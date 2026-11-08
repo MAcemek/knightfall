@@ -1,0 +1,138 @@
+{
+  "source": "Lichess puzzle database (CC0)",
+  "builtFrom": 6193530,
+  "kept": 1736418,
+  "buckets": [
+    {
+      "bucket": 400,
+      "file": "bucket-0400.json",
+      "count": 52
+    },
+    {
+      "bucket": 500,
+      "file": "bucket-0500.json",
+      "count": 265
+    },
+    {
+      "bucket": 600,
+      "file": "bucket-0600.json",
+      "count": 1200
+    },
+    {
+      "bucket": 700,
+      "file": "bucket-0700.json",
+      "count": 1200
+    },
+    {
+      "bucket": 800,
+      "file": "bucket-0800.json",
+      "count": 1200
+    },
+    {
+      "bucket": 900,
+      "file": "bucket-0900.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1000,
+      "file": "bucket-1000.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1100,
+      "file": "bucket-1100.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1200,
+      "file": "bucket-1200.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1300,
+      "file": "bucket-1300.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1400,
+      "file": "bucket-1400.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1500,
+      "file": "bucket-1500.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1600,
+      "file": "bucket-1600.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1700,
+      "file": "bucket-1700.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1800,
+      "file": "bucket-1800.json",
+      "count": 1200
+    },
+    {
+      "bucket": 1900,
+      "file": "bucket-1900.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2000,
+      "file": "bucket-2000.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2100,
+      "file": "bucket-2100.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2200,
+      "file": "bucket-2200.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2300,
+      "file": "bucket-2300.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2400,
+      "file": "bucket-2400.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2500,
+      "file": "bucket-2500.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2600,
+      "file": "bucket-2600.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2700,
+      "file": "bucket-2700.json",
+      "count": 1200
+    },
+    {
+      "bucket": 2800,
+      "file": "bucket-2800.json",
+      "count": 170
+    },
+    {
+      "bucket": 2900,
+      "file": "bucket-2900.json",
+      "count": 25
+    }
+  ],
+  "daily": 3000
+}

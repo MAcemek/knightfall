@@ -1,0 +1,114 @@
+@import 'tailwindcss';
+
+/* Knightfall design tokens: midnight ink + ember accent. Use these via Tailwind (e.g. bg-ink-900, text-ember-400). */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-ink-950: #0a0e17;
+  --color-ink-900: #0f1420;
+  --color-ink-850: #141a29;
+  --color-ink-800: #1a2133;
+  --color-ink-700: #252e45;
+  --color-ink-600: #36425f;
+  --color-ink-500: #55627f;
+  --color-ink-400: #7d8aa8;
+  --color-ink-300: #a8b3cc;
+  --color-ink-200: #cfd6e6;
+  --color-ink-100: #e9edf5;
+
+  --color-ember-300: #ffcf8a;
+  --color-ember-400: #ffb454;
+  --color-ember-500: #ff9a1f;
+  --color-ember-600: #e67c00;
+
+  --color-good-400: #5be38e;
+  --color-good-500: #2fcf6f;
+  --color-good-600: #1fae58;
+  --color-bad-400: #ff7a7a;
+  --color-bad-500: #f04848;
+  --color-bad-600: #cf2f2f;
+  --color-sky-400: #6cc4ff;
+  --color-violet-400: #b48cff;
+
+  /* Board palette (original to Knightfall: cool slate/teal) */
+  --color-sq-light: #dfe6e3;
+  --color-sq-dark: #6b8f8d;
+
+  --animate-shake: kf-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  --animate-pop: kf-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-pulse-ring: kf-pulse-ring 1.2s ease-out infinite;
+  --animate-float-up: kf-float-up 1.1s ease-out forwards;
+  --animate-piece-in: kf-piece-in 0.18s ease-out both;
+  --animate-glow: kf-glow 0.6s ease-out both;
+}
+
+@keyframes kf-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-7px); }
+  40%, 60% { transform: translateX(7px); }
+}
+@keyframes kf-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes kf-pulse-ring {
+  0% { box-shadow: inset 0 0 0 0 rgb(255 180 84 / 0.85); }
+  70% { box-shadow: inset 0 0 0 10px rgb(255 180 84 / 0); }
+  100% { box-shadow: inset 0 0 0 0 rgb(255 180 84 / 0); }
+}
+@keyframes kf-float-up {
+  0% { transform: translateY(6px) scale(0.9); opacity: 0; }
+  15% { transform: translateY(0) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-34px) scale(1); opacity: 0; }
+}
+@keyframes kf-piece-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes kf-glow {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Board pieces: slide between squares; transition is disabled while dragging. */
+.kf-piece {
+  transition: transform 170ms cubic-bezier(0.25, 0.8, 0.35, 1);
+  will-change: transform;
+}
+.kf-piece.dragging {
+  transition: none;
+  z-index: 30;
+  filter: drop-shadow(0 10px 12px rgb(0 0 0 / 0.45));
+  cursor: grabbing;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kf-piece {
+    transition: none;
+  }
+}

@@ -237,7 +237,6 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     setHintsUsed(hintsRef.current);
     // First hint: which piece. Second hint: where it goes.
     setPulse(hintsRef.current >= 2 ? [expected.slice(0, 2), expected.slice(2, 4)] : [expected.slice(0, 2)]);
-    sfx.click();
   }, [puzzle, status]);
 
   const retry = useCallback(() => {

@@ -38,6 +38,10 @@ describe('ratings', () => {
     const p = { rating: 1500, rd: 80, vol: 0.06 };
     expect(puzzleRatingChange(p, 1900, true).delta).toBeGreaterThan(puzzleRatingChange(p, 1100, true).delta);
   });
+  it('caps single-puzzle swings for provisional players', () => {
+    expect(Math.abs(puzzleRatingChange(DEFAULT_GLICKO, 1150, false).delta)).toBeLessThanOrEqual(48);
+    expect(puzzleRatingChange(DEFAULT_GLICKO, 2400, true).delta).toBeLessThanOrEqual(48);
+  });
   it('elo is symmetric', () => {
     expect(eloUpdate(1500, 1500, 1) - 1500).toBe(1500 - eloUpdate(1500, 1500, 0));
   });

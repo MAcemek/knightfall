@@ -73,9 +73,14 @@ export function glickoUpdate(player: Glicko, opponentRating: number, opponentRd:
   };
 }
 
-/** Rating change (rounded) for a puzzle attempt. */
+/** Largest rating swing a single puzzle can cause (keeps new players' first results from feeling brutal). */
+export const MAX_PUZZLE_DELTA = 48;
+
+/** Rating change (rounded, capped at ±MAX_PUZZLE_DELTA) for a puzzle attempt. */
 export function puzzleRatingChange(player: Glicko, puzzleRating: number, solved: boolean): { next: Glicko; delta: number } {
-  const next = glickoUpdate(player, puzzleRating, 80, solved ? 1 : 0);
+  const raw = glickoUpdate(player, puzzleRating, 80, solved ? 1 : 0);
+  const capped = Math.max(-MAX_PUZZLE_DELTA, Math.min(MAX_PUZZLE_DELTA, raw.rating - player.rating));
+  const next = { ...raw, rating: player.rating + capped };
   return { next, delta: Math.round(next.rating) - Math.round(player.rating) };
 }
 

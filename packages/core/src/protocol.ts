@@ -6,6 +6,10 @@
 export const BATTLE_DURATION_MS = 3 * 60 * 1000;
 export const BATTLE_COUNTDOWN_MS = 3000;
 export const BATTLE_MAX_STRIKES = 3;
+/** Difficulty ramp (rampRating start/step) of the shared Battle puzzle sequence. Client and server bot must agree. */
+export const BATTLE_RAMP = { start: 500, step: 45 } as const;
+/** Both players must send 'rematch' within this window after the end. */
+export const BATTLE_REMATCH_WINDOW_MS = 20_000;
 
 export interface PlayerInfo {
   name: string;
@@ -23,6 +27,7 @@ export type ClientMessage =
   /** Sent after every puzzle result. `index` is the puzzle index just finished. */
   | { type: 'progress'; index: number; solved: number; strikes: number }
   | { type: 'rematch' }
+  /** Leave the current room. Mid-game the opponent wins ('opponent-left'); the leaver gets no 'end' message. */
   | { type: 'leave' }
   | { type: 'ping' };
 

@@ -9,13 +9,13 @@ real-time head-to-head puzzle battles, and a custom puzzle editor with shareable
 
 ## Modes
 
-| Mode | What it is |
-| --- | --- |
-| **Puzzles** | Glicko-2 rated puzzles picked near your rating, solve streaks, hints, retry & solution replay |
-| **Daily** | One puzzle per UTC day, identical for everyone, with a daily streak and calendar |
-| **Rush** | 3 min / 5 min / Survival. Difficulty ramps up; three strikes and you're out |
-| **Battle** | Live 1v1 over WebSocket: same puzzle sequence, 3 minutes, 3 strikes, Elo rating |
-| **Custom** | Board editor → record a solution → save locally → share via link |
+| Mode | Route | What it is |
+| --- | --- | --- |
+| **Puzzles** | `/puzzles` | Glicko-2 rated puzzles picked near your rating. Clean solves gain rating, hinted solves are neutral, misses cost rating. Solve streak with milestones, hints (H), retry (R, unrated), solution (S), flip (F), auto-next, and a replayable history strip |
+| **Daily** | `/daily` | One puzzle per UTC day, identical for everyone. Daily streak, countdown to the next puzzle, month calendar; past days can be played late (shown on the calendar, not counted for the streak). Spoiler-free share text |
+| **Rush** | `/rush` | 3 min / 5 min / Survival. Difficulty ramps up, combos build, three strikes and you're out. Personal bests per mode, game-over stats and an untimed review of every puzzle in the run |
+| **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign |
+| **Custom** | `/custom` | Board editor → record the solution → add title, themes and difficulty → save locally. Play, edit, share as a self-contained link (`/custom/s#…`), export/import JSON |
 
 ## Quick start
 
@@ -25,7 +25,7 @@ npm run puzzles   # downloads the Lichess puzzle DB (~300 MB, cached in data/) a
 npm run dev       # web on http://localhost:5173, battle server on ws://localhost:8787/ws
 ```
 
-`npm test` runs the core unit tests, `npm run typecheck` / `npm run build` check everything.
+`npm test` runs every unit test (core rules, server rooms/matchmaking, and each mode's pure logic); `npm run typecheck` / `npm run build` check everything.
 
 ## Layout
 

@@ -2,7 +2,7 @@ import { BATTLE_MAX_STRIKES, type BattleScore } from '@knightfall/core';
 
 /** Pure battle rules: progress validation, end conditions and results. Shared by Room and its tests. */
 
-export type EndReason = 'time' | 'strikes' | 'opponent-left';
+export type EndReason = 'time' | 'strikes' | 'opponent-left' | 'claimed';
 export type BattleResult = 'win' | 'loss' | 'draw';
 
 export const emptyScore = (): BattleScore => ({ solved: 0, strikes: 0 });
@@ -39,15 +39,28 @@ export function acceptProgress(
  * - time is up
  * - both players struck out
  * - one player struck out and the other is already strictly ahead (nothing left to decide)
+ *   EXCEPT when the struck-out player is a bot: the human has clinched the win but may keep
+ *   solving for the rest of the clock (or claim the win early with 'claim').
  */
-export function endReason(a: BattleScore, b: BattleScore, now: number, endsAt: number): Exclude<EndReason, 'opponent-left'> | null {
+export function endReason(
+  a: BattleScore,
+  b: BattleScore,
+  now: number,
+  endsAt: number,
+  bots: { a?: boolean; b?: boolean } = {},
+): Exclude<EndReason, 'opponent-left' | 'claimed'> | null {
   if (now >= endsAt) return 'time';
   const aOut = isOut(a);
   const bOut = isOut(b);
   if (aOut && bOut) return 'strikes';
-  if (aOut && b.solved > a.solved) return 'strikes';
-  if (bOut && a.solved > b.solved) return 'strikes';
+  if (aOut && !bots.a && b.solved > a.solved) return 'strikes';
+  if (bOut && !bots.b && a.solved > b.solved) return 'strikes';
   return null;
+}
+
+/** May the player with score `me` claim the win now? Only vs a struck-out bot while strictly ahead. */
+export function canClaim(me: BattleScore, opp: BattleScore, oppIsBot: boolean): boolean {
+  return oppIsBot && isOut(opp) && !isOut(me) && me.solved > opp.solved;
 }
 
 /** Result from the perspective of the player with score `me`. */

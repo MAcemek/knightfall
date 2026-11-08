@@ -35,8 +35,8 @@ export function DailyCard({ runner, date, today, record, practice, finished, chi
       note = runner.retrying || runner.hintsUsed > 0 ? 'Solved! Counts for your streak.' : 'Flawless! First try, no hints.';
       tone = 'text-good-400';
     }
-  } else if (runner.status === 'failed' || runner.status === 'solution') {
-    note = runner.status === 'failed' ? (late ? 'Not quite. Try again — a late solve still goes on your calendar.' : 'Not quite. Retry — a solve today still keeps your streak.') : 'Solution shown.';
+  } else if (runner.status === 'failed' || runner.status === 'solution' || runner.retrying) {
+    note = runner.status !== 'solution' ? (late ? 'Not quite. Try again — a late solve still goes on your calendar.' : 'Not quite — keep trying. A solve today still keeps your streak.') : 'Solution shown.';
     tone = 'text-bad-400';
   } else if (late) {
     note = 'Playing late: it goes on your calendar but won’t count for the streak.';

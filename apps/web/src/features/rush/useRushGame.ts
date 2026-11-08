@@ -186,7 +186,7 @@ export function useRushGame(mode: RushMode): RushGame {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadIndex, end]);
 
-  const runner = usePuzzleRunner(puzzle, { onComplete, solvedSound: false, replyDelay: 250, introDelay: 350 });
+  const runner = usePuzzleRunner(puzzle, { onComplete, solvedSound: false, replyDelay: 220, introDelay: 320, autoRetry: false });
 
   // Countdown (StrictMode-safe: cleanup cancels everything and the second mount restarts it).
   useEffect(() => {

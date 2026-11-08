@@ -48,6 +48,56 @@ export function parseFenPieces(fen: string): Map<string, PieceCode> {
   return out;
 }
 
+/**
+ * Premove destinations by piece geometry only (like Lichess): sliders reach every square on their
+ * lines regardless of blockers, pawns may push or capture diagonally, kings may castle.
+ * Legality is checked when the premove is actually played.
+ */
+export function premoveDests(sq: string, code: PieceCode): string[] {
+  const f = sq.charCodeAt(0) - 97;
+  const r = Number(sq[1]) - 1;
+  const out: string[] = [];
+  const add = (df: number, dr: number) => {
+    const nf = f + df;
+    const nr = r + dr;
+    if (nf >= 0 && nf < 8 && nr >= 0 && nr < 8) out.push(`${FILES[nf]}${nr + 1}`);
+  };
+  const ray = (df: number, dr: number) => {
+    for (let i = 1; i < 8; i++) add(df * i, dr * i);
+  };
+  const white = code[0] === 'w';
+  switch (code[1]) {
+    case 'P': {
+      const dir = white ? 1 : -1;
+      add(0, dir);
+      if ((white && r === 1) || (!white && r === 6)) add(0, 2 * dir);
+      add(-1, dir);
+      add(1, dir);
+      break;
+    }
+    case 'N':
+      for (const [a, b] of [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]) add(a, b);
+      break;
+    case 'B':
+      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) ray(a, b);
+      break;
+    case 'R':
+      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ray(a, b);
+      break;
+    case 'Q':
+      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]]) ray(a, b);
+      break;
+    case 'K':
+      for (const [a, b] of [[1, 1], [1, 0], [1, -1], [0, 1], [0, -1], [-1, 1], [-1, 0], [-1, -1]]) add(a, b);
+      if (sq === (white ? 'e1' : 'e8')) {
+        add(2, 0);
+        add(-2, 0);
+      }
+      break;
+  }
+  return out;
+}
+
 export interface TrackedPiece {
   id: number;
   sq: string;

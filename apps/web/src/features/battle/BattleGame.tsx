@@ -16,12 +16,13 @@ const NEXT_AFTER_MISS_MS = 900;
  * The live battle: the shared puzzle sequence on the board, the HUD on top, and a side panel.
  * Mount with key={roomId} so every battle starts fresh.
  */
-export function BattleGame({ state, match, serverNow, onResult, onResign }: {
+export function BattleGame({ state, match, serverNow, onResult, onResign, onClaim }: {
   state: BattleState;
   match: MatchInfo;
   serverNow: () => number;
   onResult: (puzzle: { id: string; rating: number }, solved: boolean) => void;
   onResign: () => void;
+  onClaim: () => void;
 }) {
   const playing = state.phase === 'playing';
   const [loadIndex, setLoadIndex] = useState(0);
@@ -60,8 +61,9 @@ export function BattleGame({ state, match, serverNow, onResult, onResign }: {
 
   const runner = usePuzzleRunner(playing ? puzzle : null, {
     solvedSound: false,
-    replyDelay: 320,
-    introDelay: 380,
+    autoRetry: false,
+    replyDelay: 240,
+    introDelay: 340,
     onComplete: ({ puzzle: p, solved }) => {
       onResult({ id: p.id, rating: p.rating }, solved);
       if (solved) {
@@ -80,6 +82,18 @@ export function BattleGame({ state, match, serverNow, onResult, onResign }: {
   });
 
   const locked = out || timeUp;
+  // Opponent (a bot) is out of lives: once you're ahead the win is yours — claim it or keep solving.
+  const oppOut = state.opp.strikes >= BATTLE_MAX_STRIKES;
+  const clinched = playing && oppOut && !out && !timeUp && state.me.solved > state.opp.solved;
+  const chasing = playing && oppOut && !out && !timeUp && !clinched;
+  const wasClinched = useRef(false);
+  useEffect(() => {
+    if (clinched && !wasClinched.current) {
+      sfx.win();
+      burstAt(myScoreRef.current, { colors: PALETTES.party, count: 40, power: 8, shape: 'star' });
+    }
+    wasClinched.current = clinched;
+  }, [clinched]);
   const lastSolved = state.history.at(-1)?.solved;
 
   const board = (
@@ -101,6 +115,7 @@ export function BattleGame({ state, match, serverNow, onResult, onResign }: {
     <>
       <GameLayout
         top={
+          <>
           <BattleHud
             me={match.me}
             opponent={match.opponent}
@@ -112,6 +127,13 @@ export function BattleGame({ state, match, serverNow, onResult, onResign }: {
             live={playing}
             myScoreRef={myScoreRef}
           />
+          {clinched && <ClinchBanner opponent={match.opponent.name} lead={state.me.solved - state.opp.solved} onClaim={onClaim} />}
+          {chasing && (
+            <div className="mb-3 animate-pop rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-semibold text-sky-400">
+              {match.opponent.name} is out of lives — solve {state.opp.solved - state.me.solved + 1} more to clinch the win!
+            </div>
+          )}
+          </>
         }
         board={board}
         side={
@@ -181,6 +203,23 @@ function sideToMoveOrientation(p: Puzzle | null): 'white' | 'black' {
   // Lichess puzzles: the side to move in the FEN plays the setup move; the solver is the other side.
   const solverWhite = p.opponentFirst ? stm === 'b' : stm === 'w';
   return solverWhite ? 'white' : 'black';
+}
+
+function ClinchBanner({ opponent, lead, onClaim }: { opponent: string; lead: number; onClaim: () => void }) {
+  return (
+    <div className="mb-3 flex animate-pop flex-wrap items-center gap-3 rounded-xl border border-good-500/40 bg-gradient-to-r from-good-500/20 to-ember-500/10 px-4 py-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-good-500/25 text-good-400">{Icons.trophy('h-6 w-6')}</div>
+      <div className="min-w-0 flex-1">
+        <div className="font-extrabold text-good-400">Victory secured!</div>
+        <div className="text-xs text-ink-300">
+          {opponent} is out of lives and you lead by {lead}. Claim it now or keep solving to pad your score.
+        </div>
+      </div>
+      <Button variant="good" size="sm" onClick={onClaim}>
+        {Icons.trophy('h-4 w-4')} Claim win
+      </Button>
+    </div>
+  );
 }
 
 function LockOverlay({ out }: { out: boolean }) {

@@ -75,6 +75,9 @@ export class BattleHub {
         room?.progress(s.id, msg);
         break;
       }
+      case 'claim':
+        this.roomOf.get(s.id)?.claim(s.id);
+        break;
       case 'rematch':
         this.rematch(s);
         break;

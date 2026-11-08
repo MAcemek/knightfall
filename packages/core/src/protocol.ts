@@ -29,6 +29,8 @@ export type ClientMessage =
   | { type: 'rematch' }
   /** Leave the current room. Mid-game the opponent wins ('opponent-left'); the leaver gets no 'end' message. */
   | { type: 'leave' }
+  /** End the battle early as the winner: allowed vs a bot that is out of strikes while you are ahead. */
+  | { type: 'claim' }
   | { type: 'ping' };
 
 export type ServerMessage =
@@ -40,7 +42,7 @@ export type ServerMessage =
   | {
       type: 'end';
       result: 'win' | 'loss' | 'draw';
-      reason: 'time' | 'strikes' | 'opponent-left';
+      reason: 'time' | 'strikes' | 'opponent-left' | 'claimed';
       you: BattleScore;
       opponent: BattleScore;
     }

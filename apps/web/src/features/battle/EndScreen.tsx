@@ -21,6 +21,8 @@ function reasonText(end: EndInfo): string {
       return end.you.strikes >= 3 && end.opponent.strikes >= 3 ? 'Both players struck out' : end.you.strikes >= 3 ? 'You struck out' : 'Your opponent struck out';
     case 'opponent-left':
       return 'Your opponent left the battle';
+    case 'claimed':
+      return 'Win claimed — your opponent was out of lives';
     case 'resigned':
       return 'You resigned';
   }

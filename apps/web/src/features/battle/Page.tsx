@@ -41,7 +41,7 @@ export default function BattlePage() {
       />
 
       {match && inMatch ? (
-        <BattleGame key={match.roomId} state={state} match={match} serverNow={api.serverNow} onResult={api.reportResult} onResign={api.resign} />
+        <BattleGame key={match.roomId} state={state} match={match} serverNow={api.serverNow} onResult={api.reportResult} onResign={api.resign} onClaim={api.claim} />
       ) : match && state.phase === 'ended' && state.end ? (
         <EndScreen state={state} match={match} onRematch={api.rematch} onNewOpponent={api.findOpponent} onLobby={api.backToLobby} />
       ) : (

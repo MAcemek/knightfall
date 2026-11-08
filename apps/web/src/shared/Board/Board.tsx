@@ -262,7 +262,11 @@ export function Board({
       if (premove) onPremove?.(null);
       setSelected(null);
       setDrawing({ from: sq, to: sq, color: colorFromEvent(e) });
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      try {
+        (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* pointer already released */
+      }
       e.preventDefault();
       return;
     }
@@ -300,7 +304,9 @@ export function Board({
 
   const onPointerUp = (e: React.PointerEvent) => {
     if (drawing) {
-      const { from, to, color: c } = drawing;
+      // Use the square under the pointer at release (state from the last move may not have rendered yet).
+      const { from, color: c } = drawing;
+      const to = pointToBoard(e).sq;
       setDrawing(null);
       if (!to) return;
       if (to === from) {
@@ -524,7 +530,13 @@ function ArrowLayer({ arrows, orientation }: { arrows: BoardArrow[]; orientation
         const py = ux;
         const headPts = `${tip.x},${tip.y} ${base.x + px * head * 0.62},${base.y + py * head * 0.62} ${base.x - px * head * 0.62},${base.y - py * head * 0.62}`;
         return (
-          <g key={`${a.from}${a.to}${i}`} opacity={isHint ? 0.95 : 0.82} style={isHint ? { filter: `drop-shadow(0 0 1.6px rgb(${rgb}))` } : undefined} className={isHint ? 'animate-pop' : undefined}>
+          <g
+            key={`${a.from}${a.to}${i}`}
+            opacity={isHint ? 0.95 : 0.82}
+            // SVG transforms default to the canvas origin; pop the hint arrow from its own centre instead.
+            style={isHint ? { filter: `drop-shadow(0 0 1.6px rgb(${rgb}))`, transformBox: 'fill-box', transformOrigin: 'center' } : undefined}
+            className={isHint ? 'animate-pop' : undefined}
+          >
             <polyline points={line} fill="none" stroke={`rgb(${rgb})`} strokeWidth={width} strokeLinejoin="round" strokeLinecap={knight ? 'round' : 'butt'} />
             <polygon points={headPts} fill={`rgb(${rgb})`} />
           </g>

@@ -28,13 +28,13 @@ describe('findPairs', () => {
 });
 
 describe('bot tuning', () => {
-  it('thinks 4–11s, faster when stronger', () => {
+  it('thinks 2–7.5s, faster when stronger', () => {
     const mid = () => 0.5;
     expect(botThinkMs(600, mid)).toBeGreaterThan(botThinkMs(2400, mid));
     for (const r of [400, 1200, 3000]) for (const x of [0, 0.999]) {
       const t = botThinkMs(r, () => x);
-      expect(t).toBeGreaterThanOrEqual(4000);
-      expect(t).toBeLessThanOrEqual(11_000);
+      expect(t).toBeGreaterThanOrEqual(2000);
+      expect(t).toBeLessThanOrEqual(7_500);
     }
   });
   it('solve chance decreases with puzzle index', () => {

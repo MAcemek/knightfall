@@ -30,7 +30,7 @@ export interface MatchInfo {
 
 export interface EndInfo {
   result: 'win' | 'loss' | 'draw';
-  reason: 'time' | 'strikes' | 'opponent-left' | 'resigned';
+  reason: 'time' | 'strikes' | 'opponent-left' | 'claimed' | 'resigned';
   you: BattleScore;
   opponent: BattleScore;
   ratingBefore: number;

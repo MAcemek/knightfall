@@ -1,7 +1,7 @@
 import { Chess, type Move } from 'chess.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { judgeMove, isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from '@knightfall/core';
-import type { BoardMark } from '../Board/index.ts';
+import type { BoardArrow, BoardMark } from '../Board/index.ts';
 import { sfx } from '../fx/sound.ts';
 
 export type RunnerStatus = 'idle' | 'intro' | 'player' | 'opponent' | 'solved' | 'failed' | 'solution';
@@ -26,6 +26,12 @@ export interface RunnerOptions {
   introDelay?: number;
   /** Play the solved arpeggio on completion (Rush/Battle use their own combo sounds). */
   solvedSound?: boolean;
+  /**
+   * After a wrong move, take it back and let the solver keep trying straight away (default true),
+   * like the big puzzle sites. The puzzle still counts as failed. Rush/Battle pass false: a miss
+   * is a strike and they move on to the next puzzle.
+   */
+  autoRetry?: boolean;
 }
 
 export interface PuzzleRunner {
@@ -36,20 +42,33 @@ export interface PuzzleRunner {
   solverColor: 'w' | 'b';
   status: RunnerStatus;
   mark: BoardMark | null;
+  /** Hint squares to highlight (the piece, then also its destination). */
   pulse: string[];
+  /** Second hint: an arrow from the piece to its destination. */
+  hintArrow: BoardArrow | null;
   shakeKey: number;
   hintsUsed: number;
   mistakes: number;
+  /** The puzzle already failed once and the solver is having another go (unrated). */
   retrying: boolean;
+  /** The most recent solver move was wrong (cleared by the next correct move). */
+  lastWrong: boolean;
+  /** Queued premove (from, to), played as soon as the opponent's move lands. */
+  premove: [string, string] | null;
   /** Solver moves found / total solver moves. */
   progress: { done: number; total: number };
   playMove: (uci: string) => void;
+  setPremove: (uci: string | null) => void;
   hint: () => void;
   retry: () => void;
   showSolution: () => void;
 }
 
 const EMPTY_FEN = '8/8/8/8/8/8/8/8 w - - 0 1';
+/** How long a wrong move stays on the board before it is taken back. */
+const WRONG_HOLD_MS = 520;
+/** Gap between the opponent's move landing and a premove being played (lets the reply animate). */
+const PREMOVE_GAP_MS = 70;
 
 export function playMoveSound(m: Move) {
   if (m.isKingsideCastle() || m.isQueensideCastle()) sfx.castle();
@@ -61,15 +80,22 @@ export function playMoveSound(m: Move) {
 
 /**
  * Drives one puzzle: auto-plays the opponent's setup move and replies, judges solver moves
- * (accepting any checkmate), and exposes board props + feedback state for <PuzzleBoard/>.
+ * (accepting any checkmate), supports premoves and auto-retry, and exposes board props +
+ * feedback state for <PuzzleBoard/>.
  */
 export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {}): PuzzleRunner {
-  const { replyDelay = 420, introDelay = 550, solvedSound = true } = opts;
+  const { replyDelay = 280, introDelay = 420, solvedSound = true, autoRetry = true } = opts;
   const optsRef = useRef(opts);
   optsRef.current = opts;
+  const cfg = useRef({ replyDelay, solvedSound, autoRetry });
+  cfg.current = { replyDelay, solvedSound, autoRetry };
 
+  const puzzleRef = useRef<Puzzle | null>(puzzle);
   const chessRef = useRef<Chess | null>(null);
   const plyRef = useRef(0);
+  const statusRef = useRef<RunnerStatus>('idle');
+  const lastMoveRef = useRef<[string, string] | null>(null);
+  const premoveRef = useRef<string | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const reported = useRef(false);
   const startedAt = useRef(0);
@@ -78,16 +104,35 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const markKey = useRef(0);
 
   const [fen, setFen] = useState(puzzle?.fen ?? EMPTY_FEN);
-  const [lastMove, setLastMove] = useState<[string, string] | null>(null);
-  const [status, setStatus] = useState<RunnerStatus>('idle');
+  const [lastMove, setLastMoveState] = useState<[string, string] | null>(null);
+  const [status, setStatusState] = useState<RunnerStatus>('idle');
   const [mark, setMark] = useState<BoardMark | null>(null);
   const [pulse, setPulse] = useState<string[]>([]);
+  const [hintArrow, setHintArrow] = useState<BoardArrow | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [hintsUsed, setHintsUsed] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [lastWrong, setLastWrong] = useState(false);
+  const [premove, setPremoveState] = useState<[string, string] | null>(null);
   const [done, setDone] = useState(0);
 
+  const setStatus = (s: RunnerStatus) => {
+    statusRef.current = s;
+    setStatusState(s);
+  };
+  const setLastMove = (m: [string, string] | null) => {
+    lastMoveRef.current = m;
+    setLastMoveState(m);
+  };
+  const clearPremove = () => {
+    premoveRef.current = null;
+    setPremoveState(null);
+  };
+  const clearHints = () => {
+    setPulse([]);
+    setHintArrow(null);
+  };
   const later = (fn: () => void, ms: number) => {
     timers.current.push(setTimeout(fn, ms));
   };
@@ -102,20 +147,18 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     return puzzle.opponentFirst ? (stm === 'w' ? 'b' : 'w') : stm;
   })();
 
-  const report = useCallback(
-    (solved: boolean) => {
-      if (reported.current || !puzzle) return;
-      reported.current = true;
-      optsRef.current.onComplete?.({
-        puzzle,
-        solved,
-        hintsUsed: hintsRef.current,
-        mistakes: mistakesRef.current,
-        timeMs: Date.now() - startedAt.current,
-      });
-    },
-    [puzzle],
-  );
+  const report = (solved: boolean) => {
+    const p = puzzleRef.current;
+    if (reported.current || !p) return;
+    reported.current = true;
+    optsRef.current.onComplete?.({
+      puzzle: p,
+      solved,
+      hintsUsed: hintsRef.current,
+      mistakes: mistakesRef.current,
+      timeMs: Date.now() - (startedAt.current || Date.now()),
+    });
+  };
 
   const applyUci = (uci: string): Move | null => {
     const c = chessRef.current!;
@@ -129,23 +172,91 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     }
   };
 
-  const playOpponent = useCallback(() => {
-    if (!puzzle) return;
+  /** Core move handler; reads only refs so it is safe to call from timers (premoves). */
+  const handleMove = (uci: string) => {
+    const p = puzzleRef.current;
+    const c = chessRef.current;
+    if (!p || !c || statusRef.current !== 'player') return;
+    const ply = plyRef.current;
+    const expected = p.moves[ply];
+    const fenBefore = c.fen();
+    const verdict = judgeMove(fenBefore, expected, uci);
+    clearHints();
+
+    if (verdict === 'wrong') {
+      mistakesRef.current++;
+      setMistakes(mistakesRef.current);
+      setLastWrong(true);
+      const prevLast = lastMoveRef.current;
+      const m = applyUci(uci);
+      if (m) playMoveSound(m);
+      setMark({ square: uci.slice(2, 4), kind: 'wrong', key: ++markKey.current });
+      setShakeKey((k) => k + 1);
+      sfx.wrong();
+      setStatus('failed');
+      report(false);
+      // Show the mistake briefly, take it back, then (by default) let them try again.
+      later(() => {
+        c.load(fenBefore);
+        setFen(fenBefore);
+        setLastMove(prevLast);
+        setMark(null);
+        if (cfg.current.autoRetry && statusRef.current === 'failed') {
+          setRetrying(true);
+          setStatus('player');
+        }
+      }, WRONG_HOLD_MS);
+      return;
+    }
+
+    const m = applyUci(uci);
+    if (!m) return;
+    playMoveSound(m);
+    setLastWrong(false);
+    plyRef.current = ply + 1;
+    setDone((d) => d + 1);
+    const finished = verdict === 'mate' || plyRef.current >= p.moves.length;
+    setMark({ square: m.to, kind: verdict === 'mate' ? 'mate' : finished ? 'best' : 'correct', key: ++markKey.current });
+    optsRef.current.onCorrectMove?.({ ply, square: m.to });
+
+    if (finished) {
+      setStatus('solved');
+      if (cfg.current.solvedSound) later(() => sfx.solved(), 90);
+      report(true);
+      return;
+    }
+    sfx.correct();
+    setStatus('opponent');
+    later(playOpponent, cfg.current.replyDelay);
+  };
+
+  /** Opponent reply (or setup move); then plays a queued premove if it is legal. */
+  const playOpponent = () => {
+    const p = puzzleRef.current;
+    if (!p || !chessRef.current) return;
     setMark(null);
-    const m = applyUci(puzzle.moves[plyRef.current]);
+    const m = applyUci(p.moves[plyRef.current]);
     if (m) playMoveSound(m);
     plyRef.current++;
-    if (plyRef.current >= puzzle.moves.length) {
+    if (plyRef.current >= p.moves.length) {
       setStatus('solved');
       report(true);
       return;
     }
     setStatus('player');
     if (!startedAt.current) startedAt.current = Date.now();
-  }, [puzzle, report]);
+
+    const pm = premoveRef.current;
+    clearPremove();
+    if (pm) {
+      const legal = chessRef.current.moves({ verbose: true }).some((x) => x.from === pm.slice(0, 2) && x.to === pm.slice(2, 4));
+      if (legal) later(() => handleMove(pm), PREMOVE_GAP_MS);
+    }
+  };
 
   // Load a new puzzle
   useEffect(() => {
+    puzzleRef.current = puzzle;
     clearTimers();
     reported.current = false;
     startedAt.current = 0;
@@ -154,8 +265,10 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     setHintsUsed(0);
     setMistakes(0);
     setRetrying(false);
+    setLastWrong(false);
     setMark(null);
-    setPulse([]);
+    clearHints();
+    clearPremove();
     setDone(0);
     if (!puzzle) {
       chessRef.current = null;
@@ -177,110 +290,78 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puzzle]);
 
-  const playMove = useCallback(
-    (uci: string) => {
-      if (!puzzle || status !== 'player' || !chessRef.current) return;
-      const c = chessRef.current;
-      const ply = plyRef.current;
-      const expected = puzzle.moves[ply];
-      const fenBefore = c.fen();
-      const verdict = judgeMove(fenBefore, expected, uci);
-      setPulse([]);
+  const playMove = useCallback((uci: string) => handleMove(uci), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-      if (verdict === 'wrong') {
-        mistakesRef.current++;
-        setMistakes(mistakesRef.current);
-        const prevLast = lastMove;
-        const m = applyUci(uci);
-        if (m) playMoveSound(m);
-        setMark({ square: uci.slice(2, 4), kind: 'wrong', key: ++markKey.current });
-        setShakeKey((k) => k + 1);
-        sfx.wrong();
-        setStatus('failed');
-        report(false);
-        // Show the mistake briefly, then take it back.
-        later(() => {
-          c.load(fenBefore);
-          setFen(fenBefore);
-          setLastMove(prevLast);
-          setMark(null);
-        }, 650);
-        return;
-      }
-
-      const m = applyUci(uci);
-      if (!m) return;
-      playMoveSound(m);
-      plyRef.current = ply + 1;
-      setDone((d) => d + 1);
-      const finished = verdict === 'mate' || plyRef.current >= puzzle.moves.length;
-      setMark({ square: m.to, kind: verdict === 'mate' ? 'mate' : finished ? 'best' : 'correct', key: ++markKey.current });
-      optsRef.current.onCorrectMove?.({ ply, square: m.to });
-
-      if (finished) {
-        setStatus('solved');
-        if (solvedSound) later(() => sfx.solved(), 90);
-        report(true);
-        return;
-      }
-      sfx.correct();
-      setStatus('opponent');
-      later(playOpponent, replyDelay);
-    },
-    [puzzle, status, lastMove, report, playOpponent, replyDelay, solvedSound],
-  );
+  const setPremove = useCallback((uci: string | null) => {
+    const s = statusRef.current;
+    if (!uci || (s !== 'opponent' && s !== 'intro')) {
+      clearPremove();
+      return;
+    }
+    premoveRef.current = uci;
+    setPremoveState([uci.slice(0, 2), uci.slice(2, 4)]);
+  }, []);
 
   const hint = useCallback(() => {
-    if (!puzzle || status !== 'player') return;
-    const expected = puzzle.moves[plyRef.current];
+    const p = puzzleRef.current;
+    if (!p || statusRef.current !== 'player') return;
+    const expected = p.moves[plyRef.current];
+    const from = expected.slice(0, 2);
+    const to = expected.slice(2, 4);
     hintsRef.current++;
     setHintsUsed(hintsRef.current);
-    // First hint: which piece. Second hint: where it goes.
-    setPulse(hintsRef.current >= 2 ? [expected.slice(0, 2), expected.slice(2, 4)] : [expected.slice(0, 2)]);
-  }, [puzzle, status]);
+    // First hint: which piece. Second hint: an arrow to where it goes.
+    if (hintsRef.current >= 2) {
+      setPulse([from, to]);
+      setHintArrow({ from, to, color: 'hint' });
+    } else {
+      setPulse([from]);
+    }
+  }, []);
 
   const retry = useCallback(() => {
-    if (status !== 'failed') return;
-    clearTimers();
-    // Ensure the wrong move is reverted even if the take-back timer was cleared.
+    const p = puzzleRef.current;
     const c = chessRef.current;
-    if (c && puzzle) {
-      const replay = new Chess(puzzle.fen);
-      for (let i = 0; i < plyRef.current; i++) replay.move(uciToMove(puzzle.moves[i]));
-      c.load(replay.fen());
-      setFen(replay.fen());
-      const prev = plyRef.current > 0 ? puzzle.moves[plyRef.current - 1] : null;
-      setLastMove(prev ? [prev.slice(0, 2), prev.slice(2, 4)] : null);
-    }
+    if (statusRef.current !== 'failed' || !p || !c) return;
+    clearTimers();
+    // Rebuild the position at the current ply (the wrong move may not have been taken back yet).
+    const replay = new Chess(p.fen);
+    for (let i = 0; i < plyRef.current; i++) replay.move(uciToMove(p.moves[i]));
+    c.load(replay.fen());
+    setFen(replay.fen());
+    const prev = plyRef.current > 0 ? p.moves[plyRef.current - 1] : null;
+    setLastMove(prev ? [prev.slice(0, 2), prev.slice(2, 4)] : null);
     setMark(null);
     setRetrying(true);
     setStatus('player');
-  }, [status, puzzle]);
+  }, []);
 
   const showSolution = useCallback(() => {
-    if (!puzzle || status === 'solution' || status === 'solved') return;
+    const p = puzzleRef.current;
+    const s = statusRef.current;
+    if (!p || s === 'solution' || s === 'solved') return;
     clearTimers();
+    clearPremove();
     report(false);
     setStatus('solution');
-    setPulse([]);
-    const replay = new Chess(puzzle.fen);
-    for (let i = 0; i < plyRef.current; i++) replay.move(uciToMove(puzzle.moves[i]));
+    clearHints();
+    const replay = new Chess(p.fen);
+    for (let i = 0; i < plyRef.current; i++) replay.move(uciToMove(p.moves[i]));
     chessRef.current = replay;
     setFen(replay.fen());
     let step = 0;
-    for (let i = plyRef.current; i < puzzle.moves.length; i++) {
+    for (let i = plyRef.current; i < p.moves.length; i++) {
       const idx = i;
       later(() => {
-        const m = applyUci(puzzle.moves[idx]);
+        const m = applyUci(p.moves[idx]);
         if (m) {
           playMoveSound(m);
-          if (isPlayerPly(puzzle, idx)) setMark({ square: m.to, kind: 'best', key: ++markKey.current });
+          if (isPlayerPly(p, idx)) setMark({ square: m.to, kind: 'best', key: ++markKey.current });
         }
         plyRef.current = idx + 1;
-      }, 350 + step++ * 700);
+      }, 300 + step++ * 650);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puzzle, status, report]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     puzzle,
@@ -291,12 +372,16 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     status,
     mark,
     pulse,
+    hintArrow,
     shakeKey,
     hintsUsed,
     mistakes,
     retrying,
+    lastWrong,
+    premove,
     progress: { done, total: puzzle ? playerMoveCount(puzzle) : 0 },
     playMove,
+    setPremove,
     hint,
     retry,
     showSolution,

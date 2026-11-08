@@ -11,24 +11,27 @@ const TIERS: { max: number; name: string }[] = [
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
+/** Bots are set a bit stronger than the player so they are a real race (+100..+260). */
+export const BOT_EDGE = { min: 100, max: 260 };
+
 export function botInfoFor(playerRating: number, rand: () => number = Math.random): PlayerInfo {
-  const rating = Math.round(clamp(playerRating + (rand() * 2 - 1) * 60, 400, 3000));
+  const rating = Math.round(clamp(playerRating + BOT_EDGE.min + rand() * (BOT_EDGE.max - BOT_EDGE.min), 400, 3000));
   const name = TIERS.find((t) => rating <= t.max)!.name;
   return { name, rating };
 }
 
-/** Milliseconds a bot of `rating` spends on one puzzle: 11s for weak bots down to 4s for strong ones, with jitter. */
+/** Milliseconds a bot of `rating` spends on one puzzle: ~6.5s for weak bots down to ~2.5s for strong ones, with jitter. */
 export function botThinkMs(rating: number, rand: () => number = Math.random): number {
   const t = clamp((rating - 600) / 1800, 0, 1);
-  const base = 10_000 - t * 5_000; // 10s .. 5s
-  return Math.round(clamp(base + (rand() * 2 - 1) * 1_000, 4_000, 11_000));
+  const base = 6_500 - t * 4_000; // 6.5s .. 2.5s
+  return Math.round(clamp(base + (rand() * 2 - 1) * 900, 2_000, 7_500));
 }
 
 /** Chance that a bot of `rating` solves the i-th battle puzzle (decreases with index). */
 export function botSolveChance(rating: number, index: number): number {
   const puzzle = rampRating(index, BATTLE_RAMP.start, BATTLE_RAMP.step);
-  const p = 1 / (1 + Math.pow(10, (puzzle - rating) / 450)) + 0.06;
-  return clamp(p, 0.08, 0.97);
+  const p = 1 / (1 + Math.pow(10, (puzzle - rating) / 500)) + 0.12;
+  return clamp(p, 0.12, 0.98);
 }
 
 /**

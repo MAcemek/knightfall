@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptProgress, endReason, resultFor } from './rules.ts';
+import { acceptProgress, canClaim, endReason, resultFor } from './rules.ts';
 
 const s = (solved: number, strikes: number) => ({ solved, strikes });
 
@@ -54,5 +54,24 @@ describe('resultFor', () => {
     expect(resultFor(s(5, 3), s(4, 0))).toBe('win');
     expect(resultFor(s(2, 0), s(4, 3))).toBe('loss');
     expect(resultFor(s(4, 1), s(4, 2))).toBe('draw');
+  });
+});
+
+describe('bot play-on and claim', () => {
+  const out = { solved: 3, strikes: 3 };
+  const ahead = { solved: 5, strikes: 1 };
+  it('keeps going when a struck-out BOT trails a human', () => {
+    expect(endReason(ahead, out, 0, 1000, { b: true })).toBeNull();
+    expect(endReason(ahead, out, 0, 1000)).toBe('strikes');
+  });
+  it('still ends when the human also strikes out or time runs out', () => {
+    expect(endReason({ solved: 5, strikes: 3 }, out, 0, 1000, { b: true })).toBe('strikes');
+    expect(endReason(ahead, out, 1000, 1000, { b: true })).toBe('time');
+  });
+  it('allows claiming only vs a struck-out bot while strictly ahead', () => {
+    expect(canClaim(ahead, out, true)).toBe(true);
+    expect(canClaim(ahead, out, false)).toBe(false);
+    expect(canClaim({ solved: 3, strikes: 0 }, out, true)).toBe(false);
+    expect(canClaim(ahead, { solved: 3, strikes: 2 }, true)).toBe(false);
   });
 });

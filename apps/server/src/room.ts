@@ -1,6 +1,6 @@
 import { BATTLE_COUNTDOWN_MS, BATTLE_DURATION_MS, BATTLE_REMATCH_WINDOW_MS, type BattleScore } from '@knightfall/core';
 import type { Participant } from './participant.ts';
-import { acceptProgress, emptyScore, endReason, resultFor, type EndReason } from './rules.ts';
+import { acceptProgress, canClaim, emptyScore, endReason, resultFor, type EndReason } from './rules.ts';
 
 export const REMATCH_WINDOW_MS = BATTLE_REMATCH_WINDOW_MS;
 
@@ -81,8 +81,18 @@ export class Room {
     if (changed) {
       this.players[1 - i].send({ type: 'opponent-progress', solved: next.solved, strikes: next.strikes, index: report.index as number });
     }
-    const reason = endReason(this.scores[0], this.scores[1], now, this.endsAt);
+    const reason = endReason(this.scores[0], this.scores[1], now, this.endsAt, { a: this.players[0].isBot, b: this.players[1].isBot });
     if (reason) this.finish(reason);
+    return true;
+  }
+
+  /** End early as the winner (vs a struck-out bot while ahead). Returns true when accepted. */
+  claim(playerId: string): boolean {
+    if (this.ended) return false;
+    const i = this.indexOf(playerId);
+    if (i === -1) return false;
+    if (!canClaim(this.scores[i], this.scores[1 - i], this.players[1 - i].isBot)) return false;
+    this.finish('claimed');
     return true;
   }
 

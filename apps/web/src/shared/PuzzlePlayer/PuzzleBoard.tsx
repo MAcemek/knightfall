@@ -21,8 +21,12 @@ export function PuzzleBoard({ runner, orientation, className, children }: {
       lastMove={runner.lastMove}
       mark={runner.mark}
       pulse={runner.pulse}
+      arrows={runner.hintArrow ? [runner.hintArrow] : undefined}
       shakeKey={runner.shakeKey}
       onMove={runner.playMove}
+      onPremove={runner.status === 'opponent' || runner.status === 'intro' ? runner.setPremove : undefined}
+      premove={runner.premove}
+      annotationKey={runner.puzzle?.id}
       className={className}
     >
       {children}
@@ -63,8 +67,13 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
       tone = 'text-ember-400';
       break;
     case 'player':
-      text = runner.progress.done > 0 ? 'Best move! Keep going' : `${side} to move`;
-      tone = runner.progress.done > 0 ? 'text-good-400' : 'text-ink-100';
+      if (runner.lastWrong) {
+        text = 'Not quite — try again';
+        tone = 'text-ember-400';
+      } else {
+        text = runner.progress.done > 0 ? 'Best move! Keep going' : `${side} to move`;
+        tone = runner.progress.done > 0 ? 'text-good-400' : 'text-ink-100';
+      }
       break;
     default:
       text = idleText;

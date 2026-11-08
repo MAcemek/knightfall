@@ -24,6 +24,8 @@ export interface BattleApi {
   reportResult: (puzzle: { id: string; rating: number }, solved: boolean) => void;
   rematch: () => void;
   resign: () => void;
+  /** Claim the win early (vs a struck-out bot while ahead). */
+  claim: () => void;
   backToLobby: () => void;
   clearError: () => void;
 }
@@ -234,6 +236,11 @@ export function useBattle(): BattleApi {
     finish({ result: 'loss', reason: 'resigned', you: s.me, opponent: s.opp }, true);
   }, [send, finish]);
 
+  const claim = useCallback(() => {
+    if (stateRef.current.phase !== 'playing') return;
+    send({ type: 'claim' });
+  }, [send]);
+
   const backToLobby = useCallback(() => {
     const s = stateRef.current;
     if (s.phase === 'matched' || s.phase === 'playing') return resign();
@@ -283,5 +290,5 @@ export function useBattle(): BattleApi {
     [send, finish],
   );
 
-  return { state, serverNow, findOpponent, cancel, reportResult, rematch, resign, backToLobby, clearError };
+  return { state, serverNow, findOpponent, cancel, reportResult, rematch, resign, claim, backToLobby, clearError };
 }

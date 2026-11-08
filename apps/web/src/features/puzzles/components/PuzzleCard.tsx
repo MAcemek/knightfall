@@ -83,7 +83,8 @@ function OutcomeLine({ runner, mode, result }: { runner: PuzzleRunner; mode: Ses
     text = 'Solved on retry · unrated';
     tone = 'text-good-400';
   } else if (runner.retrying && runner.status === 'player') {
-    text = 'Retry · unrated';
+    text = mode === 'rated' && result?.kind === 'loss' && result.delta !== 0 ? `−${Math.abs(result.delta)} · keep trying` : 'Keep trying · unrated';
+    tone = 'text-ember-400';
   } else if (mode === 'rated' && result) {
     if (result.kind === 'gain') {
       text = `+${result.delta} rating`;

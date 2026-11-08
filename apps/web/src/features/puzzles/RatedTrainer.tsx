@@ -90,7 +90,8 @@ export function RatedTrainer() {
   const canHint = status === 'player';
   const canRetry = status === 'failed';
   const canSolution = status === 'player' || status === 'opponent' || status === 'failed';
-  const canNext = finished || session.mode === 'replay' || session.error !== null;
+  // After a miss the solver keeps trying (unrated), but can move on at any time.
+  const canNext = finished || retrying || session.mode === 'replay' || session.error !== null;
   const goNext = () => void session.next();
   const flip = () => setFlipped((f) => !f);
 
@@ -159,7 +160,7 @@ export function RatedTrainer() {
                   canRetry={canRetry}
                   canSolution={canSolution}
                   canNext={canNext}
-                  nextReady={finished}
+                  nextReady={finished || retrying}
                   loading={session.loading}
                   onHint={runner.hint}
                   onRetry={runner.retry}
@@ -169,7 +170,7 @@ export function RatedTrainer() {
                   nextLabel={session.mode === 'replay' ? 'Back to rated' : 'Next puzzle'}
                   extra={<Toggle checked={autoNext} onChange={setAuto} label="Auto-next" />}
                 />
-                {status === 'failed' && session.mode === 'rated' && (
+                {(status === 'failed' || (retrying && status !== 'solved')) && session.mode === 'rated' && (
                   <p className="mt-3 text-center text-xs text-ink-400">Retries are for practice and don't change your rating.</p>
                 )}
               </div>

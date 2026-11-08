@@ -2,12 +2,20 @@ import type { ReactNode } from 'react';
 import { Board } from '../Board/index.ts';
 import type { PuzzleRunner } from './usePuzzleRunner.ts';
 
-/** Board wired to a puzzle runner. Interactive only on the solver's turn. */
-export function PuzzleBoard({ runner, className, children }: { runner: PuzzleRunner; className?: string; children?: ReactNode }) {
+/**
+ * Board wired to a puzzle runner. Interactive only on the solver's turn.
+ * `orientation` overrides the solver-side default (e.g. a Flip button); `children` render as board overlays.
+ */
+export function PuzzleBoard({ runner, orientation, className, children }: {
+  runner: PuzzleRunner;
+  orientation?: 'white' | 'black';
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
     <Board
       fen={runner.fen}
-      orientation={runner.orientation}
+      orientation={orientation ?? runner.orientation}
       interactive={runner.status === 'player'}
       movableColor={runner.solverColor}
       lastMove={runner.lastMove}
@@ -23,7 +31,12 @@ export function PuzzleBoard({ runner, className, children }: { runner: PuzzleRun
 }
 
 /** One-line prompt above/below the board: "Black to move", "Correct!", ... */
-export function PuzzlePrompt({ runner, className = '' }: { runner: PuzzleRunner; className?: string }) {
+export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }: {
+  runner: PuzzleRunner;
+  className?: string;
+  /** Shown while no puzzle is loaded (status 'idle'). */
+  idleText?: string;
+}) {
   const side = runner.solverColor === 'w' ? 'White' : 'Black';
   const swatch = runner.solverColor === 'w' ? 'bg-ink-100' : 'bg-ink-950 ring-1 ring-ink-400';
   let text: string;
@@ -54,7 +67,7 @@ export function PuzzlePrompt({ runner, className = '' }: { runner: PuzzleRunner;
       tone = runner.progress.done > 0 ? 'text-good-400' : 'text-ink-100';
       break;
     default:
-      text = 'Loading…';
+      text = idleText;
       tone = 'text-ink-400';
   }
   return (

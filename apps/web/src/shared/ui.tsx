@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { sfx } from './fx/sound.ts';
 
 /** Small shared UI kit. Features should compose these so the app feels consistent. */
@@ -76,11 +76,42 @@ export function PageHeader({ title, subtitle, icon, right }: { title: string; su
   );
 }
 
-export function Modal({ open, onClose, children, className = '' }: { open: boolean; onClose?: () => void; children: ReactNode; className?: string }) {
+const MODAL_SIZES = { md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
+
+/** Centered dialog. Closes on backdrop click and Escape when `onClose` is given. */
+export function Modal({ open, onClose, children, className = '', size = 'md', label }: {
+  open: boolean;
+  onClose?: () => void;
+  children: ReactNode;
+  className?: string;
+  size?: keyof typeof MODAL_SIZES;
+  /** Accessible name for the dialog. */
+  label?: string;
+}) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !closeRef.current) return;
+      // Capture phase + stopImmediatePropagation: Escape closes the dialog, not the page behind it.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeRef.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/75 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className={`w-full max-w-md animate-pop rounded-2xl border border-ink-700 bg-ink-850 p-6 shadow-2xl ${className}`} onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        className={`w-full ${MODAL_SIZES[size]} max-h-[calc(100dvh-2rem)] animate-pop overflow-y-auto rounded-2xl border border-ink-700 bg-ink-850 p-6 shadow-2xl ${className}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>

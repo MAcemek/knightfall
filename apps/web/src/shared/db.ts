@@ -31,6 +31,13 @@ export interface DailyRecord {
   /** true when solved on the first try without hints */
   clean: boolean;
   at: number;
+  /**
+   * Late play (the day had already ended in UTC). `solved`/`clean` only ever describe a SAME-DAY result,
+   * so streak readers can keep using `solved`; late plays are tracked with these two flags.
+   */
+  solvedLate?: boolean;
+  /** The record was created after the day had passed. */
+  playedLate?: boolean;
 }
 
 export type RushMode = '3min' | '5min' | 'survival';

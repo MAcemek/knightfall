@@ -28,6 +28,8 @@ export interface BoardProps {
   onMove?: (uci: string) => void;
   /** Free mode (editor): any piece to any square, no legality. Called with from/to. */
   freeMove?: (from: string, to: string) => void;
+  /** Free mode only: a piece from `from` was dragged and released outside the board (editor: remove it). */
+  onDropOff?: (from: string) => void;
   /** Called on clicking a square (editor painting). Return true to consume the click. */
   onSquareClick?: (sq: string) => boolean | void;
   /** Increment to shake the board. */
@@ -62,6 +64,7 @@ export function Board({
   tints,
   onMove,
   freeMove,
+  onDropOff,
   onSquareClick,
   shakeKey = 0,
   showCoords = true,
@@ -191,6 +194,11 @@ export function Board({
     const d = drag;
     setDrag(null);
     if (!d.moved) return; // treated as a click: keep selection
+    if (!sq && freeMove && onDropOff) {
+      setSelected(null);
+      onDropOff(d.from);
+      return;
+    }
     if (sq && sq !== d.from) {
       if (!tryMove(d.from, sq)) setSelected(null);
     }

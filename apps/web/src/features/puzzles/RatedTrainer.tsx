@@ -138,6 +138,12 @@ export function RatedTrainer() {
             <div className="hidden lg:block">
               <RatingCard {...ratingProps} />
             </div>
+            {session.abandonedDelta !== null && (
+              <div className="animate-pop rounded-xl border border-bad-500/30 bg-bad-500/10 px-4 py-2.5 text-sm text-bad-400">
+                Your last puzzle was left unfinished and counted as a miss
+                {session.abandonedDelta !== 0 && <span className="font-mono font-bold"> ({session.abandonedDelta > 0 ? '+' : '−'}{Math.abs(session.abandonedDelta)})</span>}.
+              </div>
+            )}
             {session.error ? (
               <Panel className="space-y-3">
                 <p className="font-semibold text-bad-400">{session.error}</p>

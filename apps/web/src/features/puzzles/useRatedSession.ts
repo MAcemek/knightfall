@@ -23,6 +23,55 @@ export interface StreakEvent extends StreakStep {
 
 const RECENT_LIMIT = 200;
 
+/** A rated puzzle that was shown but has no outcome yet. */
+interface PendingRated {
+  puzzleId: string;
+  puzzleRating: number;
+  at: number;
+}
+
+/**
+ * Apply one rated result (rating, streak, Attempt row) atomically. If a pending marker exists for
+ * `puzzleId` it is cleared in the same transaction, so a result is never applied twice.
+ */
+async function applyRated(r: { puzzleId: string; puzzleRating: number; solved: boolean; hintsUsed: number; timeMs: number }) {
+  return db.transaction('rw', db.kv, db.attempts, async () => {
+    const player = await getKV<Glicko>(KEYS.puzzleRating, defaults.puzzleRating);
+    const streak = await getKV<StreakState>(KEYS.puzzleStreak, defaults.puzzleStreak);
+    const rated = ratedOutcome(player, r.puzzleRating, r.solved, r.hintsUsed);
+    const step = nextStreak(streak, r.solved, rated.clean);
+    if (rated.applied) await setKV(KEYS.puzzleRating, rated.next);
+    if (step.streak !== streak) await setKV(KEYS.puzzleStreak, step.streak);
+    const pending = await getKV<PendingRated | null>(KEYS.ratedPending, null);
+    if (pending?.puzzleId === r.puzzleId) await setKV<PendingRated | null>(KEYS.ratedPending, null);
+    const attempt: Attempt = {
+      puzzleId: r.puzzleId,
+      mode: 'rated',
+      solved: r.solved,
+      puzzleRating: r.puzzleRating,
+      ratingBefore: Math.round(player.rating),
+      ratingAfter: Math.round(rated.next.rating),
+      delta: rated.delta,
+      hintsUsed: r.hintsUsed,
+      timeMs: r.timeMs,
+      at: Date.now(),
+    };
+    await db.attempts.add(attempt);
+    return { rated, step };
+  });
+}
+
+/**
+ * Settle an abandoned rated puzzle (left mid-solve via navigation, reload or closing the tab) as a miss.
+ * Returns the rating change applied, or null if nothing was pending.
+ */
+export async function settleAbandoned(): Promise<number | null> {
+  const pending = await getKV<PendingRated | null>(KEYS.ratedPending, null);
+  if (!pending) return null;
+  const { rated } = await applyRated({ ...pending, solved: false, hintsUsed: 0, timeMs: Date.now() - pending.at });
+  return rated.delta;
+}
+
 /**
  * Rated-puzzle session: picks puzzles near the player's Glicko rating, applies the rating/streak
  * rules on the first outcome, writes Attempt rows, and prefetches the next puzzle.
@@ -34,6 +83,8 @@ export function useRatedSession() {
   const [streakEvent, setStreakEvent] = useState<StreakEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Rating change from a previously abandoned puzzle that was just settled as a miss. */
+  const [abandonedDelta, setAbandonedDelta] = useState<number | null>(null);
 
   const modeRef = useRef<SessionMode>('rated');
   const recent = useRef<Set<string>>(new Set());
@@ -42,6 +93,9 @@ export function useRatedSession() {
   const writeChain = useRef<Promise<unknown>>(Promise.resolve());
   const loadSeq = useRef(0);
   const eventKey = useRef(0);
+  /** A rated puzzle was shown during this mount and has no outcome yet. */
+  const unfinished = useRef(false);
+  const settledDelta = useRef<number | null>(null);
 
   const show = useCallback((p: Puzzle, m: SessionMode) => {
     seen.current.set(p.id, p);
@@ -49,6 +103,12 @@ export function useRatedSession() {
     modeRef.current = m;
     setMode(m);
     setResult(null);
+    // Rated puzzles count from the moment they are shown: leaving before an outcome is a miss.
+    unfinished.current = m === 'rated';
+    if (m === 'rated') {
+      const mark: PendingRated = { puzzleId: p.id, puzzleRating: p.rating, at: Date.now() };
+      writeChain.current = writeChain.current.then(() => setKV(KEYS.ratedPending, mark)).catch(() => {});
+    }
     // Always a fresh object so the runner resets even if the same puzzle comes back.
     setPuzzle({ ...p });
   }, []);
@@ -89,10 +149,22 @@ export function useRatedSession() {
       } catch {
         /* first run or private mode: start fresh */
       }
-      if (alive) void next();
+      // A puzzle left unfinished last time (reload / closed tab) counts as a miss.
+      const settle = writeChain.current.then(settleAbandoned);
+      writeChain.current = settle.catch(() => {});
+      const delta = await settle.catch(() => null);
+      // Kept in a ref so the notice survives React StrictMode's dev unmount/remount.
+      if (delta !== null) settledDelta.current = delta;
+      if (!alive) return;
+      if (settledDelta.current !== null) setAbandonedDelta(settledDelta.current);
+      settledDelta.current = null;
+      void next();
     })();
     return () => {
       alive = false;
+      // Navigating away inside the app mid-puzzle: settle it right away. (Only for a puzzle shown during
+      // this mount, so React StrictMode's dev remount doesn't silently settle a leftover from a reload.)
+      if (unfinished.current) writeChain.current = writeChain.current.then(settleAbandoned).catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -103,30 +175,16 @@ export function useRatedSession() {
         setResult({ kind: r.solved ? 'replay-solved' : 'replay-failed', solved: r.solved, delta: 0 });
         return;
       }
+      setAbandonedDelta(null);
+      unfinished.current = false;
       const job = writeChain.current.then(async () => {
-        const out = await db.transaction('rw', db.kv, db.attempts, async () => {
-          const player = await getKV<Glicko>(KEYS.puzzleRating, defaults.puzzleRating);
-          const streak = await getKV<StreakState>(KEYS.puzzleStreak, defaults.puzzleStreak);
-          const rated = ratedOutcome(player, r.puzzle.rating, r.solved, r.hintsUsed);
-          const step = nextStreak(streak, r.solved, rated.clean);
-          if (rated.applied) await setKV(KEYS.puzzleRating, rated.next);
-          if (step.streak !== streak) await setKV(KEYS.puzzleStreak, step.streak);
-          const attempt: Attempt = {
-            puzzleId: r.puzzle.id,
-            mode: 'rated',
-            solved: r.solved,
-            puzzleRating: r.puzzle.rating,
-            ratingBefore: Math.round(player.rating),
-            ratingAfter: Math.round(rated.next.rating),
-            delta: rated.delta,
-            hintsUsed: r.hintsUsed,
-            timeMs: r.timeMs,
-            at: Date.now(),
-          };
-          await db.attempts.add(attempt);
-          return { rated, step };
+        const { rated, step } = await applyRated({
+          puzzleId: r.puzzle.id,
+          puzzleRating: r.puzzle.rating,
+          solved: r.solved,
+          hintsUsed: r.hintsUsed,
+          timeMs: r.timeMs,
         });
-        const { rated, step } = out;
         setResult({
           kind: !r.solved ? 'loss' : rated.applied ? 'gain' : 'hinted',
           solved: r.solved,
@@ -175,5 +233,5 @@ export function useRatedSession() {
     [show],
   );
 
-  return { puzzle, mode, result, streakEvent, error, loading, next, replay, onComplete };
+  return { puzzle, mode, result, streakEvent, error, loading, abandonedDelta, next, replay, onComplete };
 }

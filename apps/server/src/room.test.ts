@@ -171,3 +171,37 @@ describe('BattleHub', () => {
     hub.stop();
   });
 });
+
+describe('Room vs bot: play on and claim', () => {
+  const make = () => {
+    const human = fake('h');
+    const bot = { ...fake('bot'), isBot: true };
+    const room = new Room({ id: 'rb', seed: 7, players: [human, bot], countdownMs: 3000, durationMs: 60_000 });
+    room.start();
+    vi.advanceTimersByTime(3000);
+    return { human, bot, room };
+  };
+  const strikeOut = (room: Room, id: string) => {
+    for (let k = 1; k <= 3; k++) room.progress(id, { index: k - 1, solved: 0, strikes: k });
+  };
+
+  it('does not end when the bot strikes out behind a human, and the human can claim', () => {
+    const { human, bot, room } = make();
+    room.progress('h', { index: 0, solved: 1, strikes: 0 });
+    strikeOut(room, 'bot');
+    expect(room.ended).toBe(false);
+    room.progress('h', { index: 1, solved: 2, strikes: 0 }); // keeps padding the score
+    expect(room.claim('h')).toBe(true);
+    expect(ends(human)[0]).toMatchObject({ result: 'win', reason: 'claimed', you: { solved: 2 } });
+    expect(ends(bot)[0]).toMatchObject({ result: 'loss', reason: 'claimed' });
+  });
+
+  it('rejects a claim while not ahead or while the bot still has lives', () => {
+    const { room } = make();
+    expect(room.claim('h')).toBe(false);
+    strikeOut(room, 'bot');
+    expect(room.claim('h')).toBe(false); // 0 - 0, not ahead
+    room.progress('h', { index: 0, solved: 1, strikes: 0 });
+    expect(room.claim('h')).toBe(true);
+  });
+});

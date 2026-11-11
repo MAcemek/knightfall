@@ -1,25 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { usePuzzleRunner, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { db } from '../../shared/db.ts';
 import { burstAt, confetti, PALETTES, sfx } from '../../shared/fx/index.ts';
 import { useProfile } from '../../shared/profile.ts';
+import { setSetting, useSettings } from '../../shared/settings.ts';
+import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
 import { Button, GameLayout, Icons, PageHeader, Panel } from '../../shared/ui.tsx';
 import { Controls, Toggle } from './components/Controls.tsx';
 import { HistoryStrip } from './components/HistoryStrip.tsx';
 import { isFinished, PuzzleCard } from './components/PuzzleCard.tsx';
 import { RatingCard } from './components/RatingCard.tsx';
+import { SolutionStepper } from './components/SolutionStepper.tsx';
+import { TipCard } from './components/TipCard.tsx';
 import { burstFromSquare, TrainerBoard, type BoardGlow } from './components/TrainerBoard.tsx';
-import { useHotkeys } from './useHotkeys.ts';
+import { useHotkeysWithHelp } from './useHotkeys.ts';
 import { useRatedSession } from './useRatedSession.ts';
 
-const AUTO_NEXT_KEY = 'kf:puzzles:autoNext';
-
-function readAutoNext(): boolean {
-  try {
-    return localStorage.getItem(AUTO_NEXT_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+const RATED_SHORTCUTS: ShortcutGroup[] = [
+  {
+    title: 'Puzzle',
+    items: [
+      { keys: ['H'], label: 'Hint (first the piece, then the square)' },
+      { keys: ['R'], label: 'Retry after a miss' },
+      { keys: ['S'], label: 'Show the solution' },
+      { keys: ['Enter', 'Space'], label: 'Next puzzle' },
+      { keys: ['←', '→'], label: 'Step through the line once the puzzle is over' },
+      { keys: ['F'], label: 'Flip the board' },
+      { keys: ['?'], label: 'Show this help' },
+    ],
+  },
+  BOARD_SHORTCUTS,
+];
 
 /** The visible element among duplicates (mobile strip vs desktop card). */
 function visible(selector: string): Element | null {
@@ -31,9 +43,10 @@ export function RatedTrainer() {
   const session = useRatedSession();
   const runner = usePuzzleRunner(session.puzzle, { onComplete: session.onComplete });
   const profile = useProfile();
+  const autoNext = useSettings().autoAdvance;
+  const ratedCount = useLiveQuery(() => db.attempts.where('mode').equals('rated').count(), []);
   const boardWrap = useRef<HTMLDivElement>(null);
   const [flipped, setFlipped] = useState(false);
-  const [autoNext, setAutoNext] = useState(readAutoNext);
 
   const { status, retrying } = runner;
   const finished = isFinished(status);
@@ -72,20 +85,11 @@ export function RatedTrainer() {
 
   // Auto-next after a solve.
   useEffect(() => {
-    if (!autoNext || status !== 'solved' || session.mode !== 'rated' || retrying) return;
+    if (!autoNext || status !== 'solved' || session.mode !== 'rated' || retrying || runner.review !== null) return;
     const t = setTimeout(() => void session.next(), 1300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoNext, status, session.mode, retrying]);
-
-  const setAuto = (v: boolean) => {
-    setAutoNext(v);
-    try {
-      localStorage.setItem(AUTO_NEXT_KEY, v ? '1' : '0');
-    } catch {
-      /* ignore */
-    }
-  };
+  }, [autoNext, status, session.mode, retrying, runner.review]);
 
   const canHint = status === 'player';
   const canRetry = status === 'failed';
@@ -95,13 +99,15 @@ export function RatedTrainer() {
   const goNext = () => void session.next();
   const flip = () => setFlipped((f) => !f);
 
-  useHotkeys({
+  const help = useHotkeysWithHelp({
     h: () => (canHint ? runner.hint() : false),
     r: () => (canRetry ? runner.retry() : false),
     s: () => (canSolution ? runner.showSolution() : false),
     f: () => flip(),
     enter: () => (canNext && !session.loading ? goNext() : false),
     ' ': () => (canNext && !session.loading ? goNext() : false),
+    arrowleft: () => runner.stepBack(),
+    arrowright: () => runner.stepForward(),
   });
 
   const delta = session.result && session.mode === 'rated' && session.result.kind !== 'hinted' ? session.result.delta : null;
@@ -139,6 +145,11 @@ export function RatedTrainer() {
             <div className="hidden lg:block">
               <RatingCard {...ratingProps} />
             </div>
+            {ratedCount === 0 && (
+              <TipCard id="rated-intro" title="How rated puzzles work">
+                Find the best move for the side shown above the board. A clean solve raises your rating, a miss lowers it, and a hint means no gain. Press <b>?</b> for shortcuts.
+              </TipCard>
+            )}
             {session.abandonedDelta !== null && (
               <div className="animate-pop rounded-xl border border-bad-500/30 bg-bad-500/10 px-4 py-2.5 text-sm text-bad-400">
                 Your last puzzle was left unfinished and counted as a miss
@@ -167,12 +178,14 @@ export function RatedTrainer() {
                   onSolution={runner.showSolution}
                   onNext={goNext}
                   onFlip={flip}
+                  stepper={<SolutionStepper runner={runner} />}
+                  onHelp={help.openHelp}
                   nextLabel={session.mode === 'replay' ? 'Back to rated' : 'Next puzzle'}
-                  extra={<Toggle checked={autoNext} onChange={setAuto} label="Auto-next" />}
+                  extra={<Toggle checked={autoNext} onChange={(v) => setSetting('autoAdvance', v)} label="Auto-next" />}
                 />
-                {(status === 'failed' || (retrying && status !== 'solved')) && session.mode === 'rated' && (
-                  <p className="mt-3 text-center text-xs text-ink-400">Retries are for practice and don't change your rating.</p>
-                )}
+                <p className="mt-3 min-h-4 text-center text-xs text-ink-400">
+                  {(status === 'failed' || (retrying && status !== 'solved')) && session.mode === 'rated' ? "Retries are for practice and don't change your rating." : ''}
+                </p>
               </div>
             </PuzzleCard>
             <HistoryStrip
@@ -182,6 +195,7 @@ export function RatedTrainer() {
           </div>
         }
       />
+      <ShortcutHelp open={help.helpOpen} onClose={help.closeHelp} groups={RATED_SHORTCUTS} />
     </>
   );
 }

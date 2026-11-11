@@ -1,13 +1,28 @@
-import { Icons, PageHeader, Panel } from '../../shared/ui.tsx';
+import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
+import { ReviewTrainer } from './ReviewTrainer.tsx';
+import { ThemeTrainer } from './ThemeTrainer.tsx';
+import { TrainHub } from './TrainHub.tsx';
 
-/** Placeholder: replaced by the train builder. */
+/**
+ * Train (all unrated).
+ *   /train                 hub: review queue + theme picker
+ *   /train/theme/:keys     theme session ("fork+pin", ?d=easier|normal|harder)
+ *   /train/review          spaced-repetition review of missed puzzles
+ */
 export default function TrainPage() {
   return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader title="Train" subtitle="Theme training and your review queue" icon={Icons.target('h-6 w-6')} />
-      <Panel>
-        <p className="text-ink-400">Coming soon.</p>
-      </Panel>
-    </div>
+    <Routes>
+      <Route index element={<TrainHub />} />
+      <Route path="theme/:keys" element={<ThemeTrainerRoute />} />
+      <Route path="review" element={<ReviewTrainer />} />
+      <Route path="*" element={<Navigate to="/train" replace />} />
+    </Routes>
   );
+}
+
+/** Keyed so that choosing other themes/difficulty starts a fresh session. */
+function ThemeTrainerRoute() {
+  const { keys } = useParams();
+  const [params] = useSearchParams();
+  return <ThemeTrainer key={`${keys}?${params.get('d') ?? ''}`} />;
 }

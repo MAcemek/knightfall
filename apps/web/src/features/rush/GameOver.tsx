@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { burstAt, confetti, PALETTES, sfx, TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Stat } from '../../shared/ui.tsx';
 import { formatSeconds, summarize, type RushModeConfig, type RunCore } from './rushLogic.ts';
@@ -71,6 +72,7 @@ export function GameOver({ cfg, core, endReason, save, onPlayAgain, onChangeMode
 
   const newBest = !!save?.newBest;
   const prevBest = save?.prevBest ?? 0;
+  const missed = core.attempts.filter((a) => !a.solved).length;
 
   return (
     <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -125,6 +127,15 @@ export function GameOver({ cfg, core, endReason, save, onPlayAgain, onChangeMode
             />
             <Stat label="Avg time" value={formatSeconds(s.avgTimeMs)} sub="per puzzle" />
           </div>
+
+          {save?.saved && missed > 0 && (
+            <Link
+              to="/train/review"
+              className="mt-3 flex animate-rise items-center justify-center gap-2 rounded-xl border border-ember-500/30 bg-ember-500/10 px-4 py-2.5 text-sm font-semibold text-ember-300 transition hover:bg-ember-500/15"
+            >
+              {Icons.layers('h-4 w-4')} {missed} missed puzzle{missed === 1 ? '' : 's'} added to your review queue {Icons.next('h-4 w-4')}
+            </Link>
+          )}
 
           <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
             <Button variant="primary" size="lg" onClick={onPlayAgain} autoFocus className="sm:min-w-48">

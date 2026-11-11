@@ -1,32 +1,44 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { dailyStreak, utcDateKey } from '@knightfall/core';
 import { db } from '../../shared/db.ts';
 import { useProfile } from '../../shared/profile.ts';
-import { Icons } from '../../shared/ui.tsx';
+import { useReviewSummary } from '../../shared/progress/index.ts';
+import { prefetchAround } from '../../shared/puzzleSource.ts';
+import { Icons, Panel } from '../../shared/ui.tsx';
 
 const MODES = [
   { to: '/puzzles', title: 'Puzzles', blurb: 'Rated tactics matched to your level. Build a streak.', icon: Icons.puzzle, tint: 'from-ember-500/25' },
+  { to: '/train', title: 'Train', blurb: 'Drill a theme or review the puzzles you missed. Unrated.', icon: Icons.target, tint: 'from-ember-300/20' },
   { to: '/daily', title: 'Daily Puzzle', blurb: 'One hand-picked puzzle a day, same for everyone.', icon: Icons.calendar, tint: 'from-sky-400/25' },
   { to: '/rush', title: 'Puzzle Rush', blurb: 'Solve as many as you can. Three strikes and you are out.', icon: Icons.bolt, tint: 'from-good-500/25' },
   { to: '/battle', title: 'Puzzle Battle', blurb: 'Race a live opponent through the same puzzles.', icon: Icons.swords, tint: 'from-bad-500/25' },
   { to: '/custom', title: 'Custom Puzzles', blurb: 'Set up a position, record the solution, share a link.', icon: Icons.pencil, tint: 'from-violet-400/25' },
+  { to: '/stats', title: 'Stats & Achievements', blurb: 'Rating curve, strengths, weaknesses and unlocks.', icon: Icons.chart, tint: 'from-sky-400/15' },
 ];
 
 export default function HomePage() {
   const profile = useProfile();
   const stats = useLiveQuery(async () => {
-    const [bestRush, daily, solved] = await Promise.all([
+    const [bestRush, daily, solved, attempts] = await Promise.all([
       db.rushRuns.orderBy('score').last(),
       db.daily.toArray(),
       db.attempts.filter((a) => a.solved).count(),
+      db.attempts.count(),
     ]);
     return {
+      attempts,
       bestRush: bestRush?.score ?? 0,
       dailyStreak: dailyStreak(daily.filter((d) => d.solved).map((d) => d.date), utcDateKey(new Date())),
       solved,
     };
   }, []);
+  const reviews = useReviewSummary();
+  const rating = profile?.puzzleRating.rating;
+  useEffect(() => {
+    if (rating !== undefined) prefetchAround(rating);
+  }, [rating]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -54,12 +66,47 @@ export default function HomePage() {
         </div>
       </section>
 
+      {stats && stats.attempts === 0 && (
+        <Panel className="mb-6 animate-rise">
+          <h2 className="mb-3 text-lg font-extrabold">New here? Three quick steps</h2>
+          <ol className="space-y-2">
+            {[
+              ['/puzzles', 'Solve your first rated puzzle'],
+              ['/daily', "Try today's Daily"],
+              ['/train', 'Missed one? It shows up in Train for review'],
+            ].map(([to, text], i) => (
+              <li key={to}>
+                <Link to={to} className="flex items-center gap-3 rounded-xl bg-ink-800/70 px-3 py-2.5 font-semibold transition hover:bg-ink-800">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ember-500/15 font-mono font-bold text-ember-400">{i + 1}</span>
+                  <span className="flex-1">{text}</span>
+                  {Icons.next('h-4 w-4')}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </Panel>
+      )}
+
+      {(reviews?.due ?? 0) > 0 && (
+        <Link
+          to="/train/review"
+          className="mb-6 flex animate-rise items-center justify-between rounded-2xl border border-ember-500/30 bg-ember-500/10 px-5 py-3 font-semibold text-ember-300 transition hover:bg-ember-500/15"
+        >
+          {Icons.layers('h-5 w-5')}
+          <span className="flex-1 px-3">
+            {reviews!.due} puzzle{reviews!.due === 1 ? '' : 's'} ready for review
+          </span>
+          {Icons.next('h-5 w-5')}
+        </Link>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {MODES.map((m) => (
+        {MODES.map((m, i) => (
           <Link
             key={m.to}
             to={m.to}
-            className={`group relative overflow-hidden rounded-2xl border border-ink-800 bg-gradient-to-br ${m.tint} to-ink-900 to-60% p-5 transition hover:-translate-y-0.5 hover:border-ink-600`}
+            style={{ animationDelay: `${i * 45}ms` }}
+            className={`group relative animate-rise overflow-hidden rounded-2xl border border-ink-800 bg-gradient-to-br ${m.tint} to-ink-900 to-60% p-5 transition hover:-translate-y-0.5 hover:border-ink-600`}
           >
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-ink-950/60 text-ember-400 transition group-hover:scale-110">{m.icon('h-6 w-6')}</div>
             <h2 className="text-lg font-extrabold">{m.title}</h2>

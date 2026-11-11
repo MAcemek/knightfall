@@ -27,6 +27,7 @@ const RECENT_LIMIT = 200;
 interface PendingRated {
   puzzleId: string;
   puzzleRating: number;
+  themes?: string[];
   at: number;
 }
 
@@ -34,7 +35,7 @@ interface PendingRated {
  * Apply one rated result (rating, streak, Attempt row) atomically. If a pending marker exists for
  * `puzzleId` it is cleared in the same transaction, so a result is never applied twice.
  */
-async function applyRated(r: { puzzleId: string; puzzleRating: number; solved: boolean; hintsUsed: number; timeMs: number }) {
+async function applyRated(r: { puzzleId: string; puzzleRating: number; solved: boolean; hintsUsed: number; timeMs: number; themes?: string[] }) {
   return db.transaction('rw', db.kv, db.attempts, async () => {
     const player = await getKV<Glicko>(KEYS.puzzleRating, defaults.puzzleRating);
     const streak = await getKV<StreakState>(KEYS.puzzleStreak, defaults.puzzleStreak);
@@ -55,6 +56,7 @@ async function applyRated(r: { puzzleId: string; puzzleRating: number; solved: b
       hintsUsed: r.hintsUsed,
       timeMs: r.timeMs,
       at: Date.now(),
+      themes: r.themes,
     };
     await db.attempts.add(attempt);
     return { rated, step };
@@ -106,7 +108,7 @@ export function useRatedSession() {
     // Rated puzzles count from the moment they are shown: leaving before an outcome is a miss.
     unfinished.current = m === 'rated';
     if (m === 'rated') {
-      const mark: PendingRated = { puzzleId: p.id, puzzleRating: p.rating, at: Date.now() };
+      const mark: PendingRated = { puzzleId: p.id, puzzleRating: p.rating, themes: p.themes, at: Date.now() };
       writeChain.current = writeChain.current.then(() => setKV(KEYS.ratedPending, mark)).catch(() => {});
     }
     // Always a fresh object so the runner resets even if the same puzzle comes back.
@@ -184,6 +186,7 @@ export function useRatedSession() {
           solved: r.solved,
           hintsUsed: r.hintsUsed,
           timeMs: r.timeMs,
+          themes: r.puzzle.themes,
         });
         setResult({
           kind: !r.solved ? 'loss' : rated.applied ? 'gain' : 'hinted',

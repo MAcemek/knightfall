@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { animate } from 'motion';
 import { burstAt, FloatingDelta, PALETTES, TickerNumber } from '../../shared/fx/index.ts';
 import { Icons } from '../../shared/ui.tsx';
-import { COMBO_BADGE_AT, DANGER_MS, formatClock, MAX_STRIKES, type RushModeConfig, type RunCore } from './rushLogic.ts';
+import { motionOff } from '../../shared/settings.ts';
+import { COMBO_BADGE_AT, DANGER_MS, formatClock, MAX_STRIKES, MILESTONE_EVERY, type RushModeConfig, type RunCore } from './rushLogic.ts';
 
 /** Clock + draining bar (or survival stopwatch). */
 function Clock({ cfg, remainingMs, elapsedMs, live }: { cfg: RushModeConfig; remainingMs: number; elapsedMs: number; live: boolean }) {
@@ -25,7 +26,7 @@ function Countdown({ cfg, remainingMs, live }: { cfg: RushModeConfig; remainingM
   const ref = useRef<HTMLDivElement>(null);
   // Heartbeat pulse on every second of the final countdown.
   useEffect(() => {
-    if (!danger || !ref.current) return;
+    if (!danger || !ref.current || motionOff()) return;
     const c = animate(ref.current, { scale: [1.22, 1] }, { duration: 0.35, ease: [0.2, 0.8, 0.2, 1] });
     return () => c.stop();
   }, [danger, sec]);
@@ -94,6 +95,22 @@ export function ComboBadge({ combo }: { combo: number }) {
   );
 }
 
+/** Five pips that fill toward the next combo milestone (every MILESTONE_EVERY solves in a row). */
+export function ComboMeter({ combo }: { combo: number }) {
+  const filled = combo === 0 ? 0 : ((combo - 1) % MILESTONE_EVERY) + 1;
+  const full = filled === MILESTONE_EVERY;
+  return (
+    <div key={full ? `full-${combo}` : 'meter'} className={`flex gap-1 ${full ? 'animate-pop' : ''}`} role="img" aria-label={`Combo ${combo}, ${filled} of ${MILESTONE_EVERY} to the next bonus burst`}>
+      {Array.from({ length: MILESTONE_EVERY }, (_, i) => (
+        <span
+          key={i}
+          className={`h-1.5 w-4 rounded-full transition-colors duration-150 sm:w-5 ${i < filled ? (full ? 'bg-ember-300 shadow-[0_0_10px_rgb(255_207_138/0.9)]' : 'bg-ember-500 shadow-[0_0_8px_rgb(255_154_31/0.6)]') : 'bg-ink-700'}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function RushHud({
   cfg,
   core,
@@ -142,6 +159,9 @@ export function RushHud({
           </div>
           <div className="mt-1 flex h-6 items-center">
             <ComboBadge combo={core.combo} />
+          </div>
+          <div className="mt-1">
+            <ComboMeter combo={core.combo} />
           </div>
         </div>
 

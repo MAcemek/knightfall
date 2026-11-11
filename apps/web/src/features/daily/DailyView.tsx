@@ -8,11 +8,27 @@ import { dailyPuzzle } from '../../shared/puzzleSource.ts';
 import { Button, GameLayout, Icons, Panel } from '../../shared/ui.tsx';
 import { Controls } from '../puzzles/components/Controls.tsx';
 import { burstFromSquare, TrainerBoard, type BoardGlow } from '../puzzles/components/TrainerBoard.tsx';
-import { useHotkeys } from '../puzzles/useHotkeys.ts';
+import { useHotkeysWithHelp } from '../puzzles/useHotkeys.ts';
+import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
 import { CelebrationModal } from './components/CelebrationModal.tsx';
 import { DailyCard } from './components/DailyCard.tsx';
 import { ShareButton } from './components/ShareButton.tsx';
 import { mergeDaily, MIN_MONTH, monthOf, shareText, streakOf, type DailyEntry } from './dailyLogic.ts';
+
+const DAILY_SHORTCUTS: ShortcutGroup[] = [
+  {
+    title: 'Daily puzzle',
+    items: [
+      { keys: ['H'], label: 'Hint' },
+      { keys: ['R'], label: 'Retry after a miss' },
+      { keys: ['S'], label: 'Show the solution' },
+      { keys: ['←', '→'], label: 'Previous / next day' },
+      { keys: ['F'], label: 'Flip the board' },
+      { keys: ['?'], label: 'Show this help' },
+    ],
+  },
+  BOARD_SHORTCUTS,
+];
 
 export interface DailyViewProps {
   date: string;
@@ -152,7 +168,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
   const canHint = status === 'player';
   const canRetry = status === 'failed';
   const canSolution = status === 'player' || status === 'opponent' || status === 'failed';
-  useHotkeys(
+  const help = useHotkeysWithHelp(
     {
       h: () => (canHint ? runner.hint() : false),
       r: () => (canRetry ? runner.retry() : false),
@@ -212,6 +228,9 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
                   }
                   extra={
                     <div className="flex items-center gap-1">
+                      <Button size="sm" variant="ghost" onClick={help.openHelp} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+                        {Icons.help('h-4 w-4')}
+                      </Button>
                       <Button size="sm" variant="ghost" disabled={!canPrev} onClick={() => go(prevDay)} title="Previous day (←)" aria-label="Previous day">
                         <span className="inline-block rotate-180">{Icons.next('h-4 w-4')}</span>
                       </Button>
@@ -227,6 +246,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
           </div>
         }
       />
+      <ShortcutHelp open={help.helpOpen} onClose={help.closeHelp} groups={DAILY_SHORTCUTS} />
       {celebration && share && (
         <CelebrationModal
           open={modalOpen}

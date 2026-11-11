@@ -55,22 +55,8 @@ export function nextStreak(prev: StreakState, solved: boolean, clean: boolean): 
   };
 }
 
-/** "advancedPawn" → "Advanced pawn", "mateIn2" → "Mate in 2". */
-export function themeLabel(theme: string): string {
-  const words = theme
-    .replace(/([a-z])([A-Z0-9])/g, '$1 $2')
-    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
-    .toLowerCase();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/** Themes that only describe length/phase and are less interesting to show first. */
-const LOW_PRIORITY = new Set(['short', 'long', 'veryLong', 'oneMove', 'middlegame', 'endgame', 'opening', 'master', 'masterVsMaster', 'superGM', 'crushing', 'advantage', 'equality']);
-
-/** Sort themes so tactical motifs (fork, pin, mate…) come before length/phase tags. */
-export function sortThemes(themes: string[]): string[] {
-  return [...themes].sort((a, b) => Number(LOW_PRIORITY.has(a)) - Number(LOW_PRIORITY.has(b)));
-}
+// Theme helpers live in shared/themes.ts (also used by Train and Stats); re-exported for existing imports.
+export { sortThemes, themeLabel } from '../../shared/themes.ts';
 
 /** Glicko RD above this reads as "provisional". */
 export const PROVISIONAL_RD = 110;

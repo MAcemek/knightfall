@@ -4,6 +4,7 @@ import { PuzzleBoard, PuzzlePrompt } from '../../shared/PuzzlePlayer/index.ts';
 import { Button, GameLayout, Icons, PageHeader, Panel, Pill } from '../../shared/ui.tsx';
 import { CountdownOverlay, EndingOverlay, GoFlash, LoadErrorOverlay, ResultFlash } from './BoardOverlays.tsx';
 import { GameOver } from './GameOver.tsx';
+import { DANGER_MS } from './rushLogic.ts';
 import { RushHud } from './RushHud.tsx';
 import { RunTiles } from './RunTiles.tsx';
 import { useRushGame } from './useRushGame.ts';
@@ -39,6 +40,7 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
   }
 
   const live = phase === 'playing';
+  const danger = live && cfg.durationMs !== null && g.remainingMs <= DANGER_MS;
   const current =
     live && runner.puzzle && !core.attempts.some((a) => a.index === g.currentIndex) ? { rating: runner.puzzle.rating, index: g.currentIndex } : null;
 
@@ -55,6 +57,7 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
         strikeKey={g.strikeKey}
       />
       <PuzzleBoard runner={runner}>
+        {danger && <div className="pointer-events-none absolute inset-0 z-30 animate-danger shadow-[inset_0_0_80px_rgb(240_72_72/0.6)]" />}
         {g.flash && <ResultFlash kind={g.flash.kind} flashKey={g.flash.key} />}
         {phase === 'countdown' && <CountdownOverlay count={g.count} label={cfg.label} />}
         {live && g.showGo && <GoFlash />}

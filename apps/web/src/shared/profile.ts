@@ -14,6 +14,20 @@ export async function getPlayerName(): Promise<string> {
   return name;
 }
 
+/** Normalise a display name: trimmed, single spaces, max 20 chars. Returns null when nothing usable is left. */
+export function cleanPlayerName(raw: string): string | null {
+  const name = raw.replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+  return name.length >= 2 ? name : null;
+}
+
+/** Rename the local player. Returns the stored name, or null when `raw` is not a usable name. */
+export async function setPlayerName(raw: string): Promise<string | null> {
+  const name = cleanPlayerName(raw);
+  if (!name) return null;
+  await setKV(KEYS.playerName, name);
+  return name;
+}
+
 /** Live snapshot of the local player's profile; re-renders when IndexedDB changes. */
 export function useProfile() {
   return useLiveQuery(async () => {

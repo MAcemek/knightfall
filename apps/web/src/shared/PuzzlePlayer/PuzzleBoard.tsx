@@ -27,6 +27,8 @@ export function PuzzleBoard({ runner, orientation, className, children }: {
       onPremove={runner.status === 'opponent' || runner.status === 'intro' ? runner.setPremove : undefined}
       premove={runner.premove}
       annotationKey={runner.puzzle?.id}
+      positionKey={runner.positionKey}
+      sweepKey={runner.solvedKey}
       className={className}
     >
       {children}
@@ -45,6 +47,16 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
   const swatch = runner.solverColor === 'w' ? 'bg-ink-100' : 'bg-ink-950 ring-1 ring-ink-400';
   let text: string;
   let tone = 'text-ink-100';
+  if (runner.review) {
+    return (
+      <div className={`flex items-center gap-2.5 text-lg font-bold text-sky-400 ${className}`}>
+        <span className={`inline-block h-4 w-4 rounded-sm ${swatch}`} />
+        <span>
+          Reviewing · move {runner.review.index} of {runner.review.total}
+        </span>
+      </div>
+    );
+  }
   switch (runner.status) {
     case 'intro':
       text = 'Get ready…';

@@ -57,11 +57,27 @@ export interface PuzzleRunner {
   premove: [string, string] | null;
   /** Solver moves found / total solver moves. */
   progress: { done: number; total: number };
+  /** Bumps (together with `fen`) whenever a new puzzle is loaded. Pass to <Board positionKey>. */
+  positionKey: number;
+  /** Bumps every time a puzzle is solved. Pass to <Board sweepKey>. */
+  solvedKey: number;
+  /**
+   * Set while the user steps through the finished line with stepBack/stepForward:
+   * the board shows the position after `index` of `total` plies (0 = starting position). Null otherwise.
+   */
+  review: { index: number; total: number } | null;
   playMove: (uci: string) => void;
   setPremove: (uci: string | null) => void;
   hint: () => void;
   retry: () => void;
   showSolution: () => void;
+  /**
+   * Step one ply back/forward through the full line. Only once the puzzle is over (status 'solved' or
+   * 'solution'); board-only, nothing is reported or rated. Stops a running solution playback.
+   * Returns false when stepping is not available or the end of the line is reached.
+   */
+  stepBack: () => boolean;
+  stepForward: () => boolean;
 }
 
 const EMPTY_FEN = '8/8/8/8/8/8/8/8 w - - 0 1';
@@ -102,6 +118,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const hintsRef = useRef(0);
   const mistakesRef = useRef(0);
   const markKey = useRef(0);
+  /** Ply shown while stepping through the finished line (null = not stepping). */
+  const viewRef = useRef<number | null>(null);
 
   const [fen, setFen] = useState(puzzle?.fen ?? EMPTY_FEN);
   const [lastMove, setLastMoveState] = useState<[string, string] | null>(null);
@@ -116,6 +134,9 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const [lastWrong, setLastWrong] = useState(false);
   const [premove, setPremoveState] = useState<[string, string] | null>(null);
   const [done, setDone] = useState(0);
+  const [positionKey, setPositionKey] = useState(0);
+  const [solvedKey, setSolvedKey] = useState(0);
+  const [review, setReview] = useState<{ index: number; total: number } | null>(null);
 
   const setStatus = (s: RunnerStatus) => {
     statusRef.current = s;
@@ -221,6 +242,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
 
     if (finished) {
       setStatus('solved');
+      setSolvedKey((k) => k + 1);
       if (cfg.current.solvedSound) later(() => sfx.solved(), 90);
       report(true);
       return;
@@ -240,6 +262,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     plyRef.current++;
     if (plyRef.current >= p.moves.length) {
       setStatus('solved');
+      setSolvedKey((k) => k + 1);
       report(true);
       return;
     }
@@ -270,6 +293,10 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     clearHints();
     clearPremove();
     setDone(0);
+    viewRef.current = null;
+    setReview(null);
+    // Same batch as setFen below, so the board deals the new position instead of sliding into it.
+    setPositionKey((k) => k + 1);
     if (!puzzle) {
       chessRef.current = null;
       setStatus('idle');
@@ -363,6 +390,34 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Show the line after `v` plies. `dir` only picks the sound. */
+  const step = (dir: 1 | -1): boolean => {
+    const p = puzzleRef.current;
+    const s = statusRef.current;
+    if (!p || (s !== 'solved' && s !== 'solution')) return false;
+    const from = viewRef.current ?? Math.min(plyRef.current, p.moves.length);
+    const v = from + dir;
+    if (v < 0 || v > p.moves.length) return false;
+    let last: Move | null = null;
+    const replay = new Chess(p.fen);
+    try {
+      for (let i = 0; i < v; i++) last = replay.move(uciToMove(p.moves[i]));
+    } catch {
+      return false;
+    }
+    clearTimers(); // stop a running solution playback
+    viewRef.current = v;
+    setFen(replay.fen());
+    setLastMove(last ? [last.from, last.to] : null);
+    setMark(null);
+    setReview({ index: v, total: p.moves.length });
+    if (dir === 1 && last) playMoveSound(last);
+    else sfx.move();
+    return true;
+  };
+  const stepBack = useCallback(() => step(-1), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const stepForward = useCallback(() => step(1), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     puzzle,
     fen,
@@ -380,10 +435,15 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     lastWrong,
     premove,
     progress: { done, total: puzzle ? playerMoveCount(puzzle) : 0 },
+    positionKey,
+    solvedKey,
+    review,
     playMove,
     setPremove,
     hint,
     retry,
     showSolution,
+    stepBack,
+    stepForward,
   };
 }

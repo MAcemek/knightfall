@@ -1,5 +1,6 @@
 import { Chess, type Square } from 'chess.js';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { motionOff, motionScale, useSettings } from '../settings.ts';
 import {
   FILES, isLightSquare, parseFenPieces, pieceUrl, premoveDests, squareToXY, trackPieces, xyToSquare,
   type PieceCode, type TrackedPiece,
@@ -10,7 +11,7 @@ export type MarkKind = 'correct' | 'wrong' | 'mate' | 'hint' | 'best';
 export interface BoardMark {
   square: string;
   kind: MarkKind;
-  /** Change to replay the pop animation on the same square. */
+  /** Change to replay the feedback animation on the same square. */
   key?: string | number;
 }
 
@@ -29,7 +30,7 @@ export interface BoardProps {
   interactive?: boolean;
   movableColor?: 'w' | 'b';
   lastMove?: [string, string] | null;
-  /** Badge over a square (✓ / ✗ / # / 💡). */
+  /** Feedback on a square: a colour wash plus an expanding ring. Deliberately no icon badge. */
   mark?: BoardMark | null;
   /** Squares to highlight strongly (e.g. hint: the piece to move, and where it goes). */
   pulse?: string[];
@@ -54,8 +55,16 @@ export interface BoardProps {
   onSquareClick?: (sq: string) => boolean | void;
   /** Change to clear user arrows/highlights (e.g. a new puzzle id). */
   annotationKey?: string | number;
+  /**
+   * Change together with `fen` when the position is replaced wholesale (a new puzzle). The pieces are then
+   * dealt fresh instead of sliding in from the previous position, and no capture effect plays.
+   */
+  positionKey?: string | number;
   /** Increment to shake the board. */
   shakeKey?: number;
+  /** Increment to play a one-shot light sweep across the board (puzzle solved). */
+  sweepKey?: number;
+  /** Rank/file labels. Leave undefined to follow the user's setting. */
   showCoords?: boolean;
   className?: string;
   children?: ReactNode;
@@ -63,12 +72,13 @@ export interface BoardProps {
 
 const PROMO: ('q' | 'r' | 'b' | 'n')[] = ['q', 'n', 'r', 'b'];
 
-const MARK_STYLE: Record<MarkKind, { bg: string; glyph: string; tint: string }> = {
-  correct: { bg: 'bg-good-500', glyph: '✓', tint: 'rgb(47 207 111 / 0.42)' },
-  best: { bg: 'bg-good-500', glyph: '★', tint: 'rgb(47 207 111 / 0.42)' },
-  mate: { bg: 'bg-ember-500', glyph: '#', tint: 'rgb(255 154 31 / 0.45)' },
-  wrong: { bg: 'bg-bad-500', glyph: '✗', tint: 'rgb(240 72 72 / 0.5)' },
-  hint: { bg: 'bg-sky-400', glyph: '?', tint: 'rgb(108 196 255 / 0.4)' },
+/** Feedback colours per mark kind, as "r g b" triplets. */
+const MARK_RGB: Record<MarkKind, string> = {
+  correct: '47 207 111',
+  best: '255 180 84',
+  mate: '255 154 31',
+  wrong: '240 72 72',
+  hint: '108 196 255',
 };
 
 const ARROW_RGB: Record<ArrowColor, string> = {
@@ -81,7 +91,7 @@ const ARROW_RGB: Record<ArrowColor, string> = {
 
 const PREMOVE_TINT = 'rgb(140 110 230 / 0.55)';
 
-/** Arrow / highlight colour from modifier keys (like the big chess sites). */
+/** Arrow / highlight colour from modifier keys. */
 function colorFromEvent(e: { shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean }): ArrowColor {
   if (e.shiftKey && (e.ctrlKey || e.metaKey)) return 'yellow';
   if (e.shiftKey) return 'red';
@@ -90,10 +100,59 @@ function colorFromEvent(e: { shiftKey: boolean; ctrlKey: boolean; altKey: boolea
   return 'green';
 }
 
+interface Ghost {
+  id: number;
+  sq: string;
+  code: PieceCode;
+}
+
+interface Tracked {
+  fen: string;
+  key: string | number | undefined;
+  pieces: TrackedPiece[];
+  /** A piece that was just captured: rendered for one short fade-out under the capturing piece. */
+  ghost: Ghost | null;
+  /** Ids of the piece(s) that just changed square (1, or 2 when castling). */
+  landed: number[];
+  /** The whole position was just dealt (first render or a new positionKey). */
+  fresh: boolean;
+}
+
+const NO_LANDED: number[] = [];
+
+function dealTracked(fen: string, key: string | number | undefined): Tracked {
+  return { fen, key, pieces: trackPieces([], parseFenPieces(fen)), ghost: null, landed: NO_LANDED, fresh: true };
+}
+
+/** Position after a fen/positionKey change. Pure. */
+function advanceTracked(prev: Tracked, fen: string, key: string | number | undefined, effects: boolean): Tracked {
+  if (key !== prev.key) return dealTracked(fen, key);
+  const pieces = trackPieces(prev.pieces, parseFenPieces(fen));
+  const ids = new Set(pieces.map((p) => p.id));
+  const removed = prev.pieces.filter((p) => !ids.has(p.id));
+  const prevSq = new Map(prev.pieces.map((p) => [p.id, p.sq]));
+  const moved = pieces.filter((p) => prevSq.has(p.id) && prevSq.get(p.id) !== p.sq).map((p) => p.id);
+  // One move = one piece changed square (two when castling). Anything else is a position swap: no effects.
+  const single = moved.length === 1 || moved.length === 2;
+  const captured = effects && single && removed.length === 1 && prev.pieces.length - pieces.length === 1 ? removed[0] : null;
+  return {
+    fen,
+    key,
+    pieces,
+    ghost: captured ? { id: captured.id, sq: captured.sq, code: captured.code } : null,
+    landed: single ? moved : NO_LANDED,
+    fresh: false,
+  };
+}
+
+const dragTransform = (x: number, y: number) => `translate(${(x - 0.5) * 100}%, ${(y - 0.5) * 100}%) scale(1.08)`;
+
 /**
  * Knightfall chessboard: click-to-move + drag-and-drop, legal-move dots, sliding pieces,
  * premoves, right-click arrows & square highlights, last-move & check highlights,
- * promotion picker, feedback badges and shake.
+ * promotion picker, feedback ripples, capture fade, landing settle, solved sweep and shake.
+ *
+ * Every effect is an overlay: none of them delays input or a position change.
  */
 export function Board({
   fen,
@@ -112,18 +171,31 @@ export function Board({
   onDropOff,
   onSquareClick,
   annotationKey,
+  positionKey,
   shakeKey = 0,
-  showCoords = true,
+  sweepKey = 0,
+  showCoords,
   className = '',
   children,
 }: BoardProps) {
+  const settings = useSettings();
+  const coords = showCoords ?? settings.showCoords;
   const boardRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<Square | null>(null);
-  const [drag, setDrag] = useState<{ id: number; from: Square; x: number; y: number; moved: boolean } | null>(null);
+  /**
+   * Drag state holds only what changes rarely. The pointer position lives in `dragPos` and is written
+   * straight to the dragged piece's style, so a drag costs zero React renders per pointermove.
+   */
+  const [drag, setDrag] = useState<{ id: number; from: Square; moved: boolean } | null>(null);
+  const dragPos = useRef({ x: 0, y: 0 });
+  const dragStart = useRef({ x: 0, y: 0 });
+  const pieceEls = useRef(new Map<number, HTMLDivElement>());
   const [promo, setPromo] = useState<{ from: Square; to: Square } | null>(null);
   const [shaking, setShaking] = useState(false);
   /** Piece dropped by drag: it lands instantly instead of sliding from its origin. */
   const [snapId, setSnapId] = useState<number | null>(null);
+  const [sweep, setSweep] = useState(0);
+  const mountSweep = useRef(sweepKey);
 
   // User annotations (right mouse button).
   const [userArrows, setUserArrows] = useState<BoardArrow[]>([]);
@@ -131,14 +203,28 @@ export function Board({
   const [drawing, setDrawing] = useState<{ from: string; to: string | null; color: ArrowColor } | null>(null);
 
   // Track pieces synchronously during render (no one-frame lag) so moves feel instant.
-  const [tracked, setTracked] = useState(() => ({ fen, pieces: trackPieces([], parseFenPieces(fen)) }));
-  let pieces = tracked.pieces;
-  if (tracked.fen !== fen) {
-    pieces = trackPieces(tracked.pieces, parseFenPieces(fen));
-    setTracked({ fen, pieces });
+  const [tracked, setTracked] = useState<Tracked>(() => dealTracked(fen, positionKey));
+  let cur = tracked;
+  if (tracked.fen !== fen || tracked.key !== positionKey) {
+    cur = advanceTracked(tracked, fen, positionKey, !motionOff());
+    setTracked(cur);
     setSelected(null);
     setPromo(null);
   }
+  const pieces = cur.pieces;
+
+  // Landing settle: a tiny squash on the piece(s) that just moved. Web Animations API on the <img>,
+  // so it never touches the wrapper's transform (the slide) and never delays anything.
+  useLayoutEffect(() => {
+    if (!tracked.landed.length || motionOff()) return;
+    const duration = 240 * motionScale();
+    for (const id of tracked.landed) {
+      const img = pieceEls.current.get(id)?.firstElementChild;
+      img?.animate?.([{ transform: 'scale(1.09)' }, { transform: 'scale(0.96)', offset: 0.7 }, { transform: 'scale(1)' }], { duration, easing: 'ease-out' });
+    }
+  }, [tracked.landed]);
+
+  const clearGhost = useCallback(() => setTracked((t) => (t.ghost ? { ...t, ghost: null } : t)), []);
 
   useEffect(() => {
     if (snapId === null) return;
@@ -157,6 +243,10 @@ export function Board({
     const t = setTimeout(() => setShaking(false), 450);
     return () => clearTimeout(t);
   }, [shakeKey]);
+
+  useEffect(() => {
+    if (sweepKey !== mountSweep.current) setSweep(sweepKey);
+  }, [sweepKey]);
 
   const chess = useMemo(() => {
     try {
@@ -280,7 +370,9 @@ export function Board({
     if (isMine(sq)) {
       const p = pieceAt(sq)!;
       setSelected(sq);
-      setDrag({ id: p.id, from: sq, x, y, moved: false });
+      dragStart.current = { x, y };
+      dragPos.current = { x, y };
+      setDrag({ id: p.id, from: sq, moved: false });
       (e.target as Element).setPointerCapture?.(e.pointerId);
       e.preventDefault();
     } else {
@@ -298,8 +390,14 @@ export function Board({
     }
     if (!drag) return;
     const { x, y } = pointToBoard(e);
-    const moved = drag.moved || Math.hypot(x - drag.x, y - drag.y) > 0.12;
-    setDrag({ ...drag, x, y, moved });
+    dragPos.current = { x, y };
+    if (!drag.moved) {
+      // One render to lift the piece; after that the position is written straight to the DOM.
+      if (Math.hypot(x - dragStart.current.x, y - dragStart.current.y) > 0.12) setDrag({ ...drag, moved: true });
+      return;
+    }
+    const el = pieceEls.current.get(drag.id);
+    if (el) el.style.transform = dragTransform(x, y);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -343,13 +441,12 @@ export function Board({
     }
   };
 
-  const squares = useMemo(() => {
-    const out: string[] = [];
-    for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) out.push(xyToSquare(col, row, orientation)!);
-    return out;
-  }, [orientation]);
+  const registerPiece = useCallback((id: number, el: HTMLDivElement | null) => {
+    if (el) pieceEls.current.set(id, el);
+    else pieceEls.current.delete(id);
+  }, []);
 
-  const markStyle = mark ? MARK_STYLE[mark.kind] : null;
+  const markRgb = mark ? MARK_RGB[mark.kind] : null;
   const allArrows: BoardArrow[] = [
     ...(arrows ?? []),
     ...userArrows,
@@ -370,42 +467,19 @@ export function Board({
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {/* Squares */}
-        <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">
-          {squares.map((sq) => {
-            const light = isLightSquare(sq);
-            const isLast = lastMove && (lastMove[0] === sq || lastMove[1] === sq);
-            const isPremove = premove && (premove[0] === sq || premove[1] === sq);
-            const userMark = userMarks[sq];
-            const { col, row } = squareToXY(sq, orientation);
-            return (
-              <div key={sq} className="relative" style={{ background: light ? 'var(--color-sq-light)' : 'var(--color-sq-dark)' }} data-square={sq}>
-                {isLast && <div className="absolute inset-0" style={{ background: 'rgb(255 196 84 / 0.42)' }} />}
-                {selected === sq && <div className="absolute inset-0" style={{ background: premoveMode ? PREMOVE_TINT : 'rgb(255 180 84 / 0.55)' }} />}
-                {isPremove && <div className="absolute inset-0" style={{ background: PREMOVE_TINT }} />}
-                {tints?.[sq] && <div className="absolute inset-0" style={{ background: tints[sq] }} />}
-                {userMark && <div className="absolute inset-0" style={{ background: `rgb(${ARROW_RGB[userMark]} / 0.62)` }} />}
-                {mark && mark.square === sq && markStyle && (
-                  <div key={`t${mark.key}`} className="absolute inset-0 animate-pop" style={{ background: markStyle.tint }} />
-                )}
-                {checkSquare === sq && (
-                  <div className="absolute inset-0" style={{ background: 'radial-gradient(circle, rgb(255 60 60 / 0.95) 0%, rgb(230 30 30 / 0.55) 40%, transparent 72%)' }} />
-                )}
-                {pulse?.includes(sq) && <div className="absolute inset-0 animate-hint-fill" />}
-                {showCoords && col === 0 && (
-                  <span className={`absolute left-[3%] top-[2%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
-                    {sq[1]}
-                  </span>
-                )}
-                {showCoords && row === 7 && (
-                  <span className={`absolute bottom-[1%] right-[4%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
-                    {sq[0]}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <SquaresLayer
+          orientation={orientation}
+          lastMove={lastMove}
+          selected={selected}
+          premove={premove}
+          premoveMode={premoveMode}
+          tints={tints}
+          userMarks={userMarks}
+          mark={mark}
+          checkSquare={checkSquare}
+          pulse={pulse}
+          coords={coords}
+        />
 
         {/* Legal move / premove dots */}
         {targets.map((t) => {
@@ -415,27 +489,41 @@ export function Board({
           return (
             <div key={t.to} className="pointer-events-none absolute z-10 flex h-[12.5%] w-[12.5%] items-center justify-center" style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%` }}>
               {occupied ? (
-                <div className="h-full w-full rounded-full" style={{ boxShadow: `inset 0 0 0 5px rgb(${tone} / 0.38)` }} />
+                <div className="h-full w-full animate-dot-in rounded-full" style={{ boxShadow: `inset 0 0 0 5px rgb(${tone} / 0.38)` }} />
               ) : (
-                <div className="h-[30%] w-[30%] rounded-full" style={{ background: `rgb(${tone} / 0.32)` }} />
+                <div className="h-[30%] w-[30%] animate-dot-in rounded-full" style={{ background: `rgb(${tone} / 0.32)` }} />
               )}
             </div>
           );
         })}
 
+        {/* Captured piece: fades out under the capturing piece (overlay only; the capture itself is instant). */}
+        {tracked.ghost && (() => {
+          const g = tracked.ghost;
+          const { col, row } = squareToXY(g.sq, orientation);
+          return (
+            <div key={`ghost-${g.id}`} className="pointer-events-none absolute left-0 top-0 z-[15] h-[12.5%] w-[12.5%]" style={{ transform: `translate(${col * 100}%, ${row * 100}%)` }}>
+              <img src={pieceUrl(g.code)} alt="" draggable={false} className="h-full w-full animate-capture-out" onAnimationEnd={clearGhost} />
+            </div>
+          );
+        })()}
+
         {/* Pieces */}
         {pieces.map((p) => {
           const { col, row } = squareToXY(p.sq, orientation);
-          const dragging = drag && drag.id === p.id && drag.moved;
-          const transform = dragging ? `translate(${(drag.x - 0.5) * 100}%, ${(drag.y - 0.5) * 100}%) scale(1.08)` : `translate(${col * 100}%, ${row * 100}%)`;
+          const dragging = !!drag && drag.id === p.id && drag.moved;
+          const transform = dragging ? dragTransform(dragPos.current.x, dragPos.current.y) : `translate(${col * 100}%, ${row * 100}%)`;
           return (
-            <div
+            <PieceView
               key={p.id}
-              className={`kf-piece pointer-events-none absolute left-0 top-0 z-20 h-[12.5%] w-[12.5%] ${dragging ? 'dragging' : ''} ${snapId === p.id ? 'snap' : ''}`}
-              style={{ transform }}
-            >
-              <img src={pieceUrl(p.code)} alt={p.code} draggable={false} className={`h-full w-full ${p.isNew ? 'animate-piece-in' : ''}`} />
-            </div>
+              id={p.id}
+              code={p.code}
+              transform={transform}
+              dragging={dragging}
+              snap={snapId === p.id}
+              enter={p.isNew ? 'new' : cur.fresh ? 'fresh' : null}
+              register={registerPiece}
+            />
           );
         })}
 
@@ -448,7 +536,7 @@ export function Board({
               className="pointer-events-none absolute z-30 h-[12.5%] w-[12.5%] p-[3%]"
               style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%` }}
             >
-              <div className="h-full w-full animate-hint-ring rounded-lg" />
+              <div className="kf-hint-ring h-full w-full rounded-lg" />
             </div>
           );
         })}
@@ -456,20 +544,22 @@ export function Board({
         {/* Arrows (app-supplied + user-drawn) */}
         {allArrows.length > 0 && <ArrowLayer arrows={allArrows} orientation={orientation} />}
 
-        {/* Feedback badge */}
-        {mark && markStyle && (() => {
+        {/* Solved: one light sweep across the board */}
+        {sweep > 0 && <div key={`sweep-${sweep}`} className="kf-sweep pointer-events-none absolute inset-0 z-[36]" />}
+
+        {/* Feedback ripple: an expanding ring in the mark's colour (two rings when the puzzle is solved) */}
+        {mark && markRgb && (() => {
           const { col, row } = squareToXY(mark.square, orientation);
+          const ring = { boxShadow: `0 0 0 3px rgb(${markRgb} / 0.95), 0 0 18px 4px rgb(${markRgb} / 0.6)` };
+          const double = mark.kind === 'best' || mark.kind === 'mate';
           return (
             <div
-              key={`b${mark.key}`}
-              className="pointer-events-none absolute z-40 flex h-[12.5%] w-[12.5%] justify-end"
+              key={`ripple-${mark.key}`}
+              className="pointer-events-none absolute z-40 h-[12.5%] w-[12.5%]"
               style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%` }}
             >
-              <div
-                className={`-mr-[18%] -mt-[18%] flex h-[44%] w-[44%] animate-pop items-center justify-center rounded-full ${markStyle.bg} text-[clamp(10px,2.2vw,18px)] font-black text-white shadow-lg ring-2 ring-white/80`}
-              >
-                {markStyle.glyph}
-              </div>
+              <div className="absolute inset-0 animate-ripple rounded-[18%]" style={ring} />
+              {double && <div className="absolute inset-0 animate-ripple rounded-[18%] [animation-delay:130ms]" style={ring} />}
             </div>
           );
         })()}
@@ -494,6 +584,92 @@ export function Board({
     </div>
   );
 }
+
+/**
+ * The 64 squares with their tints. Memoised: it re-renders only when a highlight actually changes,
+ * not on every parent render (Rush re-renders its board 10×/s for the clock) and never during a drag.
+ */
+const SquaresLayer = memo(function SquaresLayer({ orientation, lastMove, selected, premove, premoveMode, tints, userMarks, mark, checkSquare, pulse, coords }: {
+  orientation: 'white' | 'black';
+  lastMove: [string, string] | null | undefined;
+  selected: string | null;
+  premove: [string, string] | null | undefined;
+  premoveMode: boolean;
+  tints: Record<string, string> | undefined;
+  userMarks: Record<string, ArrowColor>;
+  mark: BoardMark | null | undefined;
+  checkSquare: string | null;
+  pulse: string[] | undefined;
+  coords: boolean;
+}) {
+  const squares = useMemo(() => {
+    const out: string[] = [];
+    for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) out.push(xyToSquare(col, row, orientation)!);
+    return out;
+  }, [orientation]);
+  const markRgb = mark ? MARK_RGB[mark.kind] : null;
+
+  return (
+    <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">
+      {squares.map((sq) => {
+        const light = isLightSquare(sq);
+        const isLast = lastMove && (lastMove[0] === sq || lastMove[1] === sq);
+        const isPremove = premove && (premove[0] === sq || premove[1] === sq);
+        const userMark = userMarks[sq];
+        const { col, row } = squareToXY(sq, orientation);
+        return (
+          <div key={sq} className="relative" style={{ background: light ? 'var(--color-sq-light)' : 'var(--color-sq-dark)' }} data-square={sq}>
+            {isLast && <div className="absolute inset-0" style={{ background: 'rgb(255 196 84 / 0.42)' }} />}
+            {selected === sq && <div className="absolute inset-0" style={{ background: premoveMode ? PREMOVE_TINT : 'rgb(255 180 84 / 0.55)' }} />}
+            {isPremove && <div className="absolute inset-0" style={{ background: PREMOVE_TINT }} />}
+            {tints?.[sq] && <div className="absolute inset-0" style={{ background: tints[sq] }} />}
+            {userMark && <div className="absolute inset-0" style={{ background: `rgb(${ARROW_RGB[userMark]} / 0.62)` }} />}
+            {mark && mark.square === sq && markRgb && (
+              <div key={`t${mark.key}`} className="absolute inset-0 animate-pop" style={{ background: `rgb(${markRgb} / 0.46)` }} />
+            )}
+            {checkSquare === sq && (
+              <div className="absolute inset-0 animate-check" style={{ background: 'radial-gradient(circle, rgb(255 60 60 / 0.95) 0%, rgb(230 30 30 / 0.55) 40%, transparent 72%)' }} />
+            )}
+            {pulse?.includes(sq) && <div className="kf-hint-fill absolute inset-0" />}
+            {coords && col === 0 && (
+              <span className={`absolute left-[3%] top-[2%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
+                {sq[1]}
+              </span>
+            )}
+            {coords && row === 7 && (
+              <span className={`absolute bottom-[1%] right-[4%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
+                {sq[0]}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+/** One piece. Memoised so a move re-renders only the piece(s) whose transform changed. */
+const PieceView = memo(function PieceView({ id, code, transform, dragging, snap, enter, register }: {
+  id: number;
+  code: PieceCode;
+  transform: string;
+  dragging: boolean;
+  snap: boolean;
+  /** Entrance animation: 'new' = appeared mid-game (promotion / take-back), 'fresh' = position just dealt. */
+  enter: 'new' | 'fresh' | null;
+  register: (id: number, el: HTMLDivElement | null) => void;
+}) {
+  const ref = useCallback((el: HTMLDivElement | null) => register(id, el), [id, register]);
+  return (
+    <div
+      ref={ref}
+      className={`kf-piece pointer-events-none absolute left-0 top-0 z-20 h-[12.5%] w-[12.5%] ${dragging ? 'dragging' : ''} ${snap ? 'snap' : ''}`}
+      style={{ transform }}
+    >
+      <img src={pieceUrl(code)} alt={code} draggable={false} className={`h-full w-full ${enter === 'new' ? 'animate-piece-in' : enter === 'fresh' ? 'animate-piece-fresh' : ''}`} />
+    </div>
+  );
+});
 
 /** SVG overlay for arrows. Knight moves get an L-shaped arrow. Coordinates: board = 100×100. */
 function ArrowLayer({ arrows, orientation }: { arrows: BoardArrow[]; orientation: 'white' | 'black' }) {
@@ -556,14 +732,14 @@ function PromotionPicker({ color, square, orientation, onPick, onCancel }: {
   const { col, row } = squareToXY(square, orientation);
   const down = row === 0;
   return (
-    <div className="absolute inset-0 z-50 bg-black/40" onPointerDown={(e) => { e.stopPropagation(); onCancel(); }}>
+    <div className="absolute inset-0 z-50 animate-fade-in bg-black/40" onPointerDown={(e) => { e.stopPropagation(); onCancel(); }}>
       {PROMO.map((p, i) => {
         const r = down ? row + i : row - i;
         return (
           <button
             key={p}
-            className="absolute flex h-[12.5%] w-[12.5%] items-center justify-center rounded-full bg-ink-100 shadow-xl transition hover:scale-105 hover:bg-ember-300"
-            style={{ left: `${col * 12.5}%`, top: `${r * 12.5}%` }}
+            className="absolute flex h-[12.5%] w-[12.5%] animate-pop items-center justify-center rounded-full bg-ink-100 shadow-xl transition hover:scale-105 hover:bg-ember-300"
+            style={{ left: `${col * 12.5}%`, top: `${r * 12.5}%`, animationDelay: `${i * 25}ms` }}
             onPointerDown={(e) => {
               e.stopPropagation();
               onPick(p);

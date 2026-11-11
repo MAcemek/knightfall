@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Global keyboard shortcuts. Keys are matched against `event.key.toLowerCase()`
- * ("h", "enter", " ", "arrowleft"...). Typing in inputs is ignored, and modifier combos pass through.
+ * ("h", "enter", " ", "arrowleft", "?"...). Typing in inputs is ignored, and modifier combos pass through.
  * A handler returning `false` means "not handled" (the event is left alone).
  */
 export function useHotkeys(map: Record<string, () => boolean | void>, enabled = true) {
@@ -24,4 +24,24 @@ export function useHotkeys(map: Record<string, () => boolean | void>, enabled = 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [enabled]);
+}
+
+export interface HotkeyHelp {
+  /** Whether the shortcut overlay is showing. */
+  helpOpen: boolean;
+  openHelp: () => void;
+  closeHelp: () => void;
+}
+
+/**
+ * useHotkeys plus a "?" shortcut that toggles a help overlay. Render
+ * `<ShortcutHelp open={helpOpen} onClose={closeHelp} groups={...} />` (shared/ShortcutHelp.tsx) with the result.
+ * While the overlay is open every other hotkey is paused (Esc closes it via the Modal).
+ */
+export function useHotkeysWithHelp(map: Record<string, () => boolean | void>, enabled = true): HotkeyHelp {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const openHelp = useCallback(() => setHelpOpen(true), []);
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
+  useHotkeys(helpOpen ? { '?': closeHelp } : { ...map, '?': openHelp }, enabled);
+  return { helpOpen, openHelp, closeHelp };
 }

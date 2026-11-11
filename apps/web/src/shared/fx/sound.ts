@@ -6,6 +6,9 @@
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = readMuted();
+/** User volume 0..1 (Settings). The master gain is BASE_GAIN × volume. */
+let volume = 1;
+const BASE_GAIN = 0.55;
 
 function readMuted(): boolean {
   try {
@@ -22,7 +25,7 @@ function ac(): AudioContext | null {
     if (!Ctor) return null;
     ctx = new Ctor();
     master = ctx.createGain();
-    master.gain.value = 0.55;
+    master.gain.value = BASE_GAIN * volume;
     master.connect(ctx.destination);
   }
   if (ctx.state === 'suspended') void ctx.resume();
@@ -157,7 +160,18 @@ export function isMuted() {
   return muted;
 }
 
+/** Master volume, 0..1 (clamped). Applies immediately to anything still ringing. */
+export function setVolume(v: number) {
+  volume = Math.min(1, Math.max(0, Number.isFinite(v) ? v : 1));
+  if (master) master.gain.value = BASE_GAIN * volume;
+}
+
+export function getVolume() {
+  return volume;
+}
+
 export function setMuted(v: boolean) {
+  if (muted === v) return;
   muted = v;
   try {
     localStorage.setItem('kf:muted', v ? '1' : '0');

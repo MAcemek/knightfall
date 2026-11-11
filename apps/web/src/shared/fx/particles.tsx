@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { motionOff } from '../settings.ts';
 
 /**
  * A single full-screen canvas for particle bursts and confetti.
@@ -23,6 +24,11 @@ interface Particle {
 const particles: Particle[] = [];
 let running = false;
 let canvasEl: HTMLCanvasElement | null = null;
+let ctx2d: CanvasRenderingContext2D | null = null;
+/** Backing-store scale: capped at 2 so 3x phones don't clear/fill a 9x canvas every frame. */
+let dpr = 1;
+/** Hard cap so stacked bursts (combo + milestone + confetti) can never tank the frame rate. */
+const MAX_PARTICLES = 420;
 
 export const PALETTES = {
   good: ['#5be38e', '#2fcf6f', '#b8ffd2', '#ffffff'],
@@ -43,15 +49,13 @@ export interface BurstOptions {
   life?: number; // frames
 }
 
-function reducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-}
-
 /** Explode particles from a viewport point. */
 export function burst(x: number, y: number, o: BurstOptions = {}) {
-  if (reducedMotion()) return;
+  if (motionOff()) return;
   const { count = 26, colors = PALETTES.ember, power = 7, spread = Math.PI * 2, angle = -Math.PI / 2, gravity = 0.22, size = 5, shape, life = 60 } = o;
-  for (let i = 0; i < count; i++) {
+  const room = Math.max(0, MAX_PARTICLES - particles.length);
+  const n = Math.min(count, room);
+  for (let i = 0; i < n; i++) {
     const a = angle - spread / 2 + Math.random() * spread;
     const p = power * (0.45 + Math.random() * 0.75);
     particles.push({
@@ -96,12 +100,11 @@ function start() {
 
 function frame() {
   const c = canvasEl;
-  if (!c) {
+  const ctx = ctx2d;
+  if (!c || !ctx) {
     running = false;
     return;
   }
-  const ctx = c.getContext('2d')!;
-  const dpr = window.devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, c.width / dpr, c.height / dpr);
   for (let i = particles.length - 1; i >= 0; i--) {
@@ -155,8 +158,9 @@ export function FxLayer() {
   useEffect(() => {
     const c = ref.current!;
     canvasEl = c;
+    ctx2d = c.getContext('2d');
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
+      dpr = Math.min(2, window.devicePixelRatio || 1);
       c.width = window.innerWidth * dpr;
       c.height = window.innerHeight * dpr;
       c.style.width = `${window.innerWidth}px`;
@@ -167,6 +171,8 @@ export function FxLayer() {
     return () => {
       window.removeEventListener('resize', resize);
       canvasEl = null;
+      ctx2d = null;
+      particles.length = 0;
     };
   }, []);
   return <canvas ref={ref} className="pointer-events-none fixed inset-0 z-[100]" aria-hidden />;

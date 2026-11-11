@@ -31,28 +31,33 @@
   --color-sky-400: #6cc4ff;
   --color-violet-400: #b48cff;
 
-  /* Board palette (original to Knightfall: cool slate/teal) */
+  /* Board palette (original to Knightfall). Defaults = "Tide"; shared/settings.ts overrides both on <html>. */
   --color-sq-light: #dfe6e3;
   --color-sq-dark: #6b8f8d;
 
-  --animate-shake: kf-shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-  --animate-pop: kf-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /*
+   * Animations. Every duration is multiplied by --kf-speed (1 = normal, 0.6 = "Fast" in Settings).
+   * These are decorative only: no game timer depends on them.
+   */
+  --animate-shake: kf-shake calc(0.42s * var(--kf-speed, 1)) cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  --animate-pop: kf-pop calc(0.32s * var(--kf-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-pulse-ring: kf-pulse-ring 1.2s ease-out infinite;
-  --animate-float-up: kf-float-up 1.1s ease-out forwards;
-  --animate-piece-in: kf-piece-in 0.18s ease-out both;
-  --animate-glow: kf-glow 0.6s ease-out both;
-  --animate-hint-fill: kf-hint-fill 1.1s ease-in-out infinite;
-  --animate-hint-ring: kf-hint-ring 1.1s ease-in-out infinite;
-}
-
-/* Hint: a bright, breathing fill under the piece + a glowing ring above it. */
-@keyframes kf-hint-fill {
-  0%, 100% { background: rgb(255 170 50 / 0.55); }
-  50% { background: rgb(255 200 90 / 0.85); }
-}
-@keyframes kf-hint-ring {
-  0%, 100% { box-shadow: 0 0 0 3px rgb(255 154 31 / 0.95), 0 0 14px 4px rgb(255 154 31 / 0.55); transform: scale(0.94); }
-  50% { box-shadow: 0 0 0 4px rgb(255 214 120 / 1), 0 0 22px 8px rgb(255 154 31 / 0.75); transform: scale(1); }
+  --animate-float-up: kf-float-up calc(1.1s * var(--kf-speed, 1)) ease-out forwards;
+  --animate-piece-in: kf-piece-in calc(0.18s * var(--kf-speed, 1)) ease-out both;
+  --animate-piece-fresh: kf-piece-fresh calc(0.16s * var(--kf-speed, 1)) ease-out both;
+  --animate-capture-out: kf-capture-out calc(0.16s * var(--kf-speed, 1)) ease-in both;
+  --animate-glow: kf-glow calc(0.6s * var(--kf-speed, 1)) ease-out both;
+  --animate-ripple: kf-ripple calc(0.5s * var(--kf-speed, 1)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-check: kf-check 1.1s ease-in-out infinite;
+  --animate-dot-in: kf-dot-in calc(0.1s * var(--kf-speed, 1)) ease-out both;
+  --animate-fade-in: kf-fade-in calc(0.16s * var(--kf-speed, 1)) ease-out both;
+  --animate-page-in: kf-page-in calc(0.2s * var(--kf-speed, 1)) ease-out backwards;
+  --animate-rise: kf-rise calc(0.28s * var(--kf-speed, 1)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-toast-in: kf-toast-in calc(0.32s * var(--kf-speed, 1)) cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-toast-out: kf-toast-out 0.18s ease-in both;
+  --animate-danger: kf-danger 1s ease-in-out infinite;
+  --animate-bar-grow: kf-bar-grow calc(0.5s * var(--kf-speed, 1)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-draw: kf-draw calc(0.9s * var(--kf-speed, 1)) ease-out both;
 }
 
 @keyframes kf-shake {
@@ -79,13 +84,98 @@
   0% { transform: scale(0.6); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* A freshly dealt position (new puzzle): all pieces fade up together. */
+@keyframes kf-piece-fresh {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+/* Captured piece: shrinks away under the capturing piece. */
+@keyframes kf-capture-out {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(0.5); opacity: 0; }
+}
 @keyframes kf-glow {
   0% { opacity: 0.85; }
   100% { opacity: 0; }
 }
+/* Move feedback: a ring that expands out of the square and fades. */
+@keyframes kf-ripple {
+  0% { transform: scale(0.55); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+/* King in check: the red glow breathes. */
+@keyframes kf-check {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+@keyframes kf-dot-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes kf-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+/* Route change. fill-mode is "backwards" on purpose: once it ends no transform is left behind,
+   so position:fixed descendants (modals) are never re-anchored to the page wrapper. */
+@keyframes kf-page-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+/* Staggered entrance for cards/rows: add animate-rise + style={{ animationDelay }}. */
+@keyframes kf-rise {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes kf-toast-in {
+  0% { opacity: 0; transform: translateY(-14px) scale(0.92); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes kf-toast-out {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.96); }
+}
+/* Rush: red vignette heartbeat over the board in the last seconds. */
+@keyframes kf-danger {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+/* Stats bars: add origin-left. */
+@keyframes kf-bar-grow {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+/* SVG line draw-in: the path needs pathLength="1" and stroke-dasharray="1". */
+@keyframes kf-draw {
+  0% { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes kf-hint-fill {
+  0%, 100% { background: rgb(255 170 50 / 0.55); }
+  50% { background: rgb(255 200 90 / 0.85); }
+}
+@keyframes kf-hint-ring {
+  0%, 100% { box-shadow: 0 0 0 3px rgb(255 154 31 / 0.95), 0 0 14px 4px rgb(255 154 31 / 0.55); transform: scale(0.94); }
+  50% { box-shadow: 0 0 0 4px rgb(255 214 120 / 1), 0 0 22px 8px rgb(255 154 31 / 0.75); transform: scale(1); }
+}
+@keyframes kf-sweep {
+  0% { transform: translateX(-110%); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateX(110%); opacity: 0; }
+}
+@keyframes kf-shine {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
 
 :root {
   color-scheme: dark;
+  /* Decorative-motion multiplier; see [data-anim] below. */
+  --kf-speed: 1;
+}
+:root[data-anim='fast'] {
+  --kf-speed: 0.6;
 }
 
 html,
@@ -105,7 +195,7 @@ body {
 
 /* Board pieces: slide between squares; transition is disabled while dragging. */
 .kf-piece {
-  transition: transform 170ms cubic-bezier(0.25, 0.8, 0.35, 1);
+  transition: transform calc(170ms * var(--kf-speed)) cubic-bezier(0.25, 0.8, 0.35, 1);
   will-change: transform;
 }
 .kf-piece.snap {
@@ -118,12 +208,52 @@ body {
   cursor: grabbing;
 }
 
+/* Hint: a bright fill under the piece + a glowing ring above it. Both have a static base look
+   (so the hint is still visible with motion off) that fades in and then breathes. */
+.kf-hint-fill {
+  background: rgb(255 180 64 / 0.7);
+  animation: kf-fade-in 0.18s ease-out both, kf-hint-fill 1.1s ease-in-out 0.18s infinite;
+}
+.kf-hint-ring {
+  box-shadow: 0 0 0 3px rgb(255 154 31 / 0.95), 0 0 14px 4px rgb(255 154 31 / 0.55);
+  animation: kf-fade-in 0.18s ease-out both, kf-hint-ring 1.1s ease-in-out 0.18s infinite;
+}
+
+/* Solved: a diagonal band of light crosses the board once. */
+.kf-sweep {
+  background: linear-gradient(115deg, transparent 36%, rgb(255 255 255 / 0.3) 50%, transparent 64%);
+  animation: kf-sweep calc(0.55s * var(--kf-speed)) ease-out both;
+}
+
+/* One slow glint across a toast. */
+.kf-shine {
+  background: linear-gradient(110deg, transparent 40%, rgb(255 255 255 / 0.12) 50%, transparent 60%);
+  animation: kf-shine calc(1.1s * var(--kf-speed)) ease-out 0.25s both;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Motion off: Settings → Animations → Off, or the OS "reduce motion" preference.
+ * Everything jumps straight to its end state; nothing is hidden, and no timer waits on an animation.
+ */
+:root[data-anim='off'] *,
+:root[data-anim='off'] *::before,
+:root[data-anim='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  .kf-piece {
-    transition: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

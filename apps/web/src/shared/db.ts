@@ -8,7 +8,7 @@ export interface KV {
   value: unknown;
 }
 
-export type AttemptMode = 'rated' | 'daily' | 'rush' | 'battle' | 'custom';
+export type AttemptMode = 'rated' | 'daily' | 'rush' | 'battle' | 'custom' | 'theme' | 'review';
 
 export interface Attempt {
   id?: number;
@@ -22,6 +22,8 @@ export interface Attempt {
   hintsUsed: number;
   timeMs: number;
   at: number;
+  /** Puzzle themes at the time of the attempt (v2+; older rows are resolved via findPuzzle). Not indexed. */
+  themes?: string[];
 }
 
 export interface DailyRecord {
@@ -75,6 +77,30 @@ export interface CustomPuzzle extends Puzzle {
   solves?: number;
 }
 
+/** A missed puzzle waiting in the spaced-repetition review queue (one row per puzzle). */
+export interface ReviewItem {
+  puzzleId: string;
+  puzzleRating: number;
+  themes?: string[];
+  /** Leitner box 0..5; higher = longer interval. */
+  box: number;
+  /** Timestamp (ms) from which the puzzle is due. */
+  due: number;
+  addedAt: number;
+  /** Last time it was reviewed (null = never). */
+  lastAt: number | null;
+  /** Times it was missed again (in review or in any other mode). */
+  lapses: number;
+  /** Clean review solves so far. */
+  reps: number;
+}
+
+/** An unlocked achievement (id from shared/progress/achievements.ts). */
+export interface AchievementRow {
+  id: string;
+  at: number;
+}
+
 export const db = new Dexie('knightfall') as Dexie & {
   kv: EntityTable<KV, 'key'>;
   attempts: EntityTable<Attempt, 'id'>;
@@ -82,6 +108,8 @@ export const db = new Dexie('knightfall') as Dexie & {
   rushRuns: EntityTable<RushRun, 'id'>;
   battles: EntityTable<BattleRecord, 'id'>;
   customPuzzles: EntityTable<CustomPuzzle, 'id'>;
+  reviews: EntityTable<ReviewItem, 'puzzleId'>;
+  achievements: EntityTable<AchievementRow, 'id'>;
 };
 
 db.version(1).stores({
@@ -91,6 +119,12 @@ db.version(1).stores({
   rushRuns: '++id, mode, score, at',
   battles: '++id, at',
   customPuzzles: 'id, createdAt, updatedAt',
+});
+
+// v2: review queue + achievements. Only NEW tables are listed; Dexie keeps every v1 table and its data as is.
+db.version(2).stores({
+  reviews: 'puzzleId, due',
+  achievements: 'id, at',
 });
 
 export async function getKV<T>(key: string, fallback: T): Promise<T> {
@@ -110,6 +144,12 @@ export const KEYS = {
   playerName: 'playerName', // string
   /** Rated puzzle currently on screen and not yet finished: { puzzleId, puzzleRating, at } | null. Settled as a miss if abandoned. */
   ratedPending: 'ratedPending',
+  /** Settings object (shared/settingsLogic.ts). */
+  settings: 'settings',
+  /** Highest attempts.id already scanned for the review queue (number). */
+  reviewCursor: 'reviewCursor',
+  /** true once achievements earned before v2 were unlocked silently. */
+  achievementsSeeded: 'achievementsSeeded',
 } as const;
 
 export interface StreakState {

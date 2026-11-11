@@ -61,16 +61,13 @@ export function PuzzleCard({ runner, mode, result, children }: { runner: PuzzleR
         </div>
       </div>
 
-      {revealed && puzzle?.gameUrl && isFinished(runner.status) && (
-        <a
-          href={puzzle.gameUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-1 text-xs text-ink-500 transition hover:text-ink-300"
-        >
-          Puzzle via the Lichess database (CC0) · View on Lichess ↗
-        </a>
-      )}
+      <div className="mt-3 min-h-4 text-xs">
+        {revealed && puzzle?.gameUrl && isFinished(runner.status) && (
+          <a href={puzzle.gameUrl} target="_blank" rel="noreferrer" className="inline-flex animate-fade-in items-center gap-1 text-ink-500 transition hover:text-ink-300">
+            Puzzle via the Lichess database (CC0) · View on Lichess ↗
+          </a>
+        )}
+      </div>
       {children}
     </div>
   );

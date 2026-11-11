@@ -135,7 +135,7 @@ export function useRushGame(mode: RushMode): RushGame {
       const at = Date.now();
       await db.rushRuns.add(toRushRun(mode, c, at));
       await db.attempts.bulkAdd(
-        c.attempts.map((a) => ({ puzzleId: a.puzzle.id, mode: 'rush' as const, solved: a.solved, puzzleRating: a.puzzle.rating, hintsUsed: 0, timeMs: a.timeMs, at })),
+        c.attempts.map((a) => ({ puzzleId: a.puzzle.id, mode: 'rush' as const, solved: a.solved, puzzleRating: a.puzzle.rating, hintsUsed: 0, timeMs: a.timeMs, at, themes: a.puzzle.themes })),
       );
       setSave({ newBest: c.score > prevBest, prevBest, saved: true });
     } catch {

@@ -24,6 +24,10 @@ export interface ControlsProps {
   action?: ReactNode;
   nextLabel?: string;
   extra?: ReactNode;
+  /** Row rendered between the Hint/Retry/Solution buttons and the action/Next button (e.g. <SolutionStepper/>). */
+  stepper?: ReactNode;
+  /** Shows a "Keys ?" button that opens the shortcut overlay. */
+  onHelp?: () => void;
 }
 
 /** Hint / Retry / Solution row, a big Next button that pulses when ready, and a flip toggle. */
@@ -41,6 +45,7 @@ export function Controls(p: ControlsProps) {
           <span className="max-[400px]:hidden">{Icons.eye('h-4 w-4')}</span> Solution <Kbd>S</Kbd>
         </Button>
       </div>
+      {p.stepper}
       {p.action}
       {p.onNext && (
         <div className="relative">
@@ -58,9 +63,16 @@ export function Controls(p: ControlsProps) {
         </div>
       )}
       <div className="flex items-center justify-between gap-2">
-        <Button size="sm" variant="ghost" onClick={p.onFlip} title="Flip board (F)">
-          {Icons.flip('h-4 w-4')} Flip <Kbd>F</Kbd>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={p.onFlip} title="Flip board (F)">
+            {Icons.flip('h-4 w-4')} Flip <Kbd>F</Kbd>
+          </Button>
+          {p.onHelp && (
+            <Button size="sm" variant="ghost" onClick={p.onHelp} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+              {Icons.help('h-4 w-4')} <span className="max-sm:hidden">Keys</span> <Kbd>?</Kbd>
+            </Button>
+          )}
+        </div>
         {p.extra}
       </div>
     </div>

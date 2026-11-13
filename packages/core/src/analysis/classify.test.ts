@@ -55,6 +55,14 @@ describe('classifyMove', () => {
     const close = ev({ cp: 30 }, [line({ cp: 30 }, 'e2e4'), line({ cp: -60 }, 'd2d4')]);
     expect(classifyMove(ctx({ before: close }))).toBe('best');
   });
+  it('best (not great) when the second line still leaves the mover well off', () => {
+    const before = ev({ cp: 900 }, [line({ cp: 900 }, 'e2e4'), line({ cp: 300 }, 'd2d4')]);
+    expect(classifyMove(ctx({ before, afterCp: 900 }))).toBe('best');
+  });
+  it('best (not great) when it just takes the piece that moved', () => {
+    const before = ev({ cp: 30 }, [line({ cp: 30 }, 'e2e4'), line({ cp: -200 }, 'd2d4')]);
+    expect(classifyMove(ctx({ before, previousUci: 'd7e4' }))).toBe('best');
+  });
   it('best (not great) when the engine gave a single line', () => {
     expect(classifyMove(ctx({ before: ev({ cp: 30 }, [line({ cp: 30 }, 'e2e4')]) }))).toBe('best');
   });

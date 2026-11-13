@@ -3,6 +3,7 @@ import { sfx, TickerNumber } from '../../../shared/fx/index.ts';
 import { Button, GameLayout, Icons, Panel, Pill } from '../../../shared/ui.tsx';
 import { MiniBoard } from '../bits.tsx';
 import { PRESET_THEMES, RATING_MAX, RATING_MIN, THEME_MAX, TITLE_MAX, cleanTheme, sideName, themeLabel, type Side } from '../logic.ts';
+import { EngineCheckPanel } from './EngineCheckPanel.tsx';
 import { Label } from './SetupStep.tsx';
 
 export function ratingTier(r: number): { label: string; tone: string } {
@@ -15,6 +16,8 @@ export function ratingTier(r: number): { label: string; tone: string } {
 
 export interface DetailsStepProps {
   fen: string;
+  moves: string[];
+  opponentFirst: boolean;
   orientation: 'white' | 'black';
   solver: Side;
   solverMoves: number;
@@ -158,6 +161,8 @@ export function DetailsStep(p: DetailsStepProps) {
               <span>{RATING_MAX}</span>
             </div>
           </div>
+
+          <EngineCheckPanel fen={p.fen} moves={p.moves} opponentFirst={p.opponentFirst} />
 
           <div className="grid grid-cols-[auto_1fr] gap-2">
             <Button size="lg" onClick={p.onBack} aria-label="Back to solution">

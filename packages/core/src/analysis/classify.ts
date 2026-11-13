@@ -7,8 +7,10 @@ export const DROP_EXCELLENT = 2;
 export const DROP_GOOD = 5;
 export const DROP_INACCURACY = 10;
 export const DROP_MISTAKE = 20;
-/** "great": the best move must beat the second-best line by more than this. */
+/** "great": the best move must beat the second-best line by more than this... */
 export const GREAT_GAP = 10;
+/** ...and the second-best line must leave the mover below this win chance (the alternatives would change the outcome). */
+export const GREAT_ALT_MAX_WIN = 50;
 /** "brilliant" is not awarded when the mover was already winning by more than this. */
 export const BRILLIANT_MAX_WIN = 97;
 /** "miss": the mover must still be at least this well off afterwards (otherwise it is a mistake/blunder). */
@@ -29,6 +31,8 @@ export interface ClassifyContext {
   legalMoves: number;
   /** Class of the opponent's previous move (undefined for the first move). */
   previous?: MoveClass;
+  /** The opponent's previous move (UCI). Taking the piece that just moved is never "great". */
+  previousUci?: string;
 }
 
 /** Plain win-chance table: <= 2 excellent, <= 5 good, <= 10 inaccuracy, <= 20 mistake, else blunder. */
@@ -46,7 +50,9 @@ export function classByDrop(drop: number): MoveClass {
  *  2. forced     it was the only legal move
  *  3. brilliant  a sound sacrifice: drop <= 2, isSacrifice(), mover was not already winning (> 97)
  *                and is not worse afterwards (>= 50)
- *  4. great      the engine's first choice, and the second line is worse by more than 10
+ *  4. great      the engine's first choice, the second line is worse by more than 10 and leaves the mover
+ *                below 50 (every alternative changes the outcome), and it does not simply take the piece
+ *                that just moved (recaptures are obvious, not great)
  *  5. best       the engine's first choice
  *  6. miss       the opponent's previous move was a mistake/blunder/miss, this move drops more than 10,
  *                and the mover is still >= 45 afterwards (the chance was wasted, the game was not thrown)
@@ -65,7 +71,9 @@ export function classifyMove(ctx: ClassifyContext): MoveClass {
 
   if (drop <= DROP_EXCELLENT && winBefore <= BRILLIANT_MAX_WIN && winAfter >= 50 && isSacrifice(ctx.fenBefore, ctx.uci)) return 'brilliant';
   if (playedBest) {
-    if (second && winPercentFor(top.score, ctx.mover) - winPercentFor(second.score, ctx.mover) > GREAT_GAP) return 'great';
+    const secondWin = second ? winPercentFor(second.score, ctx.mover) : 100;
+    const takesMover = !!ctx.previousUci && ctx.previousUci.slice(2, 4) === ctx.uci.slice(2, 4);
+    if (second && !takesMover && secondWin < GREAT_ALT_MAX_WIN && winPercentFor(top.score, ctx.mover) - secondWin > GREAT_GAP) return 'great';
     return 'best';
   }
   const gifted = ctx.previous === 'mistake' || ctx.previous === 'blunder' || ctx.previous === 'miss';

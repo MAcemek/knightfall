@@ -120,6 +120,7 @@ export function buildReport(input: ReportInput): GameReport {
       isBook: i < bookPlies,
       legalMoves: legalMoveCount(fens[i]),
       previous,
+      previousUci: i > 0 ? ucis[i - 1] : undefined,
     });
     previous = cls;
     const winBefore = winPercentFor(before.score, color);

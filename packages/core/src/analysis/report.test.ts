@@ -124,7 +124,7 @@ describe('buildReport', () => {
   const report = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings });
 
   it('classifies every move', () => {
-    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'good', 'best', 'best', 'blunder', 'great']);
+    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'good', 'best', 'best', 'blunder', 'best']);
   });
   it('fills move metadata', () => {
     const nf6 = report.moves[5];
@@ -146,7 +146,7 @@ describe('buildReport', () => {
     expect(report.acpl.white).toBeCloseTo(60 / 4, 6);
     expect(report.acpl.black).toBeCloseTo(1030 / 3, 6);
     expect(report.estimatedRating.white!).toBeGreaterThan(report.estimatedRating.black!);
-    expect(report.counts.white).toMatchObject({ book: 1, good: 1, best: 1, great: 1, blunder: 0 });
+    expect(report.counts.white).toMatchObject({ book: 1, good: 1, best: 2, great: 0, blunder: 0 });
     expect(report.counts.black).toMatchObject({ book: 1, best: 1, blunder: 1 });
     expect(Object.values(report.counts.white).reduce((a, b) => a + b, 0)).toBe(4);
   });

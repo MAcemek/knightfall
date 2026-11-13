@@ -7,12 +7,20 @@ import {
   type BattleState, type EndInfo, type MatchInfo,
 } from './battleState.ts';
 
-export const OFFLINE_MESSAGE = 'Battle server offline — run npm run dev';
+/**
+ * Where the battle server lives. VITE_BATTLE_URL (e.g. wss://battle.example.com/ws) points a static
+ * deployment such as Vercel at a separately hosted apps/server; otherwise the same origin's /ws is used
+ * (the dev proxy, or apps/server serving behind the same host).
+ */
+const BATTLE_URL: string | undefined = import.meta.env.VITE_BATTLE_URL || undefined;
+
+export const OFFLINE_MESSAGE =
+  import.meta.env.DEV ? 'Battle server offline — run npm run dev' : 'The battle server is offline right now. Try again in a minute.';
 const CONNECT_TIMEOUT_MS = 5000;
 const PING_EVERY_MS = 15_000;
 
 function socketUrl() {
-  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  return BATTLE_URL ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 }
 
 export interface BattleApi {

@@ -10,3 +10,6 @@ data-build.log
 
 # Optional full Stockfish build (~99 MB), fetched with `npm run engine:deep`
 apps/web/public/engine/deep/
+
+# Vercel build output and local link
+.vercel/

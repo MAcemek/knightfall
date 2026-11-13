@@ -43,6 +43,24 @@ npm run engine:deep  # fetch the full Stockfish 19 build (~99 MB, not committed)
 
 `npm test` runs every unit test; `npm run typecheck` and `npm run build` check everything.
 
+## Deploy
+
+**Vercel (site + API).** Import the repository on [vercel.com/new](https://vercel.com/new) and keep the
+defaults: `vercel.json` runs `scripts/build-vercel.mjs`, which writes the Vite build and a small function
+for `/api/*` (the chess.com lookup) in Vercel's Build Output format. Every mode except live Battle works
+on Vercel as is.
+
+**Battle server (optional).** Vercel functions can't hold WebSocket connections, so live Battle needs
+`apps/server` on an always-on Node host (Render, Railway, Fly.io, a VPS…):
+
+```bash
+npm ci
+NODE_ENV=production PORT=8787 npm start -w @knightfall/server
+```
+
+Then set `VITE_BATTLE_URL=wss://<your-battle-host>/ws` in the Vercel project's environment variables and
+redeploy. Without it, the Battle page says the battle server is offline.
+
 ## Layout
 
 ```
@@ -53,7 +71,7 @@ apps/web          Vite + React + Tailwind client
                   pool, cloud evals), importers (Lichess, chess.com), settings, progress
   src/features    one folder per mode: puzzles, train, daily, rush, battle, custom, analysis, stats, settings, home
 apps/server       Node HTTP + ws server: battle matchmaking, rooms, authoritative clock; chess.com game lookup
-scripts           build-puzzles, build-openings, fetch-engine, fit-rating
+scripts           build-puzzles, build-openings, fetch-engine, fit-rating, build-vercel
 ```
 
 ## Network use

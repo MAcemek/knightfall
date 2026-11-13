@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
-import { buildReport, parsePgnGame, REPORT_VERSION, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
+import { parsePgnGame, REPORT_VERSION, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
 import type { StoredGame } from '../db.ts';
 import { analysePositions, cloudEval, ENGINE_BUILD, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
-import { getAnalysis, getAnalysisPrefs, getGame, loadOpenings, saveAnalysis } from './store.ts';
+import { buildReportOffThread } from './reportClient.ts';
+import { getAnalysis, getAnalysisPrefs, getGame, saveAnalysis } from './store.ts';
 
 /**
  * One analysis session per game, kept in a module-level map so a review keeps running (and its result is
@@ -74,25 +75,24 @@ function createSession(gameKey: string): AnalysisSession {
     set({ status: 'analysing', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
     try {
       const pool = getEnginePool(engine);
-      const [all, openings] = await Promise.all([
-        analysePositions({
-          fens: parsed.fens,
-          depth,
-          multiPv: REVIEW_MULTIPV,
-          evaluate: (job) => pool.evaluate(job),
-          cloud: cloudEval,
-          signal: ctl.signal,
-          onEval: (i, e, done, total) => {
-            if (mine !== run) return;
-            const next = snap.evals.slice();
-            next[i] = e;
-            set({ evals: next, done, total });
-          },
-        }),
-        loadOpenings(),
-      ]);
+      const all = await analysePositions({
+        fens: parsed.fens,
+        depth,
+        multiPv: REVIEW_MULTIPV,
+        evaluate: (job) => pool.evaluate(job),
+        cloud: cloudEval,
+        signal: ctl.signal,
+        onEval: (i, e, done, total) => {
+          if (mine !== run) return;
+          const next = snap.evals.slice();
+          next[i] = e;
+          set({ evals: next, done, total });
+        },
+      });
       if (mine !== run) return;
-      const report = buildReport({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: all, openings, ratings: { white: game.white.rating, black: game.black.rating } });
+      // The report is built in a worker (the brilliant check is CPU heavy); a cancel/restart meanwhile drops the result.
+      const report = await buildReportOffThread({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: all, ratings: { white: game.white.rating, black: game.black.rating } });
+      if (mine !== run) return;
       const analysedAt = Date.now();
       await saveAnalysis({ gameKey, analysedAt, engine, depth, report, engineBuild: ENGINE_BUILD });
       if (mine !== run) return;
@@ -116,8 +116,7 @@ function createSession(gameKey: string): AnalysisSession {
           // Older classification rules: rebuild from the stored evaluations (no engine run) and save it back.
           try {
             const g = parsed.game;
-            const openings = await loadOpenings();
-            report = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: stored.report.evals, openings, ratings: { white: game.white.rating, black: game.black.rating } });
+            report = await buildReportOffThread({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: stored.report.evals, ratings: { white: game.white.rating, black: game.black.rating } });
             await saveAnalysis({ ...stored, report });
           } catch {
             report = null;

@@ -195,6 +195,8 @@ export function Editor({ id }: { id?: string }) {
         {step === 2 && (
           <DetailsStep
             fen={fen}
+            moves={moves}
+            opponentFirst={opponentFirst}
             orientation={orientation}
             solver={solverSide(fen, opponentFirst)}
             solverMoves={solverMoves}

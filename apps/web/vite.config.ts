@@ -7,6 +7,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: { '/ws': { target: 'ws://localhost:8787', ws: true } },
+    proxy: {
+      '/ws': { target: 'ws://localhost:8787', ws: true },
+      // Knightfall server JSON API (chess.com game lookup for Game Review).
+      '/api': 'http://localhost:8787',
+    },
   },
 });

@@ -1,25 +1,74 @@
 import {
   bucketFileName, bucketFor, dailyIndex, MAX_BUCKET, MIN_BUCKET, BUCKET_SIZE, nearRating, pickIndex, rampRating,
-  rowToPuzzle, type Puzzle, type PuzzleRow,
+  GAME_PUZZLE_PREFIX, rowToPuzzle, type Puzzle, type PuzzleRow,
 } from '@knightfall/core';
+import type { PuzzleWorkerReply, PuzzleWorkerRequest } from './puzzleWorker.ts';
 import { bucketSearchOrder, matchesThemes } from './themes.ts';
 
 /**
  * Loads puzzles from /puzzles/*.json (built by scripts/build-puzzles.mjs from the Lichess CC0 database).
  * Buckets are 100 rating points wide and fetched lazily + cached.
+ * Download + JSON parsing + row conversion run in a Web Worker (shared/puzzleWorker.ts) when the browser
+ * has one; otherwise, or if the worker fails, the same work happens on the main thread.
  */
 
 const cache = new Map<string, Promise<Puzzle[]>>();
 
+function fetchOnMainThread(file: string): Promise<Puzzle[]> {
+  return fetch(`/puzzles/${file}`)
+    .then((r) => {
+      if (!r.ok) throw new Error(`Failed to load ${file}: ${r.status}`);
+      return r.json() as Promise<PuzzleRow[]>;
+    })
+    .then((rows) => rows.map(rowToPuzzle));
+}
+
+/** undefined = not started yet, null = unavailable (no Worker support, or it crashed). */
+let worker: Worker | null | undefined;
+let nextRequest = 0;
+const waiting = new Map<number, { resolve: (p: Puzzle[]) => void; reject: (e: Error) => void }>();
+
+function puzzleWorker(): Worker | null {
+  if (worker !== undefined) return worker;
+  try {
+    worker = typeof Worker === 'undefined' ? null : new Worker(new URL('./puzzleWorker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    worker = null;
+  }
+  if (worker) {
+    worker.onmessage = (e: MessageEvent<PuzzleWorkerReply>) => {
+      const w = waiting.get(e.data.id);
+      if (!w) return;
+      waiting.delete(e.data.id);
+      if (e.data.ok) w.resolve(e.data.puzzles);
+      else w.reject(new Error(e.data.error));
+    };
+    worker.onerror = () => {
+      // The worker itself is broken: stop using it. Callers retry on the main thread.
+      worker?.terminate();
+      worker = null;
+      for (const w of waiting.values()) w.reject(new Error('Puzzle worker failed'));
+      waiting.clear();
+    };
+  }
+  return worker;
+}
+
+function fetchPuzzleFile(file: string): Promise<Puzzle[]> {
+  const w = puzzleWorker();
+  if (!w) return fetchOnMainThread(file);
+  return new Promise<Puzzle[]>((resolve, reject) => {
+    const id = ++nextRequest;
+    waiting.set(id, { resolve, reject });
+    const request: PuzzleWorkerRequest = { id, file };
+    w.postMessage(request);
+  }).catch(() => fetchOnMainThread(file));
+}
+
 async function loadFile(file: string): Promise<Puzzle[]> {
   let p = cache.get(file);
   if (!p) {
-    p = fetch(`/puzzles/${file}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Failed to load ${file}: ${r.status}`);
-        return r.json() as Promise<PuzzleRow[]>;
-      })
-      .then((rows) => rows.map(rowToPuzzle))
+    p = fetchPuzzleFile(file)
       .catch((e) => {
         cache.delete(file);
         throw e;
@@ -84,8 +133,15 @@ export function prefetchSequence(seed: number | string, fromIndex: number, count
 /**
  * Look a puzzle up by id. `rating` is the puzzle's rating as stored on the Attempt/ReviewItem, so only
  * its bucket (and the two neighbours, in case the set was rebuilt) is fetched. Null if it is gone.
+ * Puzzles made from the player's own games ("game-..." ids, see shared/analysis/practice.ts) live in
+ * IndexedDB instead of the bundled set.
  */
 export async function findPuzzle(id: string, rating: number): Promise<Puzzle | null> {
+  if (id.startsWith(GAME_PUZZLE_PREFIX)) {
+    // Imported lazily so this module stays loadable without IndexedDB.
+    const { db } = await import('./db.ts');
+    return (await db.customPuzzles.get(id)) ?? null;
+  }
   const b = bucketFor(rating);
   for (const bucket of [b, b - BUCKET_SIZE, b + BUCKET_SIZE]) {
     if (bucket < MIN_BUCKET || bucket > MAX_BUCKET) continue;

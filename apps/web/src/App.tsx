@@ -18,10 +18,11 @@ const Daily = lazy(() => import('./features/daily/Page.tsx'));
 const Rush = lazy(() => import('./features/rush/Page.tsx'));
 const Battle = lazy(() => import('./features/battle/Page.tsx'));
 const Custom = lazy(() => import('./features/custom/Page.tsx'));
+const Analysis = lazy(() => import('./features/analysis/Page.tsx'));
 const Stats = lazy(() => import('./features/stats/Page.tsx'));
 const Settings = lazy(() => import('./features/settings/Page.tsx'));
 
-/** Main modes: desktop sidebar + mobile bottom bar (7 columns). */
+/** Main modes: desktop sidebar + mobile bottom bar (8 columns). */
 const NAV = [
   { to: '/', label: 'Home', icon: Icons.home, end: true },
   { to: '/puzzles', label: 'Puzzles', icon: Icons.puzzle },
@@ -30,6 +31,7 @@ const NAV = [
   { to: '/rush', label: 'Rush', icon: Icons.bolt },
   { to: '/battle', label: 'Battle', icon: Icons.swords },
   { to: '/custom', label: 'Custom', icon: Icons.pencil },
+  { to: '/analysis', label: 'Review', icon: Icons.search },
 ];
 
 /** Secondary pages: below the modes in the sidebar, icons in the mobile top bar. */
@@ -132,6 +134,7 @@ export function App() {
               <Route path="/rush/*" element={<Rush />} />
               <Route path="/battle/*" element={<Battle />} />
               <Route path="/custom/*" element={<Custom />} />
+              <Route path="/analysis/*" element={<Analysis />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<div className="p-10 text-center text-ink-400">Page not found.</div>} />
@@ -141,13 +144,13 @@ export function App() {
       </main>
 
       {/* Bottom nav (mobile) */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {NAV.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
             end={n.end}
-            className={({ isActive }) => `relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
+            className={({ isActive }) => `relative flex min-w-0 flex-col items-center gap-0.5 py-2 text-[9px] font-semibold min-[400px]:text-[10px] transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
           >
             {n.icon('h-5 w-5')}
             {n.label}

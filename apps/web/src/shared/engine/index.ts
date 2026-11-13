@@ -1,0 +1,10 @@
+export { UciEngine, workerTransport, parseInfo, parseBestMove, toWhitePov, MAX_PV } from './uci.ts';
+export type { UciTransport, UciInfo, AnalyseOptions, PoolEngine } from './uci.ts';
+export { EnginePool, AbortError, isAbortError, poolSize, POOL_IDLE_MS } from './pool.ts';
+export type { EvalJob, PoolOptions } from './pool.ts';
+export { createCloudEval, parseCloudEval, normalisePv, CLOUD_MAX_PLY, CLOUD_TIMEOUT_MS } from './cloudEval.ts';
+export type { CloudEvalClient } from './cloudEval.ts';
+export { analysePositions } from './analyseGame.ts';
+export type { AnalysePositionsOptions } from './analyseGame.ts';
+export { ENGINES, cloudEval, deepEngineAvailable, disposeEnginePools, getEnginePool, isMobileDevice } from './engines.ts';
+export type { EngineId, EngineInfo } from './engines.ts';

@@ -234,6 +234,7 @@ export const Icons = {
   target: (c?: string) => <I className={c} d={<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></>} />,
   layers: (c?: string) => <I className={c} d={<><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></>} />,
   help: (c?: string) => <I className={c} d={<><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01" /></>} />,
+  search: (c?: string) => <I className={c} d={<><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.8-3.8" /><path d="M8.5 12.5l2-2.5 1.5 1.5 2-2.5" /></>} />,
   lock: (c?: string) => <I className={c} d={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />,
 };
 

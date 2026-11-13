@@ -9,7 +9,10 @@
     "build": "npm run build -w @knightfall/web && npm run build -w @knightfall/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "puzzles": "node scripts/build-puzzles.mjs"
+    "puzzles": "node scripts/build-puzzles.mjs",
+    "engine": "node scripts/fetch-engine.mjs",
+    "engine:deep": "node scripts/fetch-engine.mjs --deep",
+    "openings": "node scripts/build-openings.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

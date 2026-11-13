@@ -42,4 +42,10 @@ scripts           build-puzzles.mjs (Lichess CSV.zst → rating buckets)
 
 - Puzzles: Lichess puzzle database (CC0).
 - Piece set: "cburnett" by Colin M.L. Burnett (CC BY-SA 3.0 / GPL), via Lichess.
+- Openings: lichess-org/chess-openings (CC0).
+- Engine: Stockfish via stockfish.js 19.0.1 (GPL-3.0), shipped unmodified as separate files. See THIRD_PARTY_NOTICES.md.
 - All sound effects are synthesized at runtime with the Web Audio API.
+
+## License
+
+Knightfall's code is MIT licensed (see `LICENSE`). Bundled third-party files keep their own licenses; see `THIRD_PARTY_NOTICES.md`.

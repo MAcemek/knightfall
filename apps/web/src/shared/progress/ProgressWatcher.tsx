@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Glicko } from '@knightfall/core';
+import { GAME_PUZZLE_PREFIX, type Glicko } from '@knightfall/core';
 import { db, defaults, getKV, KEYS, setKV, type StreakState } from '../db.ts';
 import { sfx } from '../fx/sound.ts';
 import { toast } from '../toast.tsx';
@@ -16,7 +16,8 @@ export async function loadSnapshot(): Promise<ProgressSnapshot> {
     db.daily.toArray(),
     getKV<Glicko>(KEYS.puzzleRating, defaults.puzzleRating),
     getKV<StreakState>(KEYS.puzzleStreak, defaults.puzzleStreak),
-    db.customPuzzles.count(),
+    // Puzzles generated from reviewed games are not "created" by hand: they do not count for achievements.
+    db.customPuzzles.filter((p) => !p.id.startsWith(GAME_PUZZLE_PREFIX)).count(),
   ]);
   return buildSnapshot({ attempts, rushRuns, battles, daily, puzzleRating: rating.rating, puzzleStreak: streak, customCount });
 }

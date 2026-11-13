@@ -1,4 +1,4 @@
-import type { AnalysedMove, EvalScore, ParsedGame } from '@knightfall/core';
+import type { AnalysedMove, EvalScore, MoveClass, ParsedGame } from '@knightfall/core';
 import { playUci } from './reviewLogic.ts';
 
 /** More pure helpers of the review page (no React, no IndexedDB). */
@@ -54,6 +54,7 @@ export function provisionalMoves(parsed: ParsedGame): AnalysedMove[] {
       phase: 'opening',
       winBefore: 50,
       winAfter: 50,
+      epLoss: 0,
       accuracy: 0,
       cpLoss: 0,
     };
@@ -98,4 +99,23 @@ export function moveLabel(m: Pick<AnalysedMove, 'moveNumber' | 'color' | 'san'>)
 /** Win-chance swing of a move for the mover, in points (negative = lost). */
 export function swingOf(m: Pick<AnalysedMove, 'winBefore' | 'winAfter'>): number {
   return Math.round((m.winAfter - m.winBefore) * 10) / 10;
+}
+
+/** Classes whose icon is shown in the move list (the rest stay quiet). */
+const ICON_CLASSES: ReadonlySet<MoveClass> = new Set<MoveClass>(['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder']);
+
+export function moveHasIcon(cls: MoveClass): boolean {
+  return ICON_CLASSES.has(cls);
+}
+
+const FIGURINES: Record<'w' | 'b', Record<string, string>> = {
+  w: { K: '\u2654', Q: '\u2655', R: '\u2656', B: '\u2657', N: '\u2658' },
+  b: { K: '\u265A', Q: '\u265B', R: '\u265C', B: '\u265D', N: '\u265E' },
+};
+
+/** SAN with piece letters replaced by figurine symbols: "Nf3" -> "\u2658f3" (hollow for White, solid for Black). */
+export function figurineSan(san: string, color: 'w' | 'b'): string {
+  const f = FIGURINES[color];
+  const lead = f[san[0]] ?? san[0];
+  return lead + san.slice(1).replace(/=([QRBN])/, (_m, p: string) => `=${f[p]}`);
 }

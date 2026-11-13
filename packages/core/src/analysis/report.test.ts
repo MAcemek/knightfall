@@ -124,16 +124,22 @@ describe('buildReport', () => {
   const report = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings });
 
   it('classifies every move', () => {
-    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'good', 'best', 'best', 'blunder', 'best']);
+    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'excellent', 'best', 'best', 'blunder', 'best']);
   });
   it('fills move metadata', () => {
     const nf6 = report.moves[5];
     expect(nf6).toMatchObject({ ply: 5, color: 'b', moveNumber: 3, san: 'Nf6', uci: 'g8f6', best: { uci: 'g7g6', san: 'g6' }, phase: 'opening' });
     expect(nf6.winBefore).toBeGreaterThan(50);
     expect(nf6.winAfter).toBe(0);
-    expect(nf6.accuracy).toBeLessThan(15);
+    // Black goes from 0.474 expected points (-30 cp) to none: loses 0.526, accuracy 103.16·e^(−2.105) − 3.17 ≈ 9.4.
+    expect(nf6.epLoss).toBeCloseTo(0.5262, 4);
+    expect(nf6.accuracy).toBeCloseTo(9.4, 1);
     expect(nf6.cpLoss).toBe(1030);
-    expect(report.moves[6]).toMatchObject({ color: 'w', moveNumber: 4, winAfter: 100, accuracy: 100, cpLoss: 0 });
+    // Qh5 (30 → -20 cp) loses 0.0437 expected points: just inside "excellent".
+    expect(report.moves[2].epLoss).toBeCloseTo(0.0437, 4);
+    expect(report.moves[2].accuracy).toBeCloseTo(83.44, 2);
+    // Delivering mate loses nothing; accuracy of a flawless move is 103.16 − 3.17.
+    expect(report.moves[6]).toMatchObject({ color: 'w', moveNumber: 4, winAfter: 100, epLoss: 0, accuracy: 99.99, cpLoss: 0 });
     expect(report.moves[0].moveNumber).toBe(1);
     expect(report.moves[1].moveNumber).toBe(1);
   });
@@ -141,13 +147,29 @@ describe('buildReport', () => {
     expect(report.opening).toEqual({ eco: 'C20', name: "King's Pawn Game", ply: 2 });
   });
   it('computes accuracy, ACPL, rating estimate and counts per side', () => {
-    expect(report.accuracy.white!).toBeGreaterThan(report.accuracy.black!);
-    expect(report.accuracy.white!).toBeGreaterThan(85);
+    // Accuracy is the plain mean of the side's move accuracies (book moves included).
+    expect(report.accuracy.white!).toBeCloseTo((99.99 + 83.4392 + 96.4486 + 99.99) / 4, 2);
+    expect(report.accuracy.black!).toBeCloseTo((99.99 + 99.99 + 9.4008) / 3, 2);
     expect(report.acpl.white).toBeCloseTo(60 / 4, 6);
     expect(report.acpl.black).toBeCloseTo(1030 / 3, 6);
-    expect(report.counts.white).toMatchObject({ book: 1, good: 1, best: 2, great: 0, blunder: 0 });
+    expect(report.counts.white).toMatchObject({ book: 1, excellent: 1, best: 2, great: 0, blunder: 0 });
     expect(report.counts.black).toMatchObject({ book: 1, best: 1, blunder: 1 });
     expect(Object.values(report.counts.white).reduce((a, b) => a + b, 0)).toBe(4);
+  });
+  it('is version 2 and carries the Lichess-formula accuracy and the game-rating estimate', () => {
+    expect(report.version).toBe(2);
+    expect(report.ratingAccuracy.white!).toBeGreaterThan(85);
+    expect(report.ratingAccuracy.black!).toBeLessThan(25);
+    // No known ratings: anchored on 1600, moved by the (clamped) accuracy gap.
+    expect(report.estimatedRating).toEqual({ white: 2200, black: 1000 });
+    const rated = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings, ratings: { white: 1510, black: 1480 } });
+    expect(rated.estimatedRating).toEqual({ white: 2100, black: 900 });
+  });
+  it('puts every non-opening move into tactics or strategy (none here: the whole game is the opening)', () => {
+    expect(report.advanced.opening.white).toBeCloseTo(report.accuracy.white!, 10);
+    expect(report.advanced.opening.black).toBeCloseTo(report.accuracy.black!, 10);
+    expect(report.advanced.tactics).toEqual({ white: null, black: null });
+    expect(report.advanced.strategy).toEqual({ white: null, black: null });
   });
   it('gives phase accuracies only where there are moves', () => {
     expect(report.phases.opening.white).not.toBeNull();
@@ -156,6 +178,15 @@ describe('buildReport', () => {
   });
   it('finds the key moment', () => {
     expect(report.keyMoments).toEqual([5]);
+  });
+  it('detects book by piece placement, so a transposition counts', () => {
+    // Only the position after 1.e4 is in the table, but the 2.Qh5 / ...Nc6 / 3.Bc4 positions are not: just ply 0 is book.
+    const one = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: { [epdOf(g.fens[1])]: ['B00', "King's Pawn"] } });
+    expect(one.moves.map((m) => m.class === 'book')).toEqual([true, false, false, false, false, false, false]);
+    // The table's side-to-move / castling fields are ignored: look the same placement up with other fields.
+    const placementOnly = { [`${g.fens[1].split(' ')[0]} w KQkq -`]: ['B00', "King's Pawn"] as [string, string] };
+    const two = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: placementOnly });
+    expect(two.moves[0].class).toBe('book');
   });
   it('works without an opening table and rejects mismatched input', () => {
     const noBook = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: null });

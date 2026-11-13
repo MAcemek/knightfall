@@ -16,15 +16,16 @@ export interface EngineInfo {
 }
 
 export const ENGINES: Record<EngineId, EngineInfo> = {
-  lite: { id: 'lite', label: 'Stockfish 19 Lite', url: '/engine/stockfish-19-lite-single.js', depth: 14 },
-  deep: { id: 'deep', label: 'Stockfish 19', url: '/engine/deep/stockfish-19-single.js', depth: 20 },
+  lite: { id: 'lite', label: 'Stockfish 17 Lite', url: '/engine/stockfish-17.1-lite-single-03e3232.js', depth: 16 },
+  deep: { id: 'deep', label: 'Stockfish 17', url: '/engine/deep/stockfish-17.1-single-a496a04.js', depth: 20 },
 };
 
+/** Identifier stored with analyses: engine build + search settings family. Bump when results are no longer comparable. */
+export const ENGINE_BUILD = 'sf17.1';
+
 /**
- * Engine lines per position in a game review. The second line is what tells "great" (the only good move)
- * from "best"; a third line costs time and no classification uses it. In a Node benchmark of one 46-move
- * game (lite build, no book or cloud evals), depth 14 + two lines gave accuracies within about 0.5 points
- * of depth 16 + three lines in roughly a quarter of the time.
+ * Engine lines per position in a game review (matches WintrChess: MultiPV 2). The second line is what tells
+ * "great" (the only good move) from "best".
  */
 export const REVIEW_MULTIPV = 2;
 

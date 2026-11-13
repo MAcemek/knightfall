@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { PositionEval } from '@knightfall/core';
+import type { MoveClass, PositionEval } from '@knightfall/core';
 import { addMistakesToPractice, practicePuzzles, useAnalysisSession } from '../../../shared/analysis/index.ts';
 import { Board, type BoardArrow } from '../../../shared/Board/index.ts';
 import { ENGINES, getEnginePool } from '../../../shared/engine/index.ts';
@@ -10,10 +10,9 @@ import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../../shar
 import { toast } from '../../../shared/toast.tsx';
 import { Button, EmptyState, GameLayout, Icons, Panel } from '../../../shared/ui.tsx';
 import { useHotkeysWithHelp } from '../../puzzles/useHotkeys.ts';
-import {
-  EvalBar, EvalGraph, ExplainPanel, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, MoveList, ProgressBar, ReviewHeader, SummaryPanel,
-  type GraphDot,
-} from './parts.tsx';
+import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
+import { ReviewView } from './ReviewView.tsx';
+import { SummaryView } from './SummaryView.tsx';
 import { lineSteps, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
 import { barFraction, graphGeometry, initialPly, lineToSan, playUci } from './reviewLogic.ts';
 import { MOVE_CLASS_META } from '../../../shared/analysis/index.ts';
@@ -34,6 +33,8 @@ const SHORTCUTS: ShortcutGroup[] = [
   { title: 'Explore', items: [{ keys: ['Drag'], label: 'Play a different move to start a variation' }] },
   BOARD_SHORTCUTS,
 ];
+
+const GRAPH_CLASSES: ReadonlySet<MoveClass> = new Set<MoveClass>(['brilliant', 'great', 'miss', 'mistake', 'blunder', 'inaccuracy']);
 
 function play(kind: ReturnType<typeof soundKind>) {
   sfx[kind]();
@@ -97,6 +98,7 @@ const ReviewBoard = memo(function ReviewBoard(props: {
   fen: string;
   orientation: 'white' | 'black';
   lastMove: [string, string] | null;
+  tints: Record<string, string> | undefined;
   arrows: BoardArrow[] | undefined;
   interactive: boolean;
   movableColor: 'w' | 'b';
@@ -125,6 +127,8 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
 
   const mySide = userSide(g);
   const [flipped, setFlipped] = useState(false);
+  const [mode, setMode] = useState<'summary' | 'review'>(() => (search.get('ply') ? 'review' : 'summary'));
+  const [playing, setPlaying] = useState(false);
   const orientation: 'white' | 'black' = (mySide === 'b') !== flipped ? 'black' : 'white';
 
   const [ply, setPly] = useState(() => initialPly(search.get('ply'), p.sans.length));
@@ -208,6 +212,12 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     () => (move && classified ? <MoveBadge square={move.uci.slice(2, 4)} orientation={orientation} cls={move.class} /> : null),
     [move, classified, orientation],
   );
+
+  const tints = useMemo<Record<string, string> | undefined>(() => {
+    if (!move || !classified || preview) return undefined;
+    const c = `${MOVE_CLASS_META[move.class].color}73`; // ~45% opacity
+    return { [move.uci.slice(0, 2)]: c, [move.uci.slice(2, 4)]: c };
+  }, [move, classified, preview]);
 
   /* Dragging a move */
   const latest = useRef({ ply, explore, view, moves, N });
@@ -297,13 +307,44 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   };
 
   /* Hotkeys */
+  const reviewing = classified && mode === 'review';
+  const enterReview = () => {
+    if (classified && mode === 'summary') setMode('review');
+  };
+  const first = () => {
+    enterReview();
+    if (explore) setCursor(0);
+    else goTo(0);
+  };
+  const last = () => {
+    enterReview();
+    if (explore) setCursor(explore.moves.length);
+    else goTo(N);
+  };
+  const stepBy = (d: number) => {
+    enterReview();
+    setPlaying(false);
+    step(d);
+  };
+
+  /* Autoplay: one move per second until the end */
+  useEffect(() => {
+    if (!playing) return;
+    if (explore || preview || ply >= N) {
+      setPlaying(false);
+      return;
+    }
+    const t = setTimeout(() => goTo(plyRef.current + 1), 1000);
+    return () => clearTimeout(t);
+  }, [playing, ply, explore, preview, N, goTo]);
+
   const help = useHotkeysWithHelp({
-    arrowleft: () => step(-1),
-    arrowup: () => step(-1),
-    arrowright: () => step(1),
-    arrowdown: () => step(1),
-    home: () => (explore ? setCursor(0) : goTo(0)),
-    end: () => (explore ? setCursor(explore.moves.length) : goTo(N)),
+    arrowleft: () => stepBy(-1),
+    arrowup: () => stepBy(-1),
+    arrowright: () => stepBy(1),
+    arrowdown: () => stepBy(1),
+    home: first,
+    end: last,
     f: () => setFlipped((f) => !f),
     escape: () => {
       if (explore || preview) {
@@ -325,7 +366,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     if (!report) return [];
     const out: GraphDot[] = [];
     for (const m of report.moves) {
-      if (m.class !== 'blunder' && m.class !== 'mistake' && m.class !== 'miss') continue;
+      if (!GRAPH_CLASSES.has(m.class)) continue;
       const pt = geom.points[m.ply + 1];
       if (pt) out.push({ key: m.ply, x: pt.x, y: pt.y, color: MOVE_CLASS_META[m.class].color, label: `${m.san}: ${MOVE_CLASS_META[m.class].label}` });
     }
@@ -374,6 +415,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
             fen={boardFen}
             orientation={orientation}
             lastMove={view.last}
+            tints={tints}
             arrows={preview ? undefined : arrows}
             interactive={!preview}
             movableColor={movableColor}
@@ -383,63 +425,98 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           />
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="secondary" aria-label="First move" onClick={() => (explore ? setCursor(0) : goTo(0))}>«</Button>
-          <Button size="sm" variant="secondary" aria-label="Previous move" onClick={() => step(-1)}>‹</Button>
-          <Button size="sm" variant="secondary" aria-label="Next move" onClick={() => step(1)}>›</Button>
-          <Button size="sm" variant="secondary" aria-label="Last move" onClick={() => (explore ? setCursor(explore.moves.length) : goTo(N))}>»</Button>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="ghost" onClick={() => setFlipped((f) => !f)} aria-label="Flip board (F)">
-            {Icons.flip('h-4 w-4')} Flip
-          </Button>
-          <Button size="sm" variant="ghost" onClick={help.openHelp} aria-label="Keyboard shortcuts">?</Button>
-        </div>
-      </div>
-      <div className="mt-3">
-        <EvalGraph geom={geom} count={N + 1} current={curIndex} dots={dots} onSeek={seek} />
+      <div className="mt-3 flex items-center justify-end gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => setFlipped((f) => !f)} aria-label="Flip board (F)">
+          {Icons.flip('h-4 w-4')} Flip
+        </Button>
+        <Button size="sm" variant="ghost" onClick={help.openHelp} aria-label="Keyboard shortcuts">?</Button>
       </div>
     </div>
   );
 
-  const side$ = (
-    <div className="space-y-4">
-      <Panel>
-        {explore ? (
-          <ExplorePanel
-            fen={view.fen}
-            live={live && live.fen === view.fen ? live.e : null}
-            sans={explore.moves.map((m) => m.san)}
-            startLabel={startLabel}
-            cursor={explore.cursor}
-            onCursor={setCursor}
-            onBack={() => setExplore(null)}
-          />
-        ) : (
-          <ExplainPanel move={shownMove} report={report} onShowLine={showLine} previewing={preview !== null} bestLine={bestLine} />
-        )}
-      </Panel>
-      <Panel>
-        <MoveList moves={moves} classified={classified} current={explore ? explore.basePly : ply} onSelect={goTo} />
-      </Panel>
-      {report && game && (
-        <Panel className="space-y-2">
-          <Button variant="good" className="w-full" disabled={mistakeCount === 0 || busy} onClick={() => void practise()}>
-            Practise {mistakeCount} mistake{mistakeCount === 1 ? '' : 's'}
-          </Button>
-          <Link to="/train/review" className="block text-center text-xs font-semibold text-ink-400 underline hover:text-ink-200">
-            Open Review mistakes
-          </Link>
-        </Panel>
-      )}
-      {report && game && (
-        <Panel>
-          <SummaryPanel report={report} game={game} onJump={goTo} />
-        </Panel>
-      )}
-    </div>
-  );
+  const startReview = () => {
+    goTo(0, false);
+    setMode('review');
+  };
+  const seekFromSummary = (i: number) => {
+    goTo(i, false);
+    setMode('review');
+  };
+
+  const panel = (() => {
+    if (!report) {
+      // Analysis still running (or failed): the live graph instead of the summary.
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-ink-300">{status === 'analysing' ? 'Analysing the game\u2026 the graph fills in as positions are evaluated.' : 'No analysis yet.'}</p>
+          <EvalGraph geom={geom} count={N + 1} current={curIndex} dots={dots} onSeek={seek} />
+        </div>
+      );
+    }
+    if (!reviewing) {
+      return (
+        <SummaryView
+          report={report}
+          game={g}
+          mySide={mySide}
+          geom={geom}
+          dots={dots}
+          mistakeCount={mistakeCount}
+          practiseBusy={busy}
+          staleEngine={s.staleEngine}
+          onStart={startReview}
+          onSeek={seekFromSummary}
+          onPractise={() => void practise()}
+          onReanalyse={() => s.restart('lite')}
+        />
+      );
+    }
+    return (
+      <ReviewView
+        moves={moves}
+        move={shownMove}
+        ply={curIndex}
+        evalAfter={evals[ply]}
+        bestLine={bestLine}
+        previewing={preview !== null}
+        explorePanel={
+          explore ? (
+            <ExplorePanel
+              fen={view.fen}
+              live={live && live.fen === view.fen ? live.e : null}
+              sans={explore.moves.map((m) => m.san)}
+              startLabel={startLabel}
+              cursor={explore.cursor}
+              onCursor={setCursor}
+              onBack={() => setExplore(null)}
+            />
+          ) : null
+        }
+        geom={geom}
+        dots={dots}
+        playing={playing}
+        onShowLine={showLine}
+        onSummary={() => {
+          setPlaying(false);
+          setExplore(null);
+          setPreview(null);
+          setMode('summary');
+        }}
+        onFirst={first}
+        onBack={() => stepBy(-1)}
+        onNext={() => stepBy(1)}
+        onLast={last}
+        onTogglePlay={() => setPlaying((v) => !v)}
+        onSelect={(i) => {
+          setPlaying(false);
+          goTo(i);
+        }}
+        onSeek={seek}
+      />
+    );
+  })();
+
+  const side$ = <Panel>{panel}</Panel>;
 
   return (
     <div className="w-full">
@@ -451,7 +528,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           <Button size="sm" variant="secondary" onClick={() => s.restart()}>Retry</Button>
         </div>
       )}
-      <GameLayout board={board} side={side$} />
+      <GameLayout board={board} side={side$} wideSide />
       <ShortcutHelp open={help.helpOpen} onClose={help.closeHelp} groups={SHORTCUTS} />
     </div>
   );

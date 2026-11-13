@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import { buildReport, parsePgnGame, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
+import { buildReport, parsePgnGame, REPORT_VERSION, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
 import type { StoredGame } from '../db.ts';
-import { analysePositions, cloudEval, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
+import { analysePositions, cloudEval, ENGINE_BUILD, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
 import { getAnalysis, getAnalysisPrefs, getGame, loadOpenings, saveAnalysis } from './store.ts';
 
 /**
@@ -32,6 +32,8 @@ export interface SessionSnapshot {
   engine: EngineId;
   depth: number;
   analysedAt: number | null;
+  /** True when the stored analysis was made by an older engine build than the current one. */
+  staleEngine: boolean;
   /** Ready-to-show message when status is 'error'. */
   error: string | null;
 }
@@ -46,7 +48,7 @@ export interface AnalysisSession {
 }
 
 const EMPTY: SessionSnapshot = {
-  status: 'loading', game: null, parsed: null, evals: [], done: 0, total: 0, report: null, engine: 'lite', depth: ENGINES.lite.depth, analysedAt: null, error: null,
+  status: 'loading', game: null, parsed: null, evals: [], done: 0, total: 0, report: null, engine: 'lite', depth: ENGINES.lite.depth, analysedAt: null, staleEngine: false, error: null,
 };
 
 function createSession(gameKey: string): AnalysisSession {
@@ -69,7 +71,7 @@ function createSession(gameKey: string): AnalysisSession {
     const mine = ++run;
     const depth = ENGINES[engine].depth;
     const evals: (PositionEval | undefined)[] = new Array(parsed.fens.length).fill(undefined);
-    set({ status: 'analysing', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, error: null });
+    set({ status: 'analysing', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
     try {
       const pool = getEnginePool(engine);
       const [all, openings] = await Promise.all([
@@ -90,9 +92,9 @@ function createSession(gameKey: string): AnalysisSession {
         loadOpenings(),
       ]);
       if (mine !== run) return;
-      const report = buildReport({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: all, openings });
+      const report = buildReport({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: all, openings, ratings: { white: game.white.rating, black: game.black.rating } });
       const analysedAt = Date.now();
-      await saveAnalysis({ gameKey, analysedAt, engine, depth, report });
+      await saveAnalysis({ gameKey, analysedAt, engine, depth, report, engineBuild: ENGINE_BUILD });
       if (mine !== run) return;
       set({ status: 'done', report, evals: all, done: all.length, analysedAt });
     } catch (e) {
@@ -108,8 +110,22 @@ function createSession(gameKey: string): AnalysisSession {
       const parsed = parsePgnGame(game.pgn);
       if (!parsed.ok) return set({ status: 'error', game, error: parsed.error });
       const total = parsed.game.fens.length;
-      if (stored && stored.report.version === 1 && stored.report.evals.length === total) {
-        return set({ status: 'done', game, parsed: parsed.game, report: stored.report, evals: stored.report.evals, done: total, total, engine: stored.engine, depth: stored.depth, analysedAt: stored.analysedAt });
+      if (stored && stored.report.evals.length === total) {
+        let report: GameReport | null = stored.report;
+        if (report.version !== REPORT_VERSION) {
+          // Older classification rules: rebuild from the stored evaluations (no engine run) and save it back.
+          try {
+            const g = parsed.game;
+            const openings = await loadOpenings();
+            report = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: stored.report.evals, openings, ratings: { white: game.white.rating, black: game.black.rating } });
+            await saveAnalysis({ ...stored, report });
+          } catch {
+            report = null;
+          }
+        }
+        if (report) {
+          return set({ status: 'done', game, parsed: parsed.game, report, evals: report.evals, done: total, total, engine: stored.engine, depth: stored.depth, analysedAt: stored.analysedAt, staleEngine: stored.engineBuild !== ENGINE_BUILD });
+        }
       }
       set({ game, parsed: parsed.game, total });
       void analyse(prefs.engine);

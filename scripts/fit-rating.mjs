@@ -1,3 +1,8 @@
+// NOTE: packages/core/src/analysis/rating.ts uses the linear fit this script prints at the end
+// ("accuracy ~ a + b * rating", about a = 61.2, b = 0.00918 on data/rating-samples.json): the game-rating
+// estimate anchors on the player's known rating and shifts by (accuracy - typical) / b / 2. If the samples are
+// refreshed, copy the new a and b into RATING_FIT there.
+//
 // Calibrate Game Review's "estimated game rating" against real games.
 //
 // 1. Collects rated, Lichess-analysed blitz/rapid games (public API, one request at a time, generic
@@ -153,11 +158,28 @@ const rows = samples
   })
   .filter(Boolean);
 
+/** Simple least squares y = a + b*x with the residual spread. */
+function linearFit(pairs) {
+  const n = pairs.length;
+  const mx = pairs.reduce((s, [x]) => s + x, 0) / n;
+  const my = pairs.reduce((s, [, y]) => s + y, 0) / n;
+  const sxy = pairs.reduce((s, [x, y]) => s + (x - mx) * (y - my), 0);
+  const sxx = pairs.reduce((s, [x]) => s + (x - mx) ** 2, 0);
+  const b = sxy / sxx;
+  const a = my - b * mx;
+  const sse = pairs.reduce((s, [x, y]) => s + (y - a - b * x) ** 2, 0);
+  const sst = pairs.reduce((s, [, y]) => s + (y - my) ** 2, 0);
+  return { a: +a.toFixed(2), b: +b.toFixed(5), r2: +(1 - sse / sst).toFixed(3), residualSd: +Math.sqrt(sse / (n - 2)).toFixed(1), meanRating: Math.round(mx), n };
+}
+
 const x = (acc) => Math.log(101 - acc);
 console.log(`${rows.length} player-games, ${new Set(rows.map((r) => r.game)).size} games`);
 console.log('own accuracy only          ', leastSquares(rows.map((r) => [x(r.accuracy), r.rating])));
 console.log('own + opponent accuracy    ', leastSquares(rows.map((r) => [x(r.accuracy), x(r.oppAccuracy), r.rating])));
 console.log('linear own + opp (compare) ', leastSquares(rows.map((r) => [r.accuracy, r.oppAccuracy, r.rating])));
+
+// The fit rating.ts uses: Lichess accuracy as a linear function of rating (accuracy ~ a + b * rating).
+console.log('accuracy ~ a + b*rating     ', linearFit(rows.map((r) => [r.rating, r.accuracy])));
 
 // What the data does support: the spread of accuracy at a known rating. Printed as the TYPICAL_ACCURACY
 // table for packages/core/src/analysis/winning.ts (200-point bands with enough games).

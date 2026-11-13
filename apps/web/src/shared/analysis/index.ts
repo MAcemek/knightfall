@@ -7,5 +7,5 @@ export { dropAnalysisSession, getAnalysisSession, useAnalysisSession } from './s
 export type { AnalysisSession, SessionSnapshot, SessionStatus } from './session.ts';
 export { addMistakesToPractice, practicePuzzles } from './practice.ts';
 export type { PracticeResult } from './practice.ts';
-export { MOVE_CLASS_META, MoveClassChip, MoveGlyph } from './glyphs.tsx';
+export { MOVE_CLASS_META, MoveClassChip, MoveGlyph, REPORT_TABLE_CLASSES } from './glyphs.tsx';
 export type { MoveClassMeta } from './glyphs.tsx';

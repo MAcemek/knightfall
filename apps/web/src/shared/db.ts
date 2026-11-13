@@ -142,6 +142,8 @@ export interface StoredAnalysis {
   engine: 'lite' | 'deep';
   depth: number;
   report: GameReport;
+  /** Engine build that produced the evaluations (see ENGINE_BUILD); absent on older rows. Not indexed. */
+  engineBuild?: string;
 }
 
 export const db = new Dexie('knightfall') as Dexie & {

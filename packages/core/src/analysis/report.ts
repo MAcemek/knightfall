@@ -1,17 +1,39 @@
 import { Chess } from 'chess.js';
 import type { Puzzle } from '../types.ts';
 import { uciToMove, validateLine } from '../validate.ts';
-import { classifyMove } from './classify.ts';
-import { pieceMaterial } from './sacrifice.ts';
+import { classifyMove, GREAT_SECOND_LOSS } from './classify.ts';
+import { epMoveAccuracy, expectedPointsLoss } from './expectedPoints.ts';
+import { pieceMaterial } from './pieceSafety.ts';
+import { estimateGameRating } from './rating.ts';
 import type { AnalysedMove, GamePhase, GameReport, MoveClass, OpeningTable, PositionEval, Side, SideNumbers } from './types.ts';
-import { MOVE_CLASSES } from './types.ts';
-import { averageCpLoss, centipawnLoss, gameAccuracy, moveAccuracy, winPercent, winPercentFor } from './winning.ts';
+import { MOVE_CLASSES, REPORT_VERSION } from './types.ts';
+import { averageCpLoss, centipawnLoss, gameAccuracy, winPercent, winPercentFor } from './winning.ts';
 
 /** Turns a move list plus one evaluation per position into the report the review page shows. Pure. */
 
 /** EPD = the first four FEN fields (placement, side, castling, en passant). */
 export function epdOf(fen: string): string {
   return fen.split(' ').slice(0, 4).join(' ');
+}
+
+/** Piece placement only (first FEN field): how known opening positions are looked up. */
+export function placementOf(fen: string): string {
+  return fen.split(' ')[0];
+}
+
+/** Opening table keyed by piece placement (first hit wins), cached per table. */
+const placementCache = new WeakMap<OpeningTable, Map<string, [string, string]>>();
+export function openingByPlacement(openings: OpeningTable): Map<string, [string, string]> {
+  let m = placementCache.get(openings);
+  if (!m) {
+    m = new Map();
+    for (const [epd, hit] of Object.entries(openings)) {
+      const key = placementOf(epd);
+      if (!m.has(key)) m.set(key, hit);
+    }
+    placementCache.set(openings, m);
+  }
+  return m;
 }
 
 export function sideToMove(fen: string): Side {
@@ -53,14 +75,6 @@ function sanOf(fen: string, uci: string): string | null {
   }
 }
 
-function legalMoveCount(fen: string): number {
-  try {
-    return new Chess(fen).moves().length;
-  } catch {
-    return 0;
-  }
-}
-
 function avg(xs: number[]): number | null {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 }
@@ -75,20 +89,25 @@ export interface ReportInput {
   evals: PositionEval[];
   /** Opening table, or null to skip book detection. */
   openings: OpeningTable | null;
+  /** Players' known ratings (anchor the game-rating estimate). */
+  ratings?: { white?: number | null; black?: number | null };
 }
 
 /** Build the full report. Throws if the array lengths do not line up. */
 export function buildReport(input: ReportInput): GameReport {
-  const { startFen, sans, ucis, fens, evals, openings } = input;
+  const { startFen, sans, ucis, fens, evals, openings, ratings } = input;
   const n = sans.length;
   if (ucis.length !== n || fens.length !== n + 1 || evals.length !== n + 1) throw new Error('buildReport: array lengths do not match');
 
-  // Book: the position AFTER the move is in the table, and every earlier move was book too.
+  // Book: the position after the move (piece placement) is a known opening position, at any ply.
+  // The opening name is the last hit of the unbroken run from the start.
+  const byPlacement = openings ? openingByPlacement(openings) : null;
+  const isBook = fens.slice(1).map((f) => !!byPlacement?.has(placementOf(f)));
   let bookPlies = 0;
   let opening: GameReport['opening'] = null;
-  if (openings) {
+  if (byPlacement) {
     for (let i = 0; i < n && i < OPENING_MAX_PLIES; i++) {
-      const hit = openings[epdOf(fens[i + 1])];
+      const hit = openings![epdOf(fens[i + 1])] ?? byPlacement.get(placementOf(fens[i + 1]));
       if (!hit) break;
       bookPlies = i + 1;
       opening = { eco: hit[0], name: hit[1], ply: i + 1 };
@@ -111,17 +130,8 @@ export function buildReport(input: ReportInput): GameReport {
     const color = sideToMove(fens[i]);
     const before = evals[i];
     const after = evals[i + 1];
-    const cls = classifyMove({
-      fenBefore: fens[i],
-      uci: ucis[i],
-      mover: color,
-      before,
-      after,
-      isBook: i < bookPlies,
-      legalMoves: legalMoveCount(fens[i]),
-      previous,
-      previousUci: i > 0 ? ucis[i - 1] : undefined,
-    });
+    const cls = classifyMove({ fenBefore: fens[i], fenAfter: fens[i + 1], uci: ucis[i], mover: color, before, after, isBook: isBook[i], previous });
+    const epLoss = expectedPointsLoss(before.score, after.score, color);
     previous = cls;
     const winBefore = winPercentFor(before.score, color);
     const winAfter = winPercentFor(after.score, color);
@@ -140,7 +150,8 @@ export function buildReport(input: ReportInput): GameReport {
       phase,
       winBefore,
       winAfter,
-      accuracy: moveAccuracy(winBefore, winAfter),
+      epLoss,
+      accuracy: epMoveAccuracy(epLoss),
       cpLoss: centipawnLoss(before.score, after.score, color),
       ...(bestUci && bestSan ? { best: { uci: bestUci, san: bestSan } } : {}),
     });
@@ -154,6 +165,22 @@ export function buildReport(input: ReportInput): GameReport {
   for (const m of moves) counts[m.color === 'w' ? 'white' : 'black'][m.class]++;
   const phaseAcc = (phase: GamePhase): SideNumbers => perSide((ms) => avg(ms.filter((m) => m.phase === phase).map((m) => m.accuracy)));
 
+  // Advanced stats. Tactics: positions with one clearly best move, or a chance the opponent just handed over.
+  const tactical = (m: AnalysedMove): boolean => {
+    const ev = evals[m.ply];
+    const second = ev.lines[1];
+    if (second && expectedPointsLoss(ev.score, second.score, m.color) >= GREAT_SECOND_LOSS) return true;
+    const prev = m.ply > 0 ? moves[m.ply - 1].class : undefined;
+    return prev === 'mistake' || prev === 'blunder' || prev === 'miss';
+  };
+  const meanAcc = (ms: AnalysedMove[]) => avg(ms.map((m) => m.accuracy));
+  const advanced = {
+    opening: perSide((ms) => meanAcc(ms.filter((m) => m.phase === 'opening'))),
+    tactics: perSide((ms) => meanAcc(ms.filter((m) => m.phase !== 'opening' && tactical(m)))),
+    strategy: perSide((ms) => meanAcc(ms.filter((m) => m.phase !== 'opening' && !tactical(m)))),
+  };
+  const ratingAccuracy: SideNumbers = { white: gameAccuracy(whiteWin, 'w', firstMover), black: gameAccuracy(whiteWin, 'b', firstMover) };
+
   const keyMoments = moves
     .map((m) => ({ ply: m.ply, swing: Math.abs(whiteWin[m.ply + 1] - whiteWin[m.ply]) }))
     .filter((x) => x.swing > 10)
@@ -163,11 +190,17 @@ export function buildReport(input: ReportInput): GameReport {
     .sort((a, b) => a - b);
 
   return {
-    version: 1,
+    version: REPORT_VERSION,
     startFen,
     moves,
     evals,
-    accuracy: { white: gameAccuracy(whiteWin, 'w', firstMover), black: gameAccuracy(whiteWin, 'b', firstMover) },
+    accuracy: perSide(meanAcc),
+    ratingAccuracy,
+    estimatedRating: {
+      white: estimateGameRating(ratingAccuracy.white, ratings?.white),
+      black: estimateGameRating(ratingAccuracy.black, ratings?.black),
+    },
+    advanced,
     acpl,
     counts,
     phases: { opening: phaseAcc('opening'), middlegame: phaseAcc('middlegame'), endgame: phaseAcc('endgame') },

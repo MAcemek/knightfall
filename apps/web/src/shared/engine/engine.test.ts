@@ -13,7 +13,7 @@ const evalOf = (fen: string, cp = 10): PositionEval => ({ fen, depth: 16, source
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('UCI parsing', () => {
-  it('parses a real Stockfish 19 info line', () => {
+  it('parses a real Stockfish info line', () => {
     const line = 'info depth 16 seldepth 20 multipv 3 score cp 20 nodes 352089 nps 166158 hashfull 129 time 2119 pv d2d4 g8f6 c2c4';
     expect(parseInfo(line)).toEqual({ depth: 16, multipv: 3, score: { cp: 20 }, pv: ['d2d4', 'g8f6', 'c2c4'] });
   });
@@ -97,6 +97,18 @@ describe('UciEngine', () => {
     await engine.analyse(START, { depth: 2, multiPv: 1 });
     expect(depths).toEqual([1, 2]);
     expect(f.sent.filter((c) => c.startsWith('setoption'))).toEqual([]);
+  });
+  it('sends ucinewgame and waits for readyok before a fresh search, and not otherwise', async () => {
+    const f = fakeTransport(['info depth 16 multipv 1 score cp 10 pv e2e4', 'bestmove e2e4']);
+    const engine = new UciEngine(f.transport);
+    await engine.analyse(START, { depth: 16, multiPv: 2, fresh: true });
+    expect(f.sent).toEqual(['uci', 'isready', 'ucinewgame', 'isready', 'setoption name MultiPV value 2', `position fen ${START}`, 'go depth 16']);
+    f.sent.length = 0;
+    await engine.analyse(START, { depth: 16, multiPv: 2 });
+    expect(f.sent).toEqual([`position fen ${START}`, 'go depth 16']);
+    f.sent.length = 0;
+    await engine.analyse(START, { depth: 16, multiPv: 2, fresh: true });
+    expect(f.sent).toEqual(['ucinewgame', 'isready', `position fen ${START}`, 'go depth 16']);
   });
   it('stop() ends an infinite search with what it has', async () => {
     const f = fakeTransport();
@@ -344,23 +356,59 @@ describe('analysePositions', () => {
     expect(out.map((e) => e.source)).toEqual(['engine', 'engine', 'terminal']);
     expect(out[2].terminal).toBe('checkmate');
     expect(asked.map((j) => j.fen)).toEqual([START, AFTER_E4]);
-    expect(asked[0]).toMatchObject({ depth: 16, multiPv: 3 });
+    expect(asked[0]).toMatchObject({ depth: 16, multiPv: 2, fresh: true });
     expect(asked[0].priority!).toBeGreaterThan(asked[1].priority!);
     expect(seen.map((s) => s[1])).toEqual([1, 2, 3]);
     expect(seen.every((s) => s[2] === 3)).toBe(true);
   });
-  it('uses the cloud first and gives up on it after two misses in a row', async () => {
-    const cloudAsked: string[] = [];
+  const cloudEvalAt = (fen: string, depth: number, lines: number): PositionEval => ({
+    fen,
+    depth,
+    source: 'cloud',
+    lines: Array.from({ length: lines }, (_, n) => ({ score: { cp: 10 + n }, pv: ['e2e4'] })),
+    score: { cp: 10 },
+  });
+  it('accepts cloud evals in order, stops asking at the first miss and sends the rest to the engine', async () => {
+    const asked: string[] = [];
     const many = [START, AFTER_E4, START, AFTER_E4, START];
     const cloud: CloudEvalClient = {
       get: async (fen) => {
-        cloudAsked.push(fen);
-        return cloudAsked.length === 1 ? { ...evalOf(fen), source: 'cloud' } : null;
+        asked.push(fen);
+        return asked.length <= 2 ? cloudEvalAt(fen, 40, 2) : null;
       },
     };
-    const out = await analysePositions({ fens: many, depth: 16, evaluate: async (j) => evalOf(j.fen), cloud });
-    expect(out.map((e) => e.source)).toEqual(['cloud', 'engine', 'engine', 'engine', 'engine']);
-    expect(cloudAsked).toHaveLength(3);
+    const local: number[] = [];
+    const out = await analysePositions({ fens: many, depth: 16, evaluate: async (j) => (local.push(1), evalOf(j.fen)), cloud });
+    expect(out.map((e) => e.source)).toEqual(['cloud', 'cloud', 'engine', 'engine', 'engine']);
+    expect(asked).toHaveLength(3); // third answer was the first miss; positions 4 and 5 were never asked
+    expect(local).toHaveLength(3);
+  });
+  it('rejects a cloud answer shallower than the review depth and then never asks again', async () => {
+    let calls = 0;
+    const cloud: CloudEvalClient = { get: async (fen) => (calls++, calls === 1 ? cloudEvalAt(fen, 15, 2) : cloudEvalAt(fen, 60, 2)) };
+    const out = await analysePositions({ fens: [START, AFTER_E4, START], depth: 16, evaluate: async (j) => evalOf(j.fen), cloud });
+    expect(calls).toBe(1);
+    expect(out.map((e) => e.source)).toEqual(['engine', 'engine', 'engine']);
+    // exactly the review depth is accepted (deep builds use 20)
+    const ok = await analysePositions({ fens: [START], depth: 20, evaluate: async (j) => evalOf(j.fen), cloud: { get: async (fen) => cloudEvalAt(fen, 20, 2) } });
+    expect(ok[0].source).toBe('cloud');
+    const shallowForDeep = await analysePositions({ fens: [START], depth: 20, evaluate: async (j) => evalOf(j.fen), cloud: { get: async (fen) => cloudEvalAt(fen, 19, 2) } });
+    expect(shallowForDeep[0].source).toBe('engine');
+  });
+  it('asks the cloud for min(multiPv, legal moves) lines and skips terminal and known positions', async () => {
+    const mins: number[] = [];
+    const cloud: CloudEvalClient = { get: async (fen, _mpv, minLines) => (mins.push(minLines), cloudEvalAt(fen, 30, minLines)) };
+    // A position with a single legal reply (Kg8).
+    const oneMove = '7k/8/6K1/8/8/8/5R2/8 b - - 0 1';
+    const known = [{ ...evalOf(START, 5) }, undefined, undefined, undefined];
+    const out = await analysePositions({ fens: [START, AFTER_E4, oneMove, MATED], depth: 16, known, evaluate: async (j) => evalOf(j.fen), cloud });
+    expect(mins).toEqual([2, 1]);
+    expect(out.map((e) => e.source)).toEqual(['engine', 'cloud', 'cloud', 'terminal']);
+  });
+  it('uses the engine for everything when there is no cloud, each search from a clean hash', async () => {
+    const jobs: EvalJob[] = [];
+    await analysePositions({ fens: [START, AFTER_E4], depth: 16, evaluate: async (j) => (jobs.push(j), evalOf(j.fen)) });
+    expect(jobs.every((j) => j.fresh === true && j.multiPv === 2)).toBe(true);
   });
   it('skips positions that are already known', async () => {
     let calls = 0;

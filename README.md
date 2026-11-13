@@ -51,7 +51,9 @@ for `/api/*` (the chess.com lookup) in Vercel's Build Output format. Every mode 
 on Vercel as is.
 
 **Battle server (optional).** Vercel functions can't hold WebSocket connections, so live Battle needs
-`apps/server` on an always-on Node host (Render, Railway, Fly.io, a VPS…):
+`apps/server` on a Node host. `render.yaml` sets it up on Render's free plan (New → Blueprint → this repo);
+free services sleep when idle, and the Battle page wakes them and waits up to a minute. Any other Node host
+works too:
 
 ```bash
 npm ci

@@ -41,6 +41,8 @@ export interface EndInfo {
 export interface BattleState {
   phase: Phase;
   error: string | null;
+  /** When the current connection attempt started (a sleeping hosted server can take a while to wake). */
+  connectingSince: number;
   queuedAt: number;
   queuePosition: number;
   match: MatchInfo | null;
@@ -56,6 +58,7 @@ export interface BattleState {
 export const initialBattleState: BattleState = {
   phase: 'lobby',
   error: null,
+  connectingSince: 0,
   queuedAt: 0,
   queuePosition: 0,
   match: null,
@@ -68,7 +71,7 @@ export const initialBattleState: BattleState = {
 };
 
 export type BattleAction =
-  | { type: 'connecting' }
+  | { type: 'connecting'; at?: number }
   | { type: 'search-started'; at: number }
   | { type: 'cancel' }
   | { type: 'to-lobby'; error?: string | null }
@@ -86,7 +89,7 @@ const inMatch = (p: Phase) => p === 'matched' || p === 'playing';
 export function battleReducer(s: BattleState, a: BattleAction): BattleState {
   switch (a.type) {
     case 'connecting':
-      return { ...s, phase: 'connecting', error: null };
+      return { ...s, phase: 'connecting', error: null, connectingSince: a.at ?? Date.now() };
     case 'search-started':
       return { ...s, phase: 'searching', queuedAt: a.at, queuePosition: 0, error: null, end: null, rematch: 'none' };
     case 'cancel':

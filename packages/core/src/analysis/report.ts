@@ -5,7 +5,7 @@ import { classifyMove } from './classify.ts';
 import { pieceMaterial } from './sacrifice.ts';
 import type { AnalysedMove, GamePhase, GameReport, MoveClass, OpeningTable, PositionEval, Side, SideNumbers } from './types.ts';
 import { MOVE_CLASSES } from './types.ts';
-import { averageCpLoss, centipawnLoss, estimatedRating, gameAccuracy, moveAccuracy, winPercent, winPercentFor } from './winning.ts';
+import { averageCpLoss, centipawnLoss, gameAccuracy, moveAccuracy, winPercent, winPercentFor } from './winning.ts';
 
 /** Turns a move list plus one evaluation per position into the report the review page shows. Pure. */
 
@@ -169,7 +169,6 @@ export function buildReport(input: ReportInput): GameReport {
     evals,
     accuracy: { white: gameAccuracy(whiteWin, 'w', firstMover), black: gameAccuracy(whiteWin, 'b', firstMover) },
     acpl,
-    estimatedRating: { white: acpl.white === null ? null : estimatedRating(acpl.white), black: acpl.black === null ? null : estimatedRating(acpl.black) },
     counts,
     phases: { opening: phaseAcc('opening'), middlegame: phaseAcc('middlegame'), endgame: phaseAcc('endgame') },
     keyMoments,

@@ -6,5 +6,5 @@ export { createCloudEval, parseCloudEval, normalisePv, CLOUD_MAX_PLY, CLOUD_TIME
 export type { CloudEvalClient } from './cloudEval.ts';
 export { analysePositions } from './analyseGame.ts';
 export type { AnalysePositionsOptions } from './analyseGame.ts';
-export { ENGINES, cloudEval, deepEngineAvailable, disposeEnginePools, getEnginePool, isMobileDevice } from './engines.ts';
+export { ENGINES, REVIEW_MULTIPV, cloudEval, deepEngineAvailable, disposeEnginePools, getEnginePool, isMobileDevice } from './engines.ts';
 export type { EngineId, EngineInfo } from './engines.ts';

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { buildReport, parsePgnGame, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
 import type { StoredGame } from '../db.ts';
-import { analysePositions, cloudEval, ENGINES, getEnginePool, isAbortError, type EngineId } from '../engine/index.ts';
+import { analysePositions, cloudEval, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
 import { getAnalysis, getAnalysisPrefs, getGame, loadOpenings, saveAnalysis } from './store.ts';
 
 /**
@@ -76,7 +76,7 @@ function createSession(gameKey: string): AnalysisSession {
         analysePositions({
           fens: parsed.fens,
           depth,
-          multiPv: 3,
+          multiPv: REVIEW_MULTIPV,
           evaluate: (job) => pool.evaluate(job),
           cloud: cloudEval,
           signal: ctl.signal,

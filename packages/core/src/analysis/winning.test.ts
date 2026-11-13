@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  averageCpLoss, centipawnLoss, estimatedRating, formatScore, gameAccuracy, moveAccuracy, scoreToCp, winPercent, winPercentFor,
+  averageCpLoss, centipawnLoss, formatScore, gameAccuracy, moveAccuracy, scoreToCp, TYPICAL_ACCURACY, typicalAccuracy, winPercent, winPercentFor,
 } from './winning.ts';
 
 describe('winPercent', () => {
@@ -98,13 +98,21 @@ describe('centipawn loss and rating estimate', () => {
     expect(averageCpLoss([])).toBeNull();
     expect(averageCpLoss([0, 30, 60])).toBe(30);
   });
-  it('maps ACPL to a rounded, bounded rating that falls as ACPL rises', () => {
-    expect(estimatedRating(0)).toBe(3000);
-    expect(estimatedRating(30)).toBe(2300);
-    expect(estimatedRating(100)).toBe(1150);
-    expect(estimatedRating(1000)).toBe(400);
-    expect(estimatedRating(20)).toBeGreaterThan(estimatedRating(60));
-    expect(estimatedRating(47) % 50).toBe(0);
+  it('finds the typical-accuracy band of a rating, and nothing outside the calibrated range', () => {
+    expect(typicalAccuracy(1850)).toMatchObject({ min: 1800, max: 2000 });
+    expect(typicalAccuracy(1800)).toMatchObject({ min: 1800 });
+    expect(typicalAccuracy(599)).toBeNull();
+    expect(typicalAccuracy(2400)).toBeNull();
+    expect(typicalAccuracy(undefined)).toBeNull();
+    expect(typicalAccuracy(Number.NaN)).toBeNull();
+  });
+  it('keeps the bands ordered, contiguous and internally consistent', () => {
+    for (let i = 0; i < TYPICAL_ACCURACY.length; i++) {
+      const b = TYPICAL_ACCURACY[i];
+      expect(b.p25).toBeLessThanOrEqual(b.p50);
+      expect(b.p50).toBeLessThanOrEqual(b.p75);
+      if (i > 0) expect(b.min).toBe(TYPICAL_ACCURACY[i - 1].max);
+    }
   });
 });
 

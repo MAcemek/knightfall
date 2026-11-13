@@ -78,7 +78,6 @@ export interface GameReport {
   evals: PositionEval[];
   accuracy: SideNumbers;
   acpl: SideNumbers;
-  estimatedRating: SideNumbers;
   counts: { white: Record<MoveClass, number>; black: Record<MoveClass, number> };
   phases: Record<GamePhase, SideNumbers>;
   /** Up to 3 plies with the largest win-chance swings, in game order. */

@@ -166,7 +166,8 @@ describe('EnginePool', () => {
     expect(poolSize(1, false)).toBe(1);
     expect(poolSize(2, false)).toBe(1);
     expect(poolSize(4, false)).toBe(3);
-    expect(poolSize(16, false)).toBe(4);
+    expect(poolSize(16, false)).toBe(8);
+    expect(poolSize(32, false)).toBe(8);
     expect(poolSize(8, true)).toBe(2);
     expect(poolSize(2, true)).toBe(1);
     expect(poolSize(undefined, false)).toBe(1);

@@ -163,7 +163,13 @@ function Searching({ api }: { api: BattleApi }) {
         <div className="text-xl font-extrabold">{state.phase === 'connecting' ? 'Connecting…' : 'Searching for an opponent…'}</div>
         <div className="mt-1 font-mono text-3xl font-bold tabular text-ember-400">{formatClock(elapsed)}</div>
         <div className="mt-2 text-sm text-ink-400">
-          {elapsed > 5000 ? 'No rival yet — a sparring bot will step in shortly.' : 'Matching you with someone near your rating.'}
+          {state.phase === 'connecting'
+            ? now - state.connectingSince > 4000
+              ? 'Waking up the battle server. This can take up to a minute.'
+              : 'Reaching the battle server.'
+            : elapsed > 5000
+              ? 'No rival yet — a sparring bot will step in shortly.'
+              : 'Matching you with someone near your rating.'}
         </div>
       </div>
       <Button variant="secondary" onClick={api.cancel}>

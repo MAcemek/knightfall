@@ -1,0 +1,24 @@
+# Render Blueprint for the Knightfall battle server (live Puzzle Battle over WebSocket + /api).
+# The website itself is on Vercel; point it here with VITE_BATTLE_URL=wss://<this service>/ws.
+services:
+  - type: web
+    name: knightfall-battle
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm start -w @knightfall/server
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+    buildFilter:
+      paths:
+        - apps/server/**
+        - packages/core/**
+        - package.json
+        - package-lock.json
+        - render.yaml

@@ -17,6 +17,21 @@ const BATTLE_URL: string | undefined = import.meta.env.VITE_BATTLE_URL || undefi
 export const OFFLINE_MESSAGE =
   import.meta.env.DEV ? 'Battle server offline — run npm run dev' : 'The battle server is offline right now. Try again in a minute.';
 const CONNECT_TIMEOUT_MS = 5000;
+/** A free-tier host may be asleep: keep retrying the socket this long before giving up. */
+const WAKE_WINDOW_MS = BATTLE_URL ? 75_000 : 0;
+const RETRY_EVERY_MS = 3000;
+
+/** Nudge a sleeping hosted battle server awake early (opaque request; the response is not needed). */
+export function wakeBattleServer(): void {
+  if (!BATTLE_URL) return;
+  try {
+    const health = new URL(BATTLE_URL.replace(/^ws/, 'http'));
+    health.pathname = '/api/health';
+    void fetch(health, { mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+  } catch {
+    /* malformed VITE_BATTLE_URL: the socket attempt reports offline */
+  }
+}
 const PING_EVERY_MS = 15_000;
 
 function socketUrl() {
@@ -196,11 +211,21 @@ export function useBattle(): BattleApi {
     void (async () => {
       const [name, rating] = await Promise.all([getPlayerName(), getKV<number>(KEYS.battleRating, defaults.battleRating)]);
       meRef.current = { name, rating };
-      try {
-        await ensureSocket();
-      } catch {
-        if (gen === searchGen.current) dispatch({ type: 'to-lobby', error: OFFLINE_MESSAGE });
-        return;
+      const deadline = Date.now() + WAKE_WINDOW_MS;
+      for (;;) {
+        try {
+          await ensureSocket();
+          break;
+        } catch {
+          if (gen !== searchGen.current) return; // cancelled while connecting
+          if (Date.now() + RETRY_EVERY_MS > deadline) {
+            dispatch({ type: 'to-lobby', error: OFFLINE_MESSAGE });
+            return;
+          }
+          wakeBattleServer();
+          await new Promise((r) => setTimeout(r, RETRY_EVERY_MS));
+          if (gen !== searchGen.current) return;
+        }
       }
       if (gen !== searchGen.current) return; // cancelled while connecting
       dispatch({ type: 'search-started', at: Date.now() });
@@ -260,6 +285,9 @@ export function useBattle(): BattleApi {
   }, [send, resign]);
 
   const clearError = useCallback(() => dispatch({ type: 'clear-error' }), []);
+
+  // Opening the Battle page starts waking a sleeping hosted server before the player clicks.
+  useEffect(() => wakeBattleServer(), []);
 
   // Countdown finished -> playing.
   const startsAt = state.match?.startsAt ?? 0;

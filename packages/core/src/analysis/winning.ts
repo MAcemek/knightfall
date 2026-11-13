@@ -96,10 +96,42 @@ export function averageCpLoss(losses: readonly number[]): number | null {
   return losses.length ? mean(losses) : null;
 }
 
-/** A rough playing-strength estimate for one game from its ACPL. Rounded to 50, within 400..3000. */
-export function estimatedRating(acpl: number): number {
-  const raw = 3100 * Math.exp(-0.01 * Math.max(0, acpl));
-  return Math.round(Math.max(400, Math.min(3000, raw)) / 50) * 50;
+/** Spread of single-game accuracy among players of one rating band. */
+export interface AccuracyBand {
+  /** Rating range [min, max). */
+  min: number;
+  max: number;
+  /** 25th, 50th and 75th percentile of accuracy. */
+  p25: number;
+  p50: number;
+  p75: number;
+  /** Player-games behind the numbers. */
+  n: number;
+}
+
+/**
+ * Typical accuracy by Lichess rating, from 4,232 player-games of rated, Lichess-analysed blitz and rapid games
+ * (2026-11, scripts/fit-rating.mjs). Bands with fewer than 80 player-games are left out.
+ *
+ * There is deliberately no "rating from accuracy" estimate: on the same data one game's accuracy explains only
+ * about 10% of rating differences (median error ~350 points), so any such number mostly reflects the average.
+ */
+export const TYPICAL_ACCURACY: readonly AccuracyBand[] = [
+  { min: 600, max: 800, p25: 55, p50: 66, p75: 79, n: 162 },
+  { min: 800, max: 1000, p25: 61, p50: 72, p75: 82, n: 345 },
+  { min: 1000, max: 1200, p25: 59, p50: 73, p75: 83, n: 390 },
+  { min: 1200, max: 1400, p25: 67, p50: 76, p75: 84, n: 340 },
+  { min: 1400, max: 1600, p25: 68, p50: 78, p75: 85, n: 631 },
+  { min: 1600, max: 1800, p25: 70, p50: 79, p75: 87, n: 626 },
+  { min: 1800, max: 2000, p25: 71, p50: 81, p75: 87, n: 559 },
+  { min: 2000, max: 2200, p25: 73, p50: 80, p75: 88, n: 600 },
+  { min: 2200, max: 2400, p25: 77, p50: 85, p75: 91, n: 386 },
+];
+
+/** The band a Lichess rating falls in; null when unknown or outside the calibrated range. */
+export function typicalAccuracy(rating: number | null | undefined): AccuracyBand | null {
+  if (typeof rating !== 'number' || !Number.isFinite(rating)) return null;
+  return TYPICAL_ACCURACY.find((b) => rating >= b.min && rating < b.max) ?? null;
 }
 
 /** "+0.35", "-1.20", "M5", "-M3" (White's view). Checkmate on the board is "#". */

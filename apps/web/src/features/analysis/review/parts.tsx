@@ -8,6 +8,7 @@ import {
   type GameReport,
   type MoveClass,
   type PositionEval,
+  typicalAccuracy,
 } from '@knightfall/core';
 import type { StoredGame } from '../../../shared/db.ts';
 import { MOVE_CLASS_META, MoveClassChip, MoveGlyph } from '../../../shared/analysis/index.ts';
@@ -354,7 +355,10 @@ const PHASES: { id: GamePhase; label: string }[] = [
 
 const fmt = (n: number | null) => (n === null ? '–' : n.toFixed(1));
 
-export const SummaryPanel = memo(function SummaryPanel({ report, onJump }: { report: GameReport; onJump: (index: number) => void }) {
+export const SummaryPanel = memo(function SummaryPanel({ report, game, onJump }: { report: GameReport; game: StoredGame; onJump: (index: number) => void }) {
+  // Calibrated on Lichess blitz/rapid ratings only; chess.com and PGN ratings are on other scales.
+  const typical = game.source === 'lichess' ? { white: typicalAccuracy(game.white.rating), black: typicalAccuracy(game.black.rating) } : null;
+  const showTypical = !!typical && (typical.white !== null || typical.black !== null);
   const classes = MOVE_CLASSES.filter((c: MoveClass) => report.counts.white[c] + report.counts.black[c] > 0);
   const moments = report.keyMoments.map((ply) => report.moves[ply]).filter((m): m is AnalysedMove => !!m);
   return (
@@ -405,10 +409,24 @@ export const SummaryPanel = memo(function SummaryPanel({ report, onJump }: { rep
           </tbody>
           <tbody className="border-t-2 border-ink-700">
             <tr>
-              <td className="py-1 text-ink-300">Performance rating</td>
-              <td className="py-1 text-right font-mono font-bold">{report.estimatedRating.white ?? '–'}</td>
-              <td className="py-1 text-right font-mono font-bold">{report.estimatedRating.black ?? '–'}</td>
+              <td className="py-1 text-ink-300">Accuracy</td>
+              <td className="py-1 text-right font-mono font-bold">{fmt(report.accuracy.white)}</td>
+              <td className="py-1 text-right font-mono font-bold">{fmt(report.accuracy.black)}</td>
             </tr>
+            {showTypical && typical && (
+              <tr className="border-t border-ink-800">
+                <td className="py-1 text-ink-400">
+                  <span title="The middle half of single-game accuracies for players of this rating, from 4,232 rated Lichess blitz and rapid games.">
+                    Typical at this rating
+                  </span>
+                </td>
+                {([typical.white, typical.black] as const).map((band, i) => (
+                  <td key={i} className="py-1 text-right font-mono text-ink-300">
+                    {band ? `${band.p25}–${band.p75}` : '–'}
+                  </td>
+                ))}
+              </tr>
+            )}
             {PHASES.map((p) => (
               <tr key={p.id} className="border-t border-ink-800">
                 <td className="py-1 text-ink-400">{p.label} accuracy</td>

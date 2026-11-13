@@ -145,7 +145,6 @@ describe('buildReport', () => {
     expect(report.accuracy.white!).toBeGreaterThan(85);
     expect(report.acpl.white).toBeCloseTo(60 / 4, 6);
     expect(report.acpl.black).toBeCloseTo(1030 / 3, 6);
-    expect(report.estimatedRating.white!).toBeGreaterThan(report.estimatedRating.black!);
     expect(report.counts.white).toMatchObject({ book: 1, good: 1, best: 2, great: 0, blunder: 0 });
     expect(report.counts.black).toMatchObject({ book: 1, best: 1, blunder: 1 });
     expect(Object.values(report.counts.white).reduce((a, b) => a + b, 0)).toBe(4);

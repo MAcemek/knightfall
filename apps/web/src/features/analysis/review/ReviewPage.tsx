@@ -423,7 +423,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
       <Panel>
         <MoveList moves={moves} classified={classified} current={explore ? explore.basePly : ply} onSelect={goTo} />
       </Panel>
-      {report && (
+      {report && game && (
         <Panel className="space-y-2">
           <Button variant="good" className="w-full" disabled={mistakeCount === 0 || busy} onClick={() => void practise()}>
             Practise {mistakeCount} mistake{mistakeCount === 1 ? '' : 's'}
@@ -433,9 +433,9 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           </Link>
         </Panel>
       )}
-      {report && (
+      {report && game && (
         <Panel>
-          <SummaryPanel report={report} onJump={goTo} />
+          <SummaryPanel report={report} game={game} onJump={goTo} />
         </Panel>
       )}
     </div>

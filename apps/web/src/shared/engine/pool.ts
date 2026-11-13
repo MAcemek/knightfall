@@ -31,10 +31,10 @@ export function isAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
-/** Engines to run: one core is left for the UI; phones get 2 at most (heat and memory). */
+/** Engines to run: one core is left for the UI, at most 8 (each lite engine is a few tens of MB); phones get 2 at most (heat and memory). */
 export function poolSize(hardwareConcurrency: number | undefined, mobile: boolean): number {
   const cores = Number.isFinite(hardwareConcurrency) && hardwareConcurrency ? hardwareConcurrency : 2;
-  const size = Math.max(1, Math.min(4, cores - 1));
+  const size = Math.max(1, Math.min(8, cores - 1));
   return mobile ? Math.min(2, size) : size;
 }
 

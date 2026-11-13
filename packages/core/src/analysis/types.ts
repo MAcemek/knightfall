@@ -54,10 +54,12 @@ export interface AnalysedMove {
   fenAfter: string;
   class: MoveClass;
   phase: GamePhase;
-  /** Win chance 0..100 of the side that moved, before and after the move. */
+  /** Win chance 0..100 of the side that moved, before and after the move (eval graph, swings). */
   winBefore: number;
   winAfter: number;
-  /** 0..100. */
+  /** Expected points (0..1) the mover gave away. */
+  epLoss: number;
+  /** 103.16·e^(−4·epLoss) − 3.17 (about −1.3..100). */
   accuracy: number;
   /** Centipawns lost by the mover (0 when the move kept or improved the eval). */
   cpLoss: number;
@@ -70,13 +72,23 @@ export interface SideNumbers {
   black: number | null;
 }
 
+/** Version of the classification rules. A stored report with another version is rebuilt from its evals. */
+export const REPORT_VERSION = 2;
+
 export interface GameReport {
-  version: 1;
+  version: typeof REPORT_VERSION;
   startFen: string;
   moves: AnalysedMove[];
   /** moves.length + 1 entries. */
   evals: PositionEval[];
+  /** Mean move accuracy per side (expected-points model). */
   accuracy: SideNumbers;
+  /** Lichess-formula accuracy, used only to estimate a game rating (its calibration data is Lichess's). */
+  ratingAccuracy: SideNumbers;
+  /** Estimated rating of each side's play in this game. */
+  estimatedRating: SideNumbers;
+  /** Advanced stats: mean accuracy on opening moves, tactical moments and the other (strategic) moves. */
+  advanced: { opening: SideNumbers; tactics: SideNumbers; strategy: SideNumbers };
   acpl: SideNumbers;
   counts: { white: Record<MoveClass, number>; black: Record<MoveClass, number> };
   phases: Record<GamePhase, SideNumbers>;

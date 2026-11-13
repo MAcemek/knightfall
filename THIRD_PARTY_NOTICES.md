@@ -4,12 +4,12 @@ Knightfall's own source code is MIT licensed (see `LICENSE`). The following thir
 components are distributed alongside it under their own licenses. They are kept as separate
 files and are not part of Knightfall's MIT-licensed code.
 
-## Stockfish (stockfish.js 19.0.1) — GPL-3.0
+## Stockfish (stockfish.js 17.1.0) — GPL-3.0
 
-- Files: `apps/web/public/engine/stockfish-19-lite-single.js`, `stockfish-19-lite-single.wasm`
-  (unmodified; optional deep build fetched into `apps/web/public/engine/deep/`)
+- Files: `apps/web/public/engine/stockfish-17.1-lite-single-03e3232.js`, `stockfish-17.1-lite-single-03e3232.wasm`
+  (unmodified; optional deep build `stockfish-17.1-single-a496a04.js` + six `-part-N.wasm` files fetched into `apps/web/public/engine/deep/`)
 - License text: `apps/web/public/engine/COPYING.txt`
-- Corresponding source: https://github.com/nmrugg/stockfish.js/tree/v19.0.1 and
+- Corresponding source: https://github.com/nmrugg/stockfish.js/tree/v17.1.0 and
   https://github.com/official-stockfish/Stockfish
 - Provenance and checksums: `apps/web/public/engine/SOURCE.md`
 

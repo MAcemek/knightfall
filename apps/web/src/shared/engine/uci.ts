@@ -3,7 +3,7 @@ import type { EngineLine, EvalScore, PositionEval } from '@knightfall/core';
 /**
  * UCI wrapper around one Stockfish worker.
  *
- * The engine (public/engine/stockfish-19-lite-single.js, unmodified from npm stockfish@19.0.1) is a CLASSIC
+ * The engine (public/engine/stockfish-17.1-lite-single-03e3232.js, unmodified from npm stockfish@17.1.0) is a CLASSIC
  * worker that speaks UCI as plain strings: worker.postMessage('uci'), worker.onmessage = (e) => e.data is
  * one output line. It derives its .wasm URL from its own URL (".js" -> ".wasm"), so the two files must sit
  * next to each other and keep their names. Load it with a plain string URL: no { type: 'module' } and no
@@ -21,7 +21,7 @@ export interface UciTransport {
   terminate(): void;
 }
 
-/** Browser transport: a classic Web Worker at `url` (e.g. "/engine/stockfish-19-lite-single.js"). */
+/** Browser transport: a classic Web Worker at `url` (e.g. "/engine/stockfish-17.1-lite-single-03e3232.js"). */
 export function workerTransport(url: string): UciTransport {
   const worker = new Worker(url);
   return {
@@ -113,6 +113,8 @@ export interface AnalyseOptions {
   multiPv: number;
   /** `go infinite`: runs until stop(). */
   infinite?: boolean;
+  /** Send `ucinewgame` and wait for `readyok` first, so the search starts from a clean hash (deterministic reviews). */
+  fresh?: boolean;
   /** Called (at most once per depth) with the evaluation so far. */
   onUpdate?: (current: PositionEval) => void;
 }
@@ -178,6 +180,12 @@ export class UciEngine implements PoolEngine {
     await this.ready();
     if (this.dead) throw this.dead;
     if (this.search) throw new Error('Engine is busy');
+    if (opts.fresh) {
+      this.transport.post('ucinewgame');
+      await this.expect('readyok', 'isready');
+      if (this.dead) throw this.dead;
+      if (this.search) throw new Error('Engine is busy');
+    }
     const multiPv = Math.max(1, Math.min(5, Math.round(opts.multiPv)));
     if (multiPv !== this.multiPv) {
       this.transport.post(`setoption name MultiPV value ${multiPv}`);

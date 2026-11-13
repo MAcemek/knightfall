@@ -5,7 +5,7 @@ import { barFraction, formatAccuracy, graphGeometry, initialPly, lineToSan, move
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const ev = (score: EvalScore): PositionEval => ({ fen: START, depth: 16, source: 'engine', lines: [], score });
 const mv = (ply: number, color: 'w' | 'b', moveNumber: number): AnalysedMove => ({
-  ply, color, moveNumber, san: 'x', uci: 'a1a2', fenBefore: START, fenAfter: START, class: 'good', phase: 'opening', winBefore: 50, winAfter: 50, accuracy: 100, cpLoss: 0,
+  ply, color, moveNumber, san: 'x', uci: 'a1a2', fenBefore: START, fenAfter: START, class: 'good', phase: 'opening', winBefore: 50, winAfter: 50, epLoss: 0, accuracy: 100, cpLoss: 0,
 });
 
 describe('barFraction', () => {

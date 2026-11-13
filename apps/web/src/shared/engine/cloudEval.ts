@@ -7,12 +7,11 @@ import { MAX_PV } from './uci.ts';
  * (mostly openings). https://lichess.org/api#tag/Analysis/operation/apiCloudEval
  *
  * Rules respected here: one request at a time, a short timeout, and a pause after a 429.
- * Any miss (404, timeout, network error, too few lines) returns null and the caller uses the local engine.
+ * Any miss (404, timeout, network error, too few lines) returns null. The caller (analyseGame.ts) applies the
+ * WintrChess rule: accept only depth >= the review depth, and stop asking the cloud at the first miss.
  */
 
 export const CLOUD_TIMEOUT_MS = 1500;
-/** Only positions before this ply are looked up (later ones are almost never in the cloud). */
-export const CLOUD_MAX_PLY = 30;
 const PAUSE_AFTER_429_MS = 60_000;
 
 type FetchFn = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;

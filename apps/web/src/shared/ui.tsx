@@ -191,14 +191,14 @@ export function EmptyState({ icon, title, children, action }: { icon?: ReactNode
 }
 
 /** Standard two-column game layout: board left, side panel right (stacks on mobile). */
-export function GameLayout({ board, side, top }: { board: ReactNode; side: ReactNode; top?: ReactNode }) {
+export function GameLayout({ board, side, top, wideSide }: { board: ReactNode; side: ReactNode; top?: ReactNode; wideSide?: boolean }) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-start">
       <div className="w-full min-w-0 lg:max-w-[min(78vh,720px)] lg:flex-1">
         {top}
         {board}
       </div>
-      <div className="w-full lg:w-[340px] lg:shrink-0">{side}</div>
+      <div className={`w-full lg:shrink-0 ${wideSide ? "lg:w-[400px]" : "lg:w-[340px]"}`}>{side}</div>
     </div>
   );
 }

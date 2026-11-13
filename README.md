@@ -38,7 +38,7 @@ The repository already includes a ready-built puzzle set (up to 1,200 puzzles pe
 
 ```bash
 npm run puzzles      # rebuild the puzzle set from the full Lichess puzzle DB (~300 MB download, cached in data/)
-npm run engine:deep  # fetch the full Stockfish 19 build (~99 MB, not committed) for deeper game reviews
+npm run engine:deep  # fetch the full Stockfish 17 build (~79 MB, not committed) for deeper game reviews
 ```
 
 `npm test` runs every unit test; `npm run typecheck` and `npm run build` check everything.
@@ -91,7 +91,7 @@ Knightfall talks only to public endpoints and never sends credentials:
 - Puzzles: Lichess puzzle database (CC0).
 - Piece set: "cburnett" by Colin M.L. Burnett (CC BY-SA 3.0 / GPL), via Lichess.
 - Openings: lichess-org/chess-openings (CC0).
-- Engine: Stockfish via stockfish.js 19.0.1 (GPL-3.0), shipped unmodified as separate files. See `THIRD_PARTY_NOTICES.md`.
+- Engine: Stockfish via stockfish.js 17.1.0 (GPL-3.0), shipped unmodified as separate files. See `THIRD_PARTY_NOTICES.md`.
 - All sound effects are synthesized at runtime with the Web Audio API.
 
 ## License

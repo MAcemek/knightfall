@@ -2,10 +2,10 @@
 /**
  * Fetches the Stockfish engine files Knightfall's Game Review runs in the browser.
  *
- *   node scripts/fetch-engine.mjs           lite single-threaded build  -> apps/web/public/engine/        (~1.9 MB, committed)
- *   node scripts/fetch-engine.mjs --deep    full single-threaded build  -> apps/web/public/engine/deep/   (~99 MB, gitignored)
+ *   node scripts/fetch-engine.mjs           lite single-threaded build  -> apps/web/public/engine/        (~7.3 MB, committed)
+ *   node scripts/fetch-engine.mjs --deep    full single-threaded build  -> apps/web/public/engine/deep/   (~79 MB in 6 parts, gitignored)
  *
- * Source: the UNMODIFIED npm package stockfish@19.0.1 (https://github.com/nmrugg/stockfish.js, GPL-3.0).
+ * Source: the UNMODIFIED npm package stockfish@17.1.0 (https://github.com/nmrugg/stockfish.js, GPL-3.0).
  * The tarball is downloaded from registry.npmjs.org into data/ (gitignored), its sha512 is checked against
  * BOTH the registry metadata (dist.integrity) and the value pinned below, and only the files listed in
  * WANTED are extracted, byte for byte. Nothing from the package is executed. No npm dependency is added:
@@ -27,26 +27,29 @@ const DATA_DIR = path.join(ROOT, 'data');
 const ENGINE_DIR = process.env.KF_ENGINE_DIR ? path.resolve(process.env.KF_ENGINE_DIR) : path.join(ROOT, 'apps/web/public/engine');
 
 const NAME = 'stockfish';
-const VERSION = '19.0.1';
+const VERSION = '17.1.0';
 const META_URL = `https://registry.npmjs.org/${NAME}/${VERSION}`;
 const TARBALL_URL = `https://registry.npmjs.org/${NAME}/-/${NAME}-${VERSION}.tgz`;
-/** dist.integrity of stockfish@19.0.1 as published. A different value means the package changed: stop. */
-const PINNED_INTEGRITY = 'sha512-bTwsO4e9HAwPBKls1+szcfibmaWRNzTF20rQE/XPdB3LOSoT6XTZDr1zYwriwSRRFT5MkvqrglPmJrKEVXGnyQ==';
+/** dist.integrity of stockfish@17.1.0 as published. A different value means the package changed: stop. */
+const PINNED_INTEGRITY = 'sha512-LvxdOzngaMjwdDKkZML4riABX9EWUkIE2ZJUsNvR2yFnM4WLiM6ggEXcBY8v53dK7uAfbxdJFcBiKTIQyGg6Zg==';
 const TARBALL = path.join(DATA_DIR, `${NAME}-${VERSION}.tgz`);
 const USER_AGENT = 'Knightfall/0.1';
 
 const deep = process.argv.includes('--deep');
 
 /** tar path -> output path relative to ENGINE_DIR. File names are kept: the loader finds its .wasm by its own name. */
+const LITE = 'stockfish-17.1-lite-single-03e3232';
+const FULL = 'stockfish-17.1-single-a496a04';
+const FULL_PARTS = [0, 1, 2, 3, 4, 5].map((n) => `${FULL}-part-${n}.wasm`);
 const WANTED = deep
   ? {
-      'package/bin/stockfish-19-single.js': 'deep/stockfish-19-single.js',
-      'package/bin/stockfish-19-single.wasm': 'deep/stockfish-19-single.wasm',
+      [`package/src/${FULL}.js`]: `deep/${FULL}.js`,
+      ...Object.fromEntries(FULL_PARTS.map((f) => [`package/src/${f}`, `deep/${f}`])),
       'package/Copying.txt': 'deep/COPYING.txt',
     }
   : {
-      'package/bin/stockfish-19-lite-single.js': 'stockfish-19-lite-single.js',
-      'package/bin/stockfish-19-lite-single.wasm': 'stockfish-19-lite-single.wasm',
+      [`package/src/${LITE}.js`]: `${LITE}.js`,
+      [`package/src/${LITE}.wasm`]: `${LITE}.wasm`,
       'package/Copying.txt': 'COPYING.txt',
     };
 

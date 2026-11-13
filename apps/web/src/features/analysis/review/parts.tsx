@@ -1,21 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  MOVE_CLASSES,
-  type AnalysedMove,
-  type EngineLine,
-  type GamePhase,
-  type GameReport,
-  type MoveClass,
-  type PositionEval,
-  typicalAccuracy,
-} from '@knightfall/core';
+import { type AnalysedMove, type EngineLine, type GameReport, type MoveClass, type PositionEval } from '@knightfall/core';
 import type { StoredGame } from '../../../shared/db.ts';
-import { MOVE_CLASS_META, MoveClassChip, MoveGlyph } from '../../../shared/analysis/index.ts';
-import { TickerNumber } from '../../../shared/fx/index.ts';
+import { MOVE_CLASS_META, MoveGlyph } from '../../../shared/analysis/index.ts';
 import { motionOff, motionScale, useSettings } from '../../../shared/settings.ts';
-import { Button, Pill } from '../../../shared/ui.tsx';
-import { barLabel, formatScore, moveLabel, squarePos, swingOf, userSide } from './reviewExtras.ts';
+import { Button } from '../../../shared/ui.tsx';
+import { barLabel, figurineSan, formatScore, moveHasIcon, squarePos } from './reviewExtras.ts';
 import { lineToSan, moveRows, nearestPoint, resultLabel, type GraphGeometry, type MoveRow } from './reviewLogic.ts';
 
 /** Milliseconds for a decorative transition, honouring the animation setting and reduced motion. */
@@ -26,59 +16,18 @@ function useMotionMs(base: number): number {
 
 /* ---------------------------------- header ---------------------------------- */
 
-function AccuracyTicker({ value }: { value: number | null }) {
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => setShown(value ?? 0), 30);
-    return () => clearTimeout(t);
-  }, [value]);
-  if (value === null) return <span className="font-mono text-2xl font-bold text-ink-500">–</span>;
-  return <TickerNumber value={shown} duration={0.9} format={(n) => n.toFixed(1)} className="font-mono text-2xl font-bold text-ink-100" />;
-}
-
 const SITE_NAME = { lichess: 'Lichess', chesscom: 'chess.com', pgn: '' } as const;
 
-function PlayerCard({ color, game, accuracy, siteAccuracy, mine }: {
-  color: 'w' | 'b';
-  game: StoredGame;
-  accuracy: number | null | undefined;
-  siteAccuracy: number | undefined;
-  mine: boolean;
-}) {
-  const p = color === 'w' ? game.white : game.black;
-  const site = SITE_NAME[game.source];
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-ink-800/70 px-3 py-2.5">
-      <span className={`h-4 w-4 shrink-0 rounded-full border border-ink-500 ${color === 'w' ? 'bg-ink-100' : 'bg-ink-950'}`} aria-label={color === 'w' ? 'White' : 'Black'} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-sm font-bold">
-          {p.title && <span className="rounded bg-ember-500/15 px-1 text-[10px] font-extrabold text-ember-400">{p.title}</span>}
-          <span className="truncate">{p.name}</span>
-          {mine && <Pill className="!px-1.5 !py-0 text-[10px]">You</Pill>}
-        </div>
-        <div className="text-xs text-ink-400">{p.rating ? p.rating : 'Unrated'}</div>
-      </div>
-      {accuracy !== undefined && (
-        <div className="text-right">
-          <AccuracyTicker value={accuracy} />
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Accuracy</div>
-          {siteAccuracy !== undefined && site && <div className="text-[10px] text-ink-500">{site}: {siteAccuracy.toFixed(1)}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export const ReviewHeader = memo(function ReviewHeader({ game, report }: { game: StoredGame; report: GameReport | null }) {
-  const me = userSide(game);
   const opening = report?.opening?.name ?? game.opening?.name;
   const date = new Date(game.playedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   return (
-    <header className="mx-auto mb-4 w-full max-w-6xl space-y-3">
+    <header className="mx-auto mb-4 w-full max-w-6xl">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Link to="/analysis" className="inline-flex items-center gap-1 text-sm font-bold text-ember-400 hover:text-ember-300">
           <span aria-hidden>‹</span> Game Review
         </Link>
+        <span className="text-sm font-bold text-ink-100">{game.white.name} vs {game.black.name}</span>
         <span className="text-xs text-ink-400">
           {resultLabel(game.result)}
           {opening ? ` · ${opening}` : ''} · {date}
@@ -89,10 +38,6 @@ export const ReviewHeader = memo(function ReviewHeader({ game, report }: { game:
             View on {SITE_NAME[game.source] || 'site'}
           </a>
         )}
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <PlayerCard color="w" game={game} accuracy={report ? report.accuracy.white : undefined} siteAccuracy={game.siteAccuracy?.white} mine={me === 'w'} />
-        <PlayerCard color="b" game={game} accuracy={report ? report.accuracy.black : undefined} siteAccuracy={game.siteAccuracy?.black} mine={me === 'b'} />
       </div>
     </header>
   );
@@ -159,7 +104,8 @@ export const EvalGraph = memo(function EvalGraph({ geom, count, current, dots, o
   geom: GraphGeometry;
   /** Number of positions (moves + 1). */
   count: number;
-  current: number;
+  /** Shown position, or null for no cursor (summary). */
+  current: number | null;
   dots: GraphDot[];
   onSeek: (index: number) => void;
 }) {
@@ -180,7 +126,7 @@ export const EvalGraph = memo(function EvalGraph({ geom, count, current, dots, o
     },
     [geom, onSeek],
   );
-  const curX = GRAPH_PAD + (count <= 1 ? (GRAPH_W - GRAPH_PAD * 2) / 2 : (current / (count - 1)) * (GRAPH_W - GRAPH_PAD * 2));
+  const curX = current === null ? null : GRAPH_PAD + (count <= 1 ? (GRAPH_W - GRAPH_PAD * 2) / 2 : (current / (count - 1)) * (GRAPH_W - GRAPH_PAD * 2));
   return (
     <svg
       ref={ref}
@@ -190,7 +136,7 @@ export const EvalGraph = memo(function EvalGraph({ geom, count, current, dots, o
       aria-label="Evaluation graph"
       aria-valuemin={0}
       aria-valuemax={Math.max(0, count - 1)}
-      aria-valuenow={current}
+      aria-valuenow={current ?? 0}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         last.current = -1;
@@ -208,7 +154,7 @@ export const EvalGraph = memo(function EvalGraph({ geom, count, current, dots, o
           <title>{d.label}</title>
         </circle>
       ))}
-      <line x1={curX} x2={curX} y1={0} y2={GRAPH_H} stroke="var(--color-ember-400)" strokeWidth={2} />
+      {curX !== null && <line x1={curX} x2={curX} y1={0} y2={GRAPH_H} stroke="var(--color-ember-400)" strokeWidth={2} />}
     </svg>
   );
 });
@@ -217,15 +163,17 @@ export const EvalGraph = memo(function EvalGraph({ geom, count, current, dots, o
 
 const MoveCell = memo(function MoveCell({ m, active, classified, onSelect }: { m: AnalysedMove | null; active: boolean; classified: boolean; onSelect: (index: number) => void }) {
   if (!m) return <span />;
+  const marked = classified && moveHasIcon(m.class);
   return (
     <button
       type="button"
       data-active={active ? 'true' : undefined}
       onClick={() => onSelect(m.ply + 1)}
-      className={`flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-left font-mono text-sm font-semibold transition-colors ${active ? 'bg-ember-500/20 text-ember-300 ring-1 ring-ember-500/50' : 'text-ink-100 hover:bg-ink-800'}`}
+      aria-label={`${m.moveNumber}${m.color === 'w' ? '.' : '...'} ${m.san}${classified ? `, ${MOVE_CLASS_META[m.class].label}` : ''}`}
+      className={`flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-left text-sm font-bold transition-colors ${active ? 'bg-ink-600 ring-1 ring-ink-400/60' : 'hover:bg-ink-800'} ${marked ? MOVE_CLASS_META[m.class].text : 'text-ink-100'}`}
     >
-      <span className="truncate">{m.san}</span>
-      {classified && <MoveGlyph cls={m.class} size={12} title={MOVE_CLASS_META[m.class].label} />}
+      {marked && <MoveGlyph cls={m.class} size={16} />}
+      <span className="truncate">{figurineSan(m.san, m.color)}</span>
     </button>
   );
 });
@@ -238,7 +186,7 @@ export const MoveList = memo(function MoveList({ moves, classified, current, onS
   }, [current]);
   if (!rows.length) return <p className="py-3 text-center text-sm text-ink-400">No moves.</p>;
   return (
-    <div ref={box} className="max-h-60 overflow-y-auto overscroll-contain pr-1 lg:max-h-72" role="list" aria-label="Moves">
+    <div ref={box} className="max-h-40 overflow-y-auto overscroll-contain pr-1 lg:max-h-56" role="list" aria-label="Moves">
       {rows.map((r) => (
         <div key={`${r.moveNumber}-${r.white?.ply ?? r.black?.ply}`} role="listitem" className="grid grid-cols-[2.25rem_1fr_1fr] items-center gap-1">
           <span className="text-right font-mono text-xs text-ink-500">{r.moveNumber}.</span>
@@ -249,55 +197,6 @@ export const MoveList = memo(function MoveList({ moves, classified, current, onS
     </div>
   );
 });
-
-/* ------------------------------ explanation panel ------------------------------ */
-
-export function ExplainPanel({ move, report, onShowLine, previewing, bestLine }: {
-  move: AnalysedMove | null;
-  report: GameReport | null;
-  onShowLine: () => void;
-  previewing: boolean;
-  /** SAN of the best line from the position before the move. */
-  bestLine: string[];
-}) {
-  if (!move) return <p className="text-sm text-ink-400">Starting position. Step through the game with the arrow keys.</p>;
-  const before = report?.evals[move.ply];
-  const after = report?.evals[move.ply + 1];
-  const wasBest = move.best ? move.best.uci === move.uci : true;
-  return (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-lg font-extrabold">{moveLabel(move)}</span>
-        {report && <MoveClassChip cls={move.class} />}
-      </div>
-      {report && (
-        <>
-          <p className="text-sm text-ink-300">{MOVE_CLASS_META[move.class].hint}.</p>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="rounded-lg bg-ink-800 px-2 py-1 font-mono">{formatScore(before?.score)}</span>
-            <span className="text-ink-500" aria-hidden>→</span>
-            <span className="rounded-lg bg-ink-800 px-2 py-1 font-mono">{formatScore(after?.score)}</span>
-            <span className="text-xs text-ink-400">{swingOf(move) !== 0 ? `${swingOf(move) > 0 ? '+' : ''}${swingOf(move)} win%` : ''}</span>
-          </div>
-          {!wasBest && move.best && (
-            <p className="text-sm">
-              <span className="text-ink-400">Best was </span>
-              <span className="font-mono font-bold text-good-400">{move.best.san}</span>
-            </p>
-          )}
-          {bestLine.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="break-words font-mono text-xs text-ink-300">{bestLine.join(' ')}</p>
-              <Button size="sm" variant="secondary" onClick={onShowLine} disabled={previewing}>
-                {previewing ? 'Playing line…' : 'Show line'}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 /* ------------------------------- exploration ------------------------------- */
 
@@ -345,102 +244,6 @@ export function ExplorePanel({ fen, live, sans, startLabel, cursor, onCursor, on
   );
 }
 
-/* --------------------------------- summary --------------------------------- */
-
-const PHASES: { id: GamePhase; label: string }[] = [
-  { id: 'opening', label: 'Opening' },
-  { id: 'middlegame', label: 'Middlegame' },
-  { id: 'endgame', label: 'Endgame' },
-];
-
-const fmt = (n: number | null) => (n === null ? '–' : n.toFixed(1));
-
-export const SummaryPanel = memo(function SummaryPanel({ report, game, onJump }: { report: GameReport; game: StoredGame; onJump: (index: number) => void }) {
-  // Calibrated on Lichess blitz/rapid ratings only; chess.com and PGN ratings are on other scales.
-  const typical = game.source === 'lichess' ? { white: typicalAccuracy(game.white.rating), black: typicalAccuracy(game.black.rating) } : null;
-  const showTypical = !!typical && (typical.white !== null || typical.black !== null);
-  const classes = MOVE_CLASSES.filter((c: MoveClass) => report.counts.white[c] + report.counts.black[c] > 0);
-  const moments = report.keyMoments.map((ply) => report.moves[ply]).filter((m): m is AnalysedMove => !!m);
-  return (
-    <div className="space-y-4">
-      {moments.length > 0 && (
-        <section>
-          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-ink-400">Key moments</h3>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {moments.map((m) => (
-              <button
-                key={m.ply}
-                type="button"
-                onClick={() => onJump(m.ply + 1)}
-                className="flex shrink-0 items-center gap-2 rounded-xl bg-ink-800 px-3 py-2 text-left hover:bg-ink-700"
-              >
-                <MoveGlyph cls={m.class} size={16} title={MOVE_CLASS_META[m.class].label} />
-                <span>
-                  <span className="block font-mono text-sm font-bold">{moveLabel(m)}</span>
-                  <span className="block text-[10px] text-ink-400">{swingOf(m) > 0 ? '+' : ''}{swingOf(m)} win%</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      <section>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs uppercase tracking-wider text-ink-400">
-              <th className="pb-1 text-left font-semibold">Moves</th>
-              <th className="pb-1 text-right font-semibold">White</th>
-              <th className="pb-1 text-right font-semibold">Black</th>
-            </tr>
-          </thead>
-          <tbody>
-            {classes.map((c) => (
-              <tr key={c} className="border-t border-ink-800">
-                <td className="py-1">
-                  <span className={`inline-flex items-center gap-1.5 ${MOVE_CLASS_META[c].text}`}>
-                    <MoveGlyph cls={c} size={12} />
-                    <span className="font-semibold">{MOVE_CLASS_META[c].label}</span>
-                  </span>
-                </td>
-                <td className="py-1 text-right font-mono">{report.counts.white[c]}</td>
-                <td className="py-1 text-right font-mono">{report.counts.black[c]}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tbody className="border-t-2 border-ink-700">
-            <tr>
-              <td className="py-1 text-ink-300">Accuracy</td>
-              <td className="py-1 text-right font-mono font-bold">{fmt(report.accuracy.white)}</td>
-              <td className="py-1 text-right font-mono font-bold">{fmt(report.accuracy.black)}</td>
-            </tr>
-            {showTypical && typical && (
-              <tr className="border-t border-ink-800">
-                <td className="py-1 text-ink-400">
-                  <span title="The middle half of single-game accuracies for players of this rating, from 4,232 rated Lichess blitz and rapid games.">
-                    Typical at this rating
-                  </span>
-                </td>
-                {([typical.white, typical.black] as const).map((band, i) => (
-                  <td key={i} className="py-1 text-right font-mono text-ink-300">
-                    {band ? `${band.p25}–${band.p75}` : '–'}
-                  </td>
-                ))}
-              </tr>
-            )}
-            {PHASES.map((p) => (
-              <tr key={p.id} className="border-t border-ink-800">
-                <td className="py-1 text-ink-400">{p.label} accuracy</td>
-                <td className="py-1 text-right font-mono">{fmt(report.phases[p.id].white)}</td>
-                <td className="py-1 text-right font-mono">{fmt(report.phases[p.id].black)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </div>
-  );
-});
-
 /* ------------------------------ board badge ------------------------------ */
 
 /** A move-class badge in the top-right corner of a square. Render as a child of <Board>. */
@@ -448,9 +251,7 @@ export const MoveBadge = memo(function MoveBadge({ square, orientation, cls }: {
   const { col, row } = squarePos(square, orientation);
   return (
     <div className="pointer-events-none absolute z-[45] h-[12.5%] w-[12.5%]" style={{ left: `${col * 12.5}%`, top: `${row * 12.5}%` }}>
-      <span className="absolute right-[3%] top-[3%] flex h-[42%] w-[42%] items-center justify-center rounded-full bg-ink-950/85 shadow ring-1 ring-ink-100/20">
-        <MoveGlyph cls={cls} size={100} className="!h-[78%] !w-[78%]" />
-      </span>
+      <MoveGlyph cls={cls} size={100} className="absolute right-[2%] top-[2%] !h-[42%] !w-[42%] drop-shadow-md" />
     </div>
   );
 });

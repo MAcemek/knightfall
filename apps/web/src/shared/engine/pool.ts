@@ -17,6 +17,8 @@ export interface EvalJob {
   signal?: AbortSignal;
   /** Search until aborted (exploration mode). */
   infinite?: boolean;
+  /** Start from a clean hash (`ucinewgame` + `isready`) so the result does not depend on earlier searches. */
+  fresh?: boolean;
   onUpdate?: (current: PositionEval) => void;
 }
 
@@ -158,7 +160,7 @@ export class EnginePool {
     let error: Error | null = null;
     let broken = false;
     try {
-      value = await slot.engine.analyse(job.fen, { depth: job.depth, multiPv: job.multiPv, infinite: job.infinite, onUpdate: job.onUpdate });
+      value = await slot.engine.analyse(job.fen, { depth: job.depth, multiPv: job.multiPv, infinite: job.infinite, fresh: job.fresh, onUpdate: job.onUpdate });
     } catch (e) {
       error = e instanceof Error ? e : new Error(String(e));
       broken = true;

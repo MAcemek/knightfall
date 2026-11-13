@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Chess } from 'chess.js';
 import type { ParsedGame } from '@knightfall/core';
-import { barLabel, formatScore, lineSteps, moveLabel, provisionalMoves, soundKind, squarePos, swingOf, userSide } from './reviewExtras.ts';
+import { barLabel, figurineSan, formatScore, lineSteps, moveHasIcon, moveLabel, provisionalMoves, soundKind, squarePos, swingOf, userSide } from './reviewExtras.ts';
 
 describe('formatScore / barLabel', () => {
   it('formats centipawns and mates', () => {
@@ -80,5 +80,23 @@ describe('moveLabel / swingOf', () => {
     expect(moveLabel({ moveNumber: 12, color: 'w', san: 'Nf3' })).toBe('12. Nf3');
     expect(moveLabel({ moveNumber: 12, color: 'b', san: 'Nf6' })).toBe('12... Nf6');
     expect(swingOf({ winBefore: 60, winAfter: 41.2 })).toBe(-18.8);
+  });
+});
+
+describe('figurineSan', () => {
+  it('replaces piece letters with figurines for the mover', () => {
+    expect(figurineSan('Nf3', 'w')).toBe('\u2658f3');
+    expect(figurineSan('Nf6', 'b')).toBe('\u265Ef6');
+    expect(figurineSan('Qxd5+', 'b')).toBe('\u265Bxd5+');
+    expect(figurineSan('e4', 'w')).toBe('e4');
+    expect(figurineSan('O-O', 'w')).toBe('O-O');
+    expect(figurineSan('exd8=Q#', 'w')).toBe('exd8=\u2655#');
+  });
+});
+
+describe('moveHasIcon', () => {
+  it('marks only the notable classes', () => {
+    for (const c of ['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder'] as const) expect(moveHasIcon(c)).toBe(true);
+    for (const c of ['best', 'excellent', 'good', 'book', 'forced'] as const) expect(moveHasIcon(c)).toBe(false);
   });
 });

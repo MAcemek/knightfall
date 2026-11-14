@@ -1,4 +1,5 @@
 import type { EngineLine, EvalScore, PositionEval } from '@knightfall/core';
+import { AbortError } from './pool.ts';
 
 /**
  * UCI wrapper around one Stockfish worker.
@@ -121,6 +122,7 @@ export interface AnalyseOptions {
 
 /** What a pool needs from an engine (lets tests use a fake). */
 export interface PoolEngine {
+  /** Rejects with AbortError when stop() arrived before the search had started; any other rejection means the engine is broken. */
   analyse(fen: string, opts: AnalyseOptions): Promise<PositionEval>;
   stop(): void;
   terminate(): void;
@@ -143,11 +145,17 @@ interface Search {
  * One engine instance. Usage: `await engine.analyse(fen, { depth: 16, multiPv: 3 })`.
  * One search at a time (the pool guarantees that); stop() makes the running search finish early with
  * whatever it has. A search always ends on the engine's "bestmove", so the engine is idle afterwards.
+ * A stop() that arrives while analyse() is still preparing (handshake, `ucinewgame`) cancels it before
+ * any "go" is sent: without that, an aborted `go infinite` would start afterwards and never end.
  */
 export class UciEngine implements PoolEngine {
   private readyPromise: Promise<void> | null = null;
   private waiters: { token: string; resolve: () => void }[] = [];
   private search: Search | null = null;
+  /** analyse() was called and has not sent its "go" yet. */
+  private starting = false;
+  /** stop() arrived while `starting`. */
+  private stopBeforeStart = false;
   private multiPv = 1;
   private dead: Error | null = null;
 
@@ -157,7 +165,7 @@ export class UciEngine implements PoolEngine {
   }
 
   get busy(): boolean {
-    return this.search !== null;
+    return this.search !== null || this.starting;
   }
 
   /** Handshake (uci / isready). Called automatically by analyse(). */
@@ -176,15 +184,20 @@ export class UciEngine implements PoolEngine {
 
   async analyse(fen: string, opts: AnalyseOptions): Promise<PositionEval> {
     if (this.dead) throw this.dead;
-    if (this.search) throw new Error('Engine is busy');
-    await this.ready();
-    if (this.dead) throw this.dead;
-    if (this.search) throw new Error('Engine is busy');
-    if (opts.fresh) {
-      this.transport.post('ucinewgame');
-      await this.expect('readyok', 'isready');
+    if (this.search || this.starting) throw new Error('Engine is busy');
+    this.starting = true;
+    this.stopBeforeStart = false;
+    try {
+      await this.ready();
       if (this.dead) throw this.dead;
-      if (this.search) throw new Error('Engine is busy');
+      if (opts.fresh && !this.stopBeforeStart) {
+        this.transport.post('ucinewgame');
+        await this.expect('readyok', 'isready');
+        if (this.dead) throw this.dead;
+      }
+      if (this.stopBeforeStart) throw new AbortError();
+    } finally {
+      this.starting = false;
     }
     const multiPv = Math.max(1, Math.min(5, Math.round(opts.multiPv)));
     if (multiPv !== this.multiPv) {
@@ -198,9 +211,13 @@ export class UciEngine implements PoolEngine {
     });
   }
 
-  /** Ask the running search to stop. Its promise still resolves (on "bestmove"). No-op when idle. */
+  /**
+   * Ask the running search to stop. Its promise still resolves (on "bestmove"). When analyse() has not
+   * sent its "go" yet, the search is never started and its promise rejects with AbortError. No-op when idle.
+   */
   stop(): void {
     if (this.search) this.transport.post('stop');
+    else if (this.starting) this.stopBeforeStart = true;
   }
 
   terminate(): void {

@@ -163,7 +163,8 @@ export class EnginePool {
       value = await slot.engine.analyse(job.fen, { depth: job.depth, multiPv: job.multiPv, infinite: job.infinite, fresh: job.fresh, onUpdate: job.onUpdate });
     } catch (e) {
       error = e instanceof Error ? e : new Error(String(e));
-      broken = true;
+      // An AbortError means stop() arrived before the search began: the engine is idle and healthy.
+      broken = !isAbortError(error);
     }
     if (slot.running !== item) return; // disposed while running
     slot.running = null;

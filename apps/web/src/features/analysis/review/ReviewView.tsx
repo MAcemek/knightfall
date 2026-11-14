@@ -24,6 +24,29 @@ function NavButton({ label, onClick, disabled, active, children }: { label: stri
   );
 }
 
+/** First / back / play / next / last. Rendered under the board on phones and at the bottom of the panel on desktop. */
+export function ReviewNav(p: { explore: boolean; ply: number; count: number; playing: boolean; onFirst: () => void; onBack: () => void; onNext: () => void; onLast: () => void; onTogglePlay: () => void }) {
+  return (
+      <div className="flex items-center gap-2" role="group" aria-label="Move navigation">
+        <NavButton label="First move" onClick={p.onFirst} disabled={!p.explore && p.ply === 0}>
+          <path d="M6 5v14M19 5l-9 7 9 7z" />
+        </NavButton>
+        <NavButton label="Previous move" onClick={p.onBack}>
+          <path d="M17 5l-9 7 9 7z" />
+        </NavButton>
+        <NavButton label={p.playing ? 'Pause autoplay' : 'Play automatically'} onClick={p.onTogglePlay} active={p.playing} disabled={!!p.explore}>
+          {p.playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5l11 7-11 7z" />}
+        </NavButton>
+        <NavButton label="Next move" onClick={p.onNext}>
+          <path d="M7 5l9 7-9 7z" />
+        </NavButton>
+        <NavButton label="Last move" onClick={p.onLast} disabled={!p.explore && p.ply >= p.count}>
+          <path d="M18 5v14M5 5l9 7-9 7z" />
+        </NavButton>
+      </div>
+  );
+}
+
 export const ReviewView = memo(function ReviewView(props: {
   moves: readonly AnalysedMove[];
   /** The move shown on the board (null at the start position). */
@@ -59,7 +82,7 @@ export const ReviewView = memo(function ReviewView(props: {
   ) : undefined;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 [overflow-anchor:none]">
       <div className="flex items-center justify-between">
         <button type="button" onClick={props.onSummary} className="inline-flex items-center gap-1 text-sm font-bold text-ember-400 hover:text-ember-300 focus-visible:outline-2 focus-visible:outline-ember-400" aria-label="Back to the game summary">
           <span aria-hidden>{'‹'}</span> Summary
@@ -68,7 +91,7 @@ export const ReviewView = memo(function ReviewView(props: {
 
       {explorePanel ?? (
         <>
-          <CoachBubble right={chip}>
+          <CoachBubble right={chip} className="[&>div:last-child]:min-h-[8.25rem]">
             {move ? (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
@@ -98,7 +121,7 @@ export const ReviewView = memo(function ReviewView(props: {
             )}
           </CoachBubble>
 
-          <Button variant="good" size="lg" className="w-full text-lg" disabled={ply >= N} onClick={props.onNext}>
+          <Button variant="good" size="lg" className="w-full text-lg max-lg:hidden" disabled={ply >= N} onClick={props.onNext}>
             Next
           </Button>
 
@@ -108,22 +131,8 @@ export const ReviewView = memo(function ReviewView(props: {
 
       <EvalGraph geom={props.geom} count={N + 1} current={ply} dots={props.dots} onSeek={props.onSeek} />
 
-      <div className="flex items-center gap-2" role="group" aria-label="Move navigation">
-        <NavButton label="First move" onClick={props.onFirst} disabled={!explorePanel && ply === 0}>
-          <path d="M6 5v14M19 5l-9 7 9 7z" />
-        </NavButton>
-        <NavButton label="Previous move" onClick={props.onBack}>
-          <path d="M17 5l-9 7 9 7z" />
-        </NavButton>
-        <NavButton label={props.playing ? 'Pause autoplay' : 'Play automatically'} onClick={props.onTogglePlay} active={props.playing} disabled={!!explorePanel}>
-          {props.playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5l11 7-11 7z" />}
-        </NavButton>
-        <NavButton label="Next move" onClick={props.onNext}>
-          <path d="M7 5l9 7-9 7z" />
-        </NavButton>
-        <NavButton label="Last move" onClick={props.onLast} disabled={!explorePanel && ply >= N}>
-          <path d="M18 5v14M5 5l9 7-9 7z" />
-        </NavButton>
+      <div className="max-lg:hidden">
+        <ReviewNav explore={!!explorePanel} ply={ply} count={N} playing={props.playing} onFirst={props.onFirst} onBack={props.onBack} onNext={props.onNext} onLast={props.onLast} onTogglePlay={props.onTogglePlay} />
       </div>
     </div>
   );

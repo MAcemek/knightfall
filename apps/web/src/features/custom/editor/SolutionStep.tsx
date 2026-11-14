@@ -229,7 +229,7 @@ export function SolutionStep(props: SolutionStepProps) {
             </Button>
           </div>
 
-          <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 sm:flex">
+          <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 fine:flex">
             <span>
               <Kbd>⌫</Kbd> undo
             </span>

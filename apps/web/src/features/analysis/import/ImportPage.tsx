@@ -410,7 +410,7 @@ export function ImportPage() {
                   disabled={disabled}
                   title={disabled ? 'Needs npm run engine:deep' : id === 'deep' ? 'Stockfish 17, depth 20' : 'Stockfish 17 Lite, depth 16'}
                   onClick={() => chooseEngine(id)}
-                  className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:cursor-not-allowed disabled:opacity-40 ${engine === id ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
+                  className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors max-lg:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:cursor-not-allowed disabled:opacity-40 ${engine === id ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
                 >
                   {id === 'lite' ? 'Lite' : 'Deep'}
                 </button>

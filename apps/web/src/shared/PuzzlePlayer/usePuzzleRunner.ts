@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { judgeMove, isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from '@knightfall/core';
 import type { BoardArrow, BoardMark } from '../Board/index.ts';
 import { sfx } from '../fx/sound.ts';
+import { getSettings } from '../settings.ts';
 
 export type RunnerStatus = 'idle' | 'intro' | 'player' | 'opponent' | 'solved' | 'failed' | 'solution';
 
@@ -321,7 +322,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
 
   const setPremove = useCallback((uci: string | null) => {
     const s = statusRef.current;
-    if (!uci || (s !== 'opponent' && s !== 'intro')) {
+    if (!uci || !getSettings().premoves || (s !== 'opponent' && s !== 'intro')) {
       clearPremove();
       return;
     }

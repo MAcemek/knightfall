@@ -132,7 +132,7 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
               Back to lobby
             </Button>
           </div>
-          <div className="mt-3 hidden gap-3 text-xs text-ink-500 sm:flex">
+          <div className="mt-3 hidden gap-3 text-xs text-ink-500 fine:flex">
             <span>
               <Kbd>R</Kbd> rematch
             </span>

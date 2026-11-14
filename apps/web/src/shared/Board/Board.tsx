@@ -1,5 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { decidePointerDown, dragThreshold, rightButtonHeld, selectionAfterPositionChange } from './boardInput.ts';
 import { motionOff, motionScale, useSettings } from '../settings.ts';
 import {
   FILES, isLightSquare, parseFenPieces, pieceUrl, premoveDests, squareToXY, trackPieces, xyToSquare,
@@ -145,6 +146,14 @@ function advanceTracked(prev: Tracked, fen: string, key: string | number | undef
   };
 }
 
+interface DragState {
+  id: number;
+  from: Square;
+  moved: boolean;
+  /** Distance (squares) before the press counts as a drag; larger for touch. */
+  threshold: number;
+}
+
 const dragTransform = (x: number, y: number) => `translate(${(x - 0.5) * 100}%, ${(y - 0.5) * 100}%) scale(1.08)`;
 
 /**
@@ -186,7 +195,17 @@ export function Board({
    * Drag state holds only what changes rarely. The pointer position lives in `dragPos` and is written
    * straight to the dragged piece's style, so a drag costs zero React renders per pointermove.
    */
-  const [drag, setDrag] = useState<{ id: number; from: Square; moved: boolean } | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  /**
+   * The live drag. Handlers read THIS, never the `drag` state: a pointermove and the pointerup that follows
+   * can arrive before React renders the move's setState, so state in the handler closure is stale and
+   * the drop was silently treated as a click (the piece did not move; the user had to try again).
+   */
+  const dragRef = useRef<DragState | null>(null);
+  const setDragBoth = useCallback((d: DragState | null) => {
+    dragRef.current = d;
+    setDrag(d);
+  }, []);
   const dragPos = useRef({ x: 0, y: 0 });
   const dragStart = useRef({ x: 0, y: 0 });
   const pieceEls = useRef(new Map<number, HTMLDivElement>());
@@ -208,10 +227,24 @@ export function Board({
   if (tracked.fen !== fen || tracked.key !== positionKey) {
     cur = advanceTracked(tracked, fen, positionKey, !motionOff());
     setTracked(cur);
-    setSelected(null);
+    setSelected(
+      (selectionAfterPositionChange({
+        selected,
+        keyChanged: tracked.key !== positionKey,
+        freeMove: !!freeMove,
+        colorAtSelected: selected ? ((cur.pieces.find((p) => p.sq === selected)?.code[0] as 'w' | 'b' | undefined) ?? null) : null,
+        movableColor: movableColor ?? ((fen.split(' ')[1] as 'w' | 'b') ?? 'w'),
+      }) as Square | null),
+    );
     setPromo(null);
   }
   const pieces = cur.pieces;
+
+  // A position change that removes the dragged piece (new puzzle) ends the drag.
+  useEffect(() => {
+    const d = dragRef.current;
+    if (d && !pieces.some((p) => p.id === d.id)) setDragBoth(null);
+  }, [pieces, setDragBoth]);
 
   // Landing settle: a tiny squash on the piece(s) that just moved. Web Animations API on the <img>,
   // so it never touches the wrapper's transform (the slide) and never delays anything.
@@ -259,7 +292,7 @@ export function Board({
   const turn = (fen.split(' ')[1] as 'w' | 'b') ?? 'w';
   const color = movableColor ?? turn;
   const canMove = interactive && !!chess && color === turn;
-  const premoveMode = !canMove && !!onPremove && !freeMove;
+  const premoveMode = !canMove && !!onPremove && !freeMove && settings.premoves;
 
   const legal = useMemo(() => {
     const map = new Map<string, { to: string; promotion: boolean; capture: boolean }[]>();
@@ -342,43 +375,91 @@ export function Board({
     if (Object.keys(userMarks).length) setUserMarks({});
   };
 
+  /** Put the dragged piece back (it slides home) and optionally clear the selection. */
+  const cancelDrag = (clearSelection: boolean) => {
+    if (dragRef.current) setDragBoth(null);
+    if (clearSelection) setSelected(null);
+  };
+
+  const releaseCapture = (e: React.PointerEvent) => {
+    try {
+      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (promo) return;
+    // A second finger must not hijack or cancel the gesture of the first.
+    if (e.pointerType === 'touch' && !e.isPrimary) return;
     const { x, y, sq } = pointToBoard(e);
+    const dragActive = !!dragRef.current;
+    // A new left press while a drag is "active" means the old gesture ended without a pointerup: drop it.
+    if (dragActive && e.button !== 2) setDragBoth(null);
     if (!sq) return;
 
-    // Right button: draw arrows / highlight squares. Also cancels a queued premove.
-    if (e.button === 2) {
-      if (premove) onPremove?.(null);
-      setSelected(null);
-      setDrawing({ from: sq, to: sq, color: colorFromEvent(e) });
-      try {
-        (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-      } catch {
-        /* pointer already released */
+    const leftFree = e.button === 0 && !promo;
+    if (leftFree) clearAnnotations();
+    const consumed = leftFree ? !!onSquareClick?.(sq) : false;
+    const action = decidePointerDown({
+      button: e.button,
+      promoOpen: !!promo,
+      dragActive: dragActive && e.button === 2,
+      consumed,
+      selected,
+      sq,
+      isMine: isMine(sq),
+      isTargetOfSelected: selected ? targetsFor(selected).some((t) => t.to === sq) : false,
+      freeMove: !!freeMove,
+    });
+
+    switch (action) {
+      case 'cancel-drag':
+        // Right-click while holding a piece: put it back, no arrow.
+        cancelDrag(true);
+        e.preventDefault();
+        return;
+      case 'annotate':
+        // Right button: draw arrows / highlight squares. Also cancels a queued premove.
+        if (premove) onPremove?.(null);
+        setSelected(null);
+        setDrawing({ from: sq, to: sq, color: colorFromEvent(e) });
+        try {
+          (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+        } catch {
+          /* pointer already released */
+        }
+        e.preventDefault();
+        return;
+      case 'move-selected':
+        tryMove(selected!, sq);
+        return;
+      case 'grab': {
+        const p = pieceAt(sq)!;
+        setSelected(sq);
+        dragStart.current = { x, y };
+        dragPos.current = { x, y };
+        setDragBoth({ id: p.id, from: sq, moved: false, threshold: dragThreshold(e.pointerType) });
+        // Capture on the board container, not e.target: the target is a square overlay that can unmount
+        // mid-gesture (last-move / mark / check tints), which would drop the pointerup.
+        try {
+          (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+        } catch {
+          /* pointer already released */
+        }
+        e.preventDefault();
+        return;
       }
-      e.preventDefault();
-      return;
-    }
-    if (e.button !== 0) return;
-    clearAnnotations();
-    if (onSquareClick?.(sq)) return;
-    if (selected && selected !== sq && targets.some((t) => t.to === sq)) {
-      tryMove(selected, sq);
-      return;
-    }
-    if (isMine(sq)) {
-      const p = pieceAt(sq)!;
-      setSelected(sq);
-      dragStart.current = { x, y };
-      dragPos.current = { x, y };
-      setDrag({ id: p.id, from: sq, moved: false });
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      e.preventDefault();
-    } else {
-      if (selected && freeMove) tryMove(selected, sq);
-      else if (premove) onPremove?.(null);
-      setSelected(null);
+      case 'free-move':
+        tryMove(selected!, sq);
+        setSelected(null);
+        return;
+      case 'deselect':
+        if (premove) onPremove?.(null);
+        setSelected(null);
+        return;
+      default:
+        return;
     }
   };
 
@@ -388,15 +469,21 @@ export function Board({
       if (sq !== drawing.to) setDrawing({ ...drawing, to: sq });
       return;
     }
-    if (!drag) return;
-    const { x, y } = pointToBoard(e);
-    dragPos.current = { x, y };
-    if (!drag.moved) {
-      // One render to lift the piece; after that the position is written straight to the DOM.
-      if (Math.hypot(x - dragStart.current.x, y - dragStart.current.y) > 0.12) setDrag({ ...drag, moved: true });
+    const d = dragRef.current;
+    if (!d) return;
+    // Right button pressed while holding (chorded): no pointerdown fires, only buttons & 2 changes.
+    if (rightButtonHeld(e.buttons)) {
+      cancelDrag(true);
       return;
     }
-    const el = pieceEls.current.get(drag.id);
+    const { x, y } = pointToBoard(e);
+    dragPos.current = { x, y };
+    if (!d.moved) {
+      // One render to lift the piece; after that the position is written straight to the DOM.
+      if (Math.hypot(x - dragStart.current.x, y - dragStart.current.y) > d.threshold) setDragBoth({ ...d, moved: true });
+      return;
+    }
+    const el = pieceEls.current.get(d.id);
     if (el) el.style.transform = dragTransform(x, y);
   };
 
@@ -406,6 +493,7 @@ export function Board({
       const { from, color: c } = drawing;
       const to = pointToBoard(e).sq;
       setDrawing(null);
+      releaseCapture(e);
       if (!to) return;
       if (to === from) {
         setUserMarks((m) => {
@@ -424,10 +512,11 @@ export function Board({
       }
       return;
     }
-    if (!drag) return;
+    const d = dragRef.current;
+    if (!d) return;
     const { sq } = pointToBoard(e);
-    const d = drag;
-    setDrag(null);
+    setDragBoth(null);
+    releaseCapture(e);
     if (!d.moved) return; // treated as a click: keep selection
     if (!sq && freeMove && onDropOff) {
       setSelected(null);
@@ -440,6 +529,18 @@ export function Board({
       } else setSelected(null);
     }
   };
+
+  // Escape: cancel a drag, close the promotion picker, clear the selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (dragRef.current) setDragBoth(null);
+      setPromo(null);
+      setSelected(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setDragBoth]);
 
   const registerPiece = useCallback((id: number, el: HTMLDivElement | null) => {
     if (el) pieceEls.current.set(id, el);
@@ -462,16 +563,24 @@ export function Board({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => {
-          setDrag(null);
+          setDragBoth(null);
           setDrawing(null);
         }}
-        onContextMenu={(e) => e.preventDefault()}
+        // Capture lost without a pointerup (window blur, element removed): never leave a drag stuck.
+        onLostPointerCapture={() => {
+          if (dragRef.current) setDragBoth(null);
+          setDrawing(null);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (dragRef.current) cancelDrag(true);
+        }}
       >
         <SquaresLayer
           orientation={orientation}
           lastMove={lastMove}
           selected={selected}
-          premove={premove}
+          premove={settings.premoves ? premove : null}
           premoveMode={premoveMode}
           tints={tints}
           userMarks={userMarks}

@@ -67,9 +67,24 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
     </div>
   );
 
+  // Phones: the prompt and End run sit right under the board (the dock); the run tiles stay in the panel.
+  const dock = (
+    <div className="mt-3 space-y-2 lg:hidden">
+      <div className="flex min-h-7 items-center justify-between gap-2">
+        <PuzzlePrompt runner={runner} idleText="Get ready…" className="text-base!" />
+        {runner.puzzle && live && (
+          <Pill key={runner.puzzle.id} className="animate-pop font-mono">
+            {runner.puzzle.rating}
+          </Pill>
+        )}
+      </div>
+      <EndRunButton onQuit={g.quit} disabled={!live} />
+    </div>
+  );
+
   const side = (
     <Panel className="space-y-4">
-      <div className="flex min-h-7 items-center justify-between gap-2">
+      <div className="flex min-h-7 items-center justify-between gap-2 max-lg:hidden">
         <PuzzlePrompt runner={runner} idleText="Get ready…" />
         {runner.puzzle && live && (
           <Pill key={runner.puzzle.id} className="animate-pop font-mono">
@@ -78,7 +93,9 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
         )}
       </div>
       <RunTiles attempts={core.attempts} current={current} />
-      <EndRunButton onQuit={g.quit} disabled={!live} />
+      <div className="max-lg:hidden">
+        <EndRunButton onQuit={g.quit} disabled={!live} />
+      </div>
     </Panel>
   );
 
@@ -92,7 +109,7 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
           right={<Pill className="px-3 py-1 text-sm">{cfg.label}</Pill>}
         />
       </div>
-      <GameLayout board={board} side={side} />
+      <GameLayout board={board} side={side} dock={dock} />
     </>
   );
 }

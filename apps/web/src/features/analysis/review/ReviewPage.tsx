@@ -11,7 +11,7 @@ import { toast } from '../../../shared/toast.tsx';
 import { Button, EmptyState, GameLayout, Icons, Panel } from '../../../shared/ui.tsx';
 import { useHotkeysWithHelp } from '../../puzzles/useHotkeys.ts';
 import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
-import { ReviewView } from './ReviewView.tsx';
+import { ReviewNav, ReviewView } from './ReviewView.tsx';
 import { SummaryView } from './SummaryView.tsx';
 import { lineSteps, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
 import { barFraction, graphGeometry, initialPly, lineToSan, playUci } from './reviewLogic.ts';
@@ -425,7 +425,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           />
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-end gap-1.5">
+      <div className="mt-1 flex items-center justify-end gap-1.5 lg:mt-3">
         <Button size="sm" variant="ghost" onClick={() => setFlipped((f) => !f)} aria-label="Flip board (F)">
           {Icons.flip('h-4 w-4')} Flip
         </Button>
@@ -528,7 +528,18 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           <Button size="sm" variant="secondary" onClick={() => s.restart()}>Retry</Button>
         </div>
       )}
-      <GameLayout board={board} side={side$} wideSide />
+      <GameLayout
+        board={board}
+        side={side$}
+        wideSide
+        dock={
+          report && reviewing ? (
+            <div className="lg:hidden">
+              <ReviewNav explore={!!explore} ply={curIndex} count={N} playing={playing} onFirst={first} onBack={() => stepBy(-1)} onNext={() => stepBy(1)} onLast={last} onTogglePlay={() => setPlaying((v) => !v)} />
+            </div>
+          ) : undefined
+        }
+      />
       <ShortcutHelp open={help.helpOpen} onClose={help.closeHelp} groups={SHORTCUTS} />
     </div>
   );

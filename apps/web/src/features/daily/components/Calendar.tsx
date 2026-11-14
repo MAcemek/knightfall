@@ -54,7 +54,7 @@ export function Calendar({ month, today, selected, records, firstPlayed, onMonth
     <div className="rounded-2xl border border-ink-700/60 bg-ink-850 p-4 shadow-xl shadow-black/20">
       <div className="mb-3 flex items-center justify-between">
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-700 hover:text-ink-100 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-300 lg:h-8 lg:w-8 transition hover:bg-ink-700 hover:text-ink-100 disabled:opacity-30"
           onClick={() => onMonth(addMonths(month, -1))}
           disabled={!canPrev}
           aria-label="Previous month"
@@ -68,7 +68,7 @@ export function Calendar({ month, today, selected, records, firstPlayed, onMonth
           </div>
         </div>
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-700 hover:text-ink-100 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-ink-300 lg:h-8 lg:w-8 transition hover:bg-ink-700 hover:text-ink-100 disabled:opacity-30"
           onClick={() => onMonth(addMonths(month, 1))}
           disabled={!canNext}
           aria-label="Next month"

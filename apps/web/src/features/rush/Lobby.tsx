@@ -82,7 +82,7 @@ function ModeCard({ mode, hist, selected, hotkey, onSelect, onStart }: {
         <div className={`flex h-11 w-11 items-center justify-center rounded-xl transition ${selected ? 'bg-ember-500 text-ink-950' : 'bg-ink-700 text-ember-400 group-hover:bg-ink-600'}`}>
           {MODE_ICON[mode]('h-6 w-6')}
         </div>
-        <kbd className="hidden rounded-md border border-ink-600 px-1.5 py-0.5 font-mono text-[11px] text-ink-400 sm:inline">{hotkey}</kbd>
+        <kbd className="hidden rounded-md border border-ink-600 px-1.5 py-0.5 font-mono text-[11px] text-ink-400 fine:inline">{hotkey}</kbd>
       </div>
       <div className="relative mt-3 text-xl font-extrabold tracking-tight">{cfg.label}</div>
       <div className="relative mt-0.5 min-h-10 text-sm text-ink-400">{cfg.blurb}</div>
@@ -177,7 +177,7 @@ export function Lobby() {
         <Button variant="primary" size="lg" className="w-full max-w-sm text-xl" onClick={() => start()}>
           {Icons.bolt('h-6 w-6')} Start {RUSH_MODES[mode].label}
         </Button>
-        <div className="hidden text-xs text-ink-500 sm:block">Press 1–3 to pick a mode · Enter to start</div>
+        <div className="hidden text-xs text-ink-500 fine:block">Press 1–3 to pick a mode · Enter to start</div>
       </div>
 
       <Panel className="mt-6 grid gap-4 sm:grid-cols-3">

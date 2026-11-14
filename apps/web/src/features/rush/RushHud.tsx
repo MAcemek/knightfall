@@ -13,7 +13,7 @@ function Clock({ cfg, remainingMs, elapsedMs, live }: { cfg: RushModeConfig; rem
         <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-400">
           {Icons.flame('h-3.5 w-3.5 text-ember-400')} Survival
         </div>
-        <div className="font-mono text-2xl font-bold text-ink-200 tabular sm:text-3xl">{formatClock(elapsedMs, 'up')}</div>
+        <div className="font-mono text-xl font-bold text-ink-200 tabular sm:text-3xl">{formatClock(elapsedMs, 'up')}</div>
       </div>
     );
   }
@@ -37,7 +37,7 @@ function Countdown({ cfg, remainingMs, live }: { cfg: RushModeConfig; remainingM
       </div>
       <div
         ref={ref}
-        className={`origin-left font-mono text-3xl font-black tabular transition-colors sm:text-4xl ${danger ? 'text-bad-400 drop-shadow-[0_0_12px_rgb(240_72_72/0.6)]' : 'text-ink-100'}`}
+        className={`origin-left font-mono text-2xl font-black tabular transition-colors sm:text-4xl ${danger ? 'text-bad-400 drop-shadow-[0_0_12px_rgb(240_72_72/0.6)]' : 'text-ink-100'}`}
       >
         {formatClock(remainingMs)}
       </div>
@@ -47,7 +47,7 @@ function Countdown({ cfg, remainingMs, live }: { cfg: RushModeConfig; remainingM
 
 /** Three ✗ slots that fill red with a pop on every strike. */
 export function StrikeSlots({ strikes, shakeKey, size = 'md' }: { strikes: number; shakeKey: number; size?: 'sm' | 'md' }) {
-  const box = size === 'sm' ? 'h-6 w-6' : 'h-8 w-8 sm:h-10 sm:w-10';
+  const box = size === 'sm' ? 'h-6 w-6' : 'h-7 w-7 sm:h-10 sm:w-10';
   const icon = size === 'sm' ? 'h-3.5 w-3.5' : 'h-5 w-5 sm:h-6 sm:w-6';
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -144,7 +144,7 @@ export function RushHud({
 
   return (
     <div className="mb-3 overflow-hidden rounded-2xl border border-ink-700/60 bg-ink-850 shadow-xl shadow-black/20">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2.5 sm:px-4">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5">
         <Clock cfg={cfg} remainingMs={remainingMs} elapsedMs={elapsedMs} live={live} />
 
         <div className="relative flex flex-col items-center" ref={scoreRef}>
@@ -153,11 +153,11 @@ export function RushHud({
             <TickerNumber
               value={core.score}
               duration={0.35}
-              className={`font-mono text-4xl font-black leading-none sm:text-5xl ${core.combo >= COMBO_BADGE_AT ? 'text-ember-400 drop-shadow-[0_0_14px_rgb(255_154_31/0.5)]' : 'text-ink-100'}`}
+              className={`font-mono text-3xl font-black leading-none sm:text-5xl ${core.combo >= COMBO_BADGE_AT ? 'text-ember-400 drop-shadow-[0_0_14px_rgb(255_154_31/0.5)]' : 'text-ink-100'}`}
             />
             <FloatingDelta delta={solveKey ? 1 : null} trigger={solveKey || null} />
           </div>
-          <div className="mt-1 flex h-6 items-center">
+          <div className="mt-0.5 flex h-5 items-center sm:mt-1 sm:h-6">
             <ComboBadge combo={core.combo} />
           </div>
           <div className="mt-1">

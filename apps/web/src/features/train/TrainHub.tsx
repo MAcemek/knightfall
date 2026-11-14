@@ -79,7 +79,7 @@ export function TrainHub() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setSelected(toggleTheme(selected, t))}
-                      className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${on ? 'bg-ember-500 text-ink-950' : 'bg-ink-800 text-ink-200 hover:bg-ink-700'}`}
+                      className={`rounded-full px-3 py-1.5 text-sm font-semibold max-lg:min-h-11 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${on ? 'bg-ember-500 text-ink-950' : 'bg-ink-800 text-ink-200 hover:bg-ink-700'}`}
                     >
                       {themeLabel(t)}
                     </button>

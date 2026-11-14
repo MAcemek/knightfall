@@ -138,7 +138,7 @@ function Hero({ api, rating, record }: { api: BattleApi; rating: number | undefi
       <Button variant="primary" size="lg" className="w-full max-w-xs" onClick={api.findOpponent} autoFocus>
         {Icons.swords('h-5 w-5')} Find opponent
       </Button>
-      <div className="text-xs text-ink-500">
+      <div className="hidden text-xs text-ink-500 fine:block">
         Press <Kbd>Enter</Kbd> to start searching
       </div>
     </div>
@@ -175,7 +175,7 @@ function Searching({ api }: { api: BattleApi }) {
       <Button variant="secondary" onClick={api.cancel}>
         Cancel
       </Button>
-      <div className="text-xs text-ink-500">
+      <div className="hidden text-xs text-ink-500 fine:block">
         <Kbd>Esc</Kbd> to cancel
       </div>
     </div>

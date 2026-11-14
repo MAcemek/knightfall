@@ -134,7 +134,7 @@ export function Editor({ id }: { id?: string }) {
       subtitle={id ? title || 'Update the position, line or details' : 'Build a position, play the solution, give it a name'}
       icon={Icons.pencil('h-6 w-6')}
       right={
-        <Link to="/custom" className="text-sm font-semibold text-ink-400 transition hover:text-ink-100">
+        <Link to="/custom" className="inline-flex min-h-11 items-center text-sm font-semibold text-ink-400 transition hover:text-ink-100">
           ← My puzzles
         </Link>
       }

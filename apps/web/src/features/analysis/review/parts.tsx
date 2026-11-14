@@ -182,11 +182,19 @@ export const MoveList = memo(function MoveList({ moves, classified, current, onS
   const rows: MoveRow[] = useMemo(() => moveRows(moves), [moves]);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    box.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Scroll only the list itself. scrollIntoView() would also scroll the window, which makes the
+    // Next button (and everything else on the page) jump on every step.
+    const c = box.current;
+    const el = c?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!c || !el) return;
+    const cr = c.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    if (er.top < cr.top) c.scrollTop += er.top - cr.top - 4;
+    else if (er.bottom > cr.bottom) c.scrollTop += er.bottom - cr.bottom + 4;
   }, [current]);
   if (!rows.length) return <p className="py-3 text-center text-sm text-ink-400">No moves.</p>;
   return (
-    <div ref={box} className="max-h-40 overflow-y-auto overscroll-contain pr-1 lg:max-h-56" role="list" aria-label="Moves">
+    <div ref={box} className="h-40 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none] lg:h-56" role="list" aria-label="Moves">
       {rows.map((r) => (
         <div key={`${r.moveNumber}-${r.white?.ply ?? r.black?.ply}`} role="listitem" className="grid grid-cols-[2.25rem_1fr_1fr] items-center gap-1">
           <span className="text-right font-mono text-xs text-ink-500">{r.moveNumber}.</span>

@@ -15,6 +15,8 @@ export interface Settings {
   showCoords: boolean;
   /** Rated puzzles: load the next puzzle automatically after a solve. */
   autoAdvance: boolean;
+  /** Queue a move while the opponent is replying (puzzles, Rush, Battle). */
+  premoves: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animSpeed: 'normal',
   showCoords: true,
   autoAdvance: false,
+  premoves: true,
 };
 
 export interface BoardTheme {
@@ -67,6 +70,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     animSpeed: ANIM_SPEEDS.some((s) => s.id === r.animSpeed) ? (r.animSpeed as AnimSpeed) : d.animSpeed,
     showCoords: typeof r.showCoords === 'boolean' ? r.showCoords : d.showCoords,
     autoAdvance: typeof r.autoAdvance === 'boolean' ? r.autoAdvance : d.autoAdvance,
+    premoves: typeof r.premoves === 'boolean' ? r.premoves : d.premoves,
   };
 }
 

@@ -10,7 +10,7 @@ export function isFinished(status: PuzzleRunner['status']) {
 }
 
 /** Prompt, progress, outcome line, and the hidden-until-finished puzzle rating & themes. */
-export function PuzzleCard({ runner, mode, result, children }: { runner: PuzzleRunner; mode: SessionMode; result: PuzzleResult | null; children?: ReactNode }) {
+export function PuzzleCard({ runner, mode, result, children, dock = false }: { runner: PuzzleRunner; mode: SessionMode; result: PuzzleResult | null; children?: ReactNode; dock?: boolean }) {
   const puzzle = runner.puzzle;
   const revealed = !!puzzle && (isFinished(runner.status) || result !== null || runner.retrying);
   const themes = puzzle ? sortThemes(puzzle.themes).slice(0, 5) : [];
@@ -18,7 +18,7 @@ export function PuzzleCard({ runner, mode, result, children }: { runner: PuzzleR
   return (
     <div className="rounded-2xl border border-ink-700/60 bg-ink-850 p-4 shadow-xl shadow-black/20">
       <div className="flex items-start justify-between gap-3">
-        <PuzzlePrompt runner={runner} />
+        <PuzzlePrompt runner={runner} className={dock ? 'max-lg:hidden' : ''} />
         {mode === 'replay' && <Pill className="shrink-0 bg-sky-400/15 text-sky-400">Replay · unrated</Pill>}
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">

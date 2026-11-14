@@ -54,7 +54,7 @@ export function App() {
   const toggleSound = () => setSetting('sound', !settings.sound);
 
   return (
-    <div className="flex min-h-full flex-col bg-ink-950 lg:flex-row">
+    <div className="flex min-h-dvh flex-col bg-ink-950 lg:flex-row">
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-ink-800 bg-ink-900 px-3 py-5 lg:flex">
         <NavLink to="/" className="group mb-7 flex items-center gap-2.5 px-2">
@@ -104,26 +104,26 @@ export function App() {
       </aside>
 
       {/* Top bar (mobile) */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-ink-800 bg-ink-900/95 px-4 py-2.5 backdrop-blur lg:hidden">
-        <NavLink to="/" className="flex items-center gap-2">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-ink-800 bg-ink-900/95 pb-1 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-[calc(0.25rem+env(safe-area-inset-top))] backdrop-blur lg:hidden">
+        <NavLink to="/" className="flex h-11 items-center gap-2">
           <img src="/pieces/wN.svg" alt="" className="h-7 w-7 -scale-x-100" />
           <span className="text-lg font-black">
             Knight<span className="text-ember-400">fall</span>
           </span>
         </NavLink>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center">
           {MORE.map((n) => (
-            <NavLink key={n.to} to={n.to} aria-label={n.label} className={({ isActive }) => (isActive ? 'text-ember-400' : 'text-ink-300')}>
+            <NavLink key={n.to} to={n.to} aria-label={n.label} className={({ isActive }) => `flex h-11 w-11 items-center justify-center rounded-xl ${isActive ? 'text-ember-400' : 'text-ink-300'}`}>
               {n.icon()}
             </NavLink>
           ))}
-          <button className="text-ink-300" aria-label="Toggle sound" onClick={toggleSound}>
+          <button className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-300" aria-label="Toggle sound" onClick={toggleSound}>
             {settings.sound ? Icons.volume() : Icons.mute()}
           </button>
         </div>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 pb-24 pt-5 lg:px-8 lg:pb-8 lg:pt-8">
+      <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 lg:px-8 lg:pb-8 lg:pt-8">
         <div key={section} className="animate-page-in">
           <Suspense fallback={<div className="p-10 text-center text-ink-400">Loading…</div>}>
             <Routes>
@@ -144,13 +144,13 @@ export function App() {
       </main>
 
       {/* Bottom nav (mobile) */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden">
         {NAV.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
             end={n.end}
-            className={({ isActive }) => `relative flex min-w-0 flex-col items-center gap-0.5 py-2 text-[9px] font-semibold min-[400px]:text-[10px] transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
+            className={({ isActive }) => `relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-semibold leading-tight transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
           >
             {n.icon('h-5 w-5')}
             {n.label}

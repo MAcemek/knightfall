@@ -46,6 +46,7 @@ function DailyRoute() {
   return (
     <>
       <PageHeader
+        compact
         title="Daily Puzzle"
         subtitle="One puzzle a day · the same for everyone"
         icon={Icons.calendar('h-6 w-6')}

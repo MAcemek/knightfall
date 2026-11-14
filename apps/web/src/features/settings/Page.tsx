@@ -125,6 +125,7 @@ export default function SettingsPage() {
         <Panel className="space-y-4">
           <h2 className="text-lg font-extrabold">Puzzles</h2>
           <Switch checked={s.autoAdvance} onChange={(v) => setSetting('autoAdvance', v)} label="Auto-advance" hint="Load the next rated puzzle automatically after a solve." />
+          <Switch checked={s.premoves} onChange={(v) => setSetting('premoves', v)} label="Premoves" hint="Queue your next move while the opponent is moving." />
         </Panel>
       </div>
 

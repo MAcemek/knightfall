@@ -5,6 +5,7 @@ import { ProgressDots, PuzzleBoard, PuzzlePrompt, usePuzzleRunner, type RunnerRe
 import { Button, GameLayout, Icons, Panel, Pill } from '../../../shared/ui.tsx';
 import { Kbd, ThemeTag, useHotkeys } from '../bits.tsx';
 import { displayTitle } from '../logic.ts';
+import { ControlDock } from '../../puzzles/components/Controls.tsx';
 import { ratingTier } from '../editor/DetailsStep.tsx';
 
 export interface CustomPlayerProps {
@@ -85,6 +86,22 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
 
   return (
     <GameLayout
+      dock={
+        <ControlDock
+          runner={runner}
+          prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
+          canHint={runner.status === 'player'}
+          canRetry={finished || runner.status === 'failed'}
+          canSolution={runner.status !== 'idle' && runner.status !== 'intro' && runner.status !== 'solution'}
+          onHint={runner.hint}
+          onRetry={finished ? again : runner.retry}
+          onSolution={runner.showSolution}
+          onNext={finished && onNext ? onNext : undefined}
+          nextReady
+          canNext
+          nextLabel="Next puzzle"
+        />
+      }
       board={
         <div ref={boardWrap}>
           <PuzzleBoard runner={runner}>
@@ -115,7 +132,7 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
             </div>
 
             <div className="space-y-2 rounded-xl bg-ink-900 p-3">
-              <PuzzlePrompt runner={runner} />
+              <PuzzlePrompt runner={runner} className="max-lg:hidden" />
               <ProgressDots runner={runner} />
             </div>
 
@@ -136,6 +153,7 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
               </div>
             )}
 
+            <div className="max-lg:hidden">
             {finished ? (
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={again}>
@@ -164,10 +182,11 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
                 </Button>
               </div>
             )}
+            </div>
 
             {actions && <div className="flex flex-wrap gap-2 border-t border-ink-700/60 pt-4">{actions}</div>}
 
-            <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 sm:flex">
+            <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 fine:flex">
               <span>
                 <Kbd>H</Kbd> hint
               </span>

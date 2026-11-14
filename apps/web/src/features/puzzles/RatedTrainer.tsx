@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { usePuzzleRunner, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { PuzzlePrompt, usePuzzleRunner, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
 import { db } from '../../shared/db.ts';
 import { burstAt, confetti, PALETTES, sfx } from '../../shared/fx/index.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { setSetting, useSettings } from '../../shared/settings.ts';
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
 import { Button, GameLayout, Icons, PageHeader, Panel } from '../../shared/ui.tsx';
-import { Controls, Toggle } from './components/Controls.tsx';
+import { ControlDock, Controls, Toggle } from './components/Controls.tsx';
 import { HistoryStrip } from './components/HistoryStrip.tsx';
 import { isFinished, PuzzleCard } from './components/PuzzleCard.tsx';
 import { RatingCard } from './components/RatingCard.tsx';
@@ -122,7 +122,7 @@ export function RatedTrainer() {
 
   return (
     <>
-      <PageHeader title="Puzzles" subtitle="Rated tactics matched to your level" icon={Icons.puzzle('h-6 w-6')} />
+      <PageHeader title="Puzzles" subtitle="Rated tactics matched to your level" icon={Icons.puzzle('h-6 w-6')} className="max-lg:hidden" />
       <GameLayout
         top={
           <div className="mb-3 lg:hidden">
@@ -139,6 +139,23 @@ export function RatedTrainer() {
               )}
             </TrainerBoard>
           </div>
+        }
+        dock={
+          <ControlDock
+            runner={runner}
+            prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
+            canHint={canHint}
+            canRetry={canRetry}
+            canSolution={canSolution}
+            canNext={canNext}
+            nextReady={finished || retrying}
+            loading={session.loading}
+            onHint={runner.hint}
+            onRetry={runner.retry}
+            onSolution={runner.showSolution}
+            onNext={goNext}
+            nextLabel={session.mode === 'replay' ? 'Back to rated' : 'Next puzzle'}
+          />
         }
         side={
           <div className="flex flex-col gap-3">
@@ -164,9 +181,10 @@ export function RatedTrainer() {
                 </Button>
               </Panel>
             ) : null}
-            <PuzzleCard runner={runner} mode={session.mode} result={session.result}>
+            <PuzzleCard runner={runner} mode={session.mode} result={session.result} dock>
               <div className="mt-4 border-t border-ink-700/60 pt-4">
                 <Controls
+                  dock
                   canHint={canHint}
                   canRetry={canRetry}
                   canSolution={canSolution}

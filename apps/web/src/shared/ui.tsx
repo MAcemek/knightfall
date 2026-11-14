@@ -21,8 +21,17 @@ export function Button({
   children,
   onClick,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg' }) {
-  const sz = size === 'lg' ? 'h-14 px-7 text-lg' : size === 'sm' ? 'h-9 px-3.5 text-sm' : 'h-11 px-5 text-base';
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'sm' | 'md' | 'lg' | 'dock' }) {
+  // 'sm' grows to a 44px tap target below the lg breakpoint (phones and tablets); 'dock' is the stacked
+  // icon-over-label button used in the compact control bar under the board on phones.
+  const sz =
+    size === 'lg'
+      ? 'h-14 px-7 text-lg'
+      : size === 'sm'
+        ? 'h-9 px-3.5 text-sm max-lg:h-11'
+        : size === 'dock'
+          ? 'h-[3.25rem] min-w-0 flex-col gap-0.5 px-1 text-[11px] leading-none'
+          : 'h-11 px-5 text-base';
   return (
     <button
       {...rest}
@@ -30,7 +39,7 @@ export function Button({
         sfx.click();
         onClick?.(e);
       }}
-      className={`inline-flex select-none items-center justify-center gap-2 rounded-xl font-bold transition-[background,transform,box-shadow] duration-100 hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:pointer-events-none disabled:opacity-40 ${sz} ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex select-none items-center justify-center gap-2 rounded-xl font-bold transition-[background,transform,box-shadow] duration-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:pointer-events-none disabled:opacity-40 ${sz} ${VARIANTS[variant]} ${className}`}
     >
       {children}
     </button>
@@ -61,14 +70,22 @@ export function Pill({ children, className = '' }: { children: ReactNode; classN
   return <span className={`inline-flex items-center gap-1 rounded-full bg-ink-700 px-2.5 py-0.5 text-xs font-semibold text-ink-200 ${className}`}>{children}</span>;
 }
 
-export function PageHeader({ title, subtitle, icon, right }: { title: string; subtitle?: string; icon?: ReactNode; right?: ReactNode }) {
+export function PageHeader({ title, subtitle, icon, right, compact = false, className = '' }: {
+  title: string;
+  subtitle?: string;
+  icon?: ReactNode;
+  right?: ReactNode;
+  /** Below lg: drop the icon and subtitle so game pages keep the board and controls on one screen. */
+  compact?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        {icon && <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-ink-800 text-ember-400">{icon}</div>}
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-ink-400">{subtitle}</p>}
+    <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:mb-5 ${compact ? 'max-lg:mb-2' : ''} ${className}`}>
+      <div className="flex min-w-0 items-center gap-3">
+        {icon && <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-ember-400 ${compact ? 'max-lg:hidden' : ''}`}>{icon}</div>}
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">{title}</h1>
+          {subtitle && <p className={`text-sm text-ink-400 ${compact ? 'max-lg:hidden' : ''}`}>{subtitle}</p>}
         </div>
       </div>
       {right}
@@ -104,12 +121,12 @@ export function Modal({ open, onClose, children, className = '', size = 'md', la
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-ink-950/75 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-ink-950/75 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`w-full ${MODAL_SIZES[size]} max-h-[calc(100dvh-2rem)] animate-pop overflow-y-auto rounded-2xl border border-ink-700 bg-ink-850 p-6 shadow-2xl ${className}`}
+        className={`w-full ${MODAL_SIZES[size]} max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] animate-pop overflow-y-auto overscroll-contain rounded-2xl border border-ink-700 bg-ink-850 p-4 shadow-2xl sm:p-6 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -140,7 +157,7 @@ export function Switch({ checked, onChange, label, hint }: { checked: boolean; o
           sfx.click();
           onChange(!checked);
         }}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${checked ? 'bg-ember-500' : 'bg-ink-700'}`}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${checked ? 'bg-ember-500' : 'bg-ink-700'}`}
       >
         <span className={`absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
       </button>
@@ -169,7 +186,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
             sfx.click();
             onChange(o.id);
           }}
-          className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${o.id === value ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
+          className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors max-lg:min-h-11 max-lg:py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 ${o.id === value ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
         >
           {o.label}
         </button>
@@ -185,18 +202,23 @@ export function EmptyState({ icon, title, children, action }: { icon?: ReactNode
       {icon && <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-800 text-ember-400">{icon}</div>}
       <div className="text-lg font-extrabold">{title}</div>
       {children && <div className="max-w-sm text-sm text-ink-400">{children}</div>}
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center">{action}</div>}
     </div>
   );
 }
 
-/** Standard two-column game layout: board left, side panel right (stacks on mobile). */
-export function GameLayout({ board, side, top, wideSide }: { board: ReactNode; side: ReactNode; top?: ReactNode; wideSide?: boolean }) {
+/**
+ * Standard two-column game layout: board left, side panel right (stacks on mobile).
+ * `dock` is a compact control bar shown directly under the board below lg; when present the board is also
+ * capped by the viewport height there, so board + dock fit on one phone screen without scrolling.
+ */
+export function GameLayout({ board, side, top, dock, wideSide }: { board: ReactNode; side: ReactNode; top?: ReactNode; dock?: ReactNode; wideSide?: boolean }) {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 lg:flex-row lg:items-start">
-      <div className="w-full min-w-0 lg:max-w-[min(78vh,720px)] lg:flex-1">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
+      <div className={`w-full min-w-0 lg:max-w-[min(78vh,720px)] lg:flex-1 ${dock ? 'max-lg:mx-auto max-lg:max-w-[max(15rem,calc(100dvh-23rem))]' : ''}`}>
         {top}
         {board}
+        {dock}
       </div>
       <div className={`w-full lg:shrink-0 ${wideSide ? "lg:w-[400px]" : "lg:w-[340px]"}`}>{side}</div>
     </div>
@@ -235,6 +257,8 @@ export const Icons = {
   layers: (c?: string) => <I className={c} d={<><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></>} />,
   help: (c?: string) => <I className={c} d={<><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01" /></>} />,
   search: (c?: string) => <I className={c} d={<><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.8-3.8" /><path d="M8.5 12.5l2-2.5 1.5 1.5 2-2.5" /></>} />,
+  chevLeft: (c?: string) => <I className={c} d={<path d="M15 5l-7 7 7 7" />} />,
+  chevRight: (c?: string) => <I className={c} d={<path d="M9 5l7 7-7 7" />} />,
   lock: (c?: string) => <I className={c} d={<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></>} />,
 };
 

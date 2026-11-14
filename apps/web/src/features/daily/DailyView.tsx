@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { addDays, playerMoveCount, utcDateKey, type Puzzle } from '@knightfall/core';
 import { db } from '../../shared/db.ts';
 import { burstAt, confetti, PALETTES, sfx } from '../../shared/fx/index.ts';
-import { usePuzzleRunner, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { PuzzlePrompt, usePuzzleRunner, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
 import { dailyPuzzle } from '../../shared/puzzleSource.ts';
 import { Button, GameLayout, Icons, Panel } from '../../shared/ui.tsx';
-import { Controls } from '../puzzles/components/Controls.tsx';
+import { ControlDock, Controls } from '../puzzles/components/Controls.tsx';
 import { burstFromSquare, TrainerBoard, type BoardGlow } from '../puzzles/components/TrainerBoard.tsx';
 import { useHotkeysWithHelp } from '../puzzles/useHotkeys.ts';
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
@@ -180,6 +180,18 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
     !modalOpen,
   );
 
+  const dayAction =
+    shareReady || late ? (
+      <div className="grid gap-2">
+        {shareReady && share && <ShareButton text={share} size="lg" variant={status === 'solved' ? 'primary' : 'secondary'} />}
+        {late && (
+          <Button variant={shareReady ? 'ghost' : 'secondary'} onClick={() => navigate('/daily')}>
+            {Icons.calendar('h-4 w-4')} Back to today’s puzzle
+          </Button>
+        )}
+      </div>
+    ) : null;
+
   return (
     <>
       <GameLayout
@@ -194,6 +206,19 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
             </TrainerBoard>
           </div>
         }
+        dock={
+          <ControlDock
+            runner={runner}
+            prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
+            canHint={canHint}
+            canRetry={canRetry}
+            canSolution={canSolution}
+            onHint={runner.hint}
+            onRetry={runner.retry}
+            onSolution={runner.showSolution}
+            action={dayAction}
+          />
+        }
         side={
           <div className="flex flex-col gap-3">
             {error && (
@@ -207,6 +232,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
             <DailyCard runner={runner} date={date} today={today} record={record} practice={practice} finished={finished}>
               <div className="mt-4 border-t border-ink-700/60 pt-4">
                 <Controls
+                  dock
                   canHint={canHint}
                   canRetry={canRetry}
                   canSolution={canSolution}
@@ -214,18 +240,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
                   onRetry={runner.retry}
                   onSolution={runner.showSolution}
                   onFlip={() => setFlipped((f) => !f)}
-                  action={
-                    (shareReady || late) && (
-                    <div className="grid gap-2">
-                      {shareReady && share && <ShareButton text={share} size="lg" variant={status === 'solved' ? 'primary' : 'secondary'} />}
-                      {late && (
-                        <Button variant={shareReady ? 'ghost' : 'secondary'} onClick={() => navigate('/daily')}>
-                          {Icons.calendar('h-4 w-4')} Back to today’s puzzle
-                        </Button>
-                      )}
-                    </div>
-                    )
-                  }
+                  action={dayAction}
                   extra={
                     <div className="flex items-center gap-1">
                       <Button size="sm" variant="ghost" onClick={help.openHelp} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">

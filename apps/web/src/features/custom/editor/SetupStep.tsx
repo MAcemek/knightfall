@@ -296,7 +296,7 @@ export function SetupStep({ position, setPosition, orientation, setOrientation, 
             Record solution {Icons.next('h-5 w-5')}
           </Button>
 
-          <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 sm:flex">
+          <div className="hidden flex-wrap gap-x-3 gap-y-1.5 text-xs text-ink-400 fine:flex">
             <span>
               <Kbd>K</Kbd>…<Kbd>p</Kbd> pick piece
             </span>

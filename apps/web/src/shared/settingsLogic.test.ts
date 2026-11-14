@@ -8,14 +8,29 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings([1, 2])).toEqual(DEFAULT_SETTINGS);
   });
   it('keeps valid fields and drops invalid ones', () => {
-    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, extra: 1 });
-    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true });
+    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, extra: 1 });
+    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false });
     expect(sanitizeSettings({ boardTheme: 'green', animSpeed: 'slow', sound: 'yes' })).toEqual(DEFAULT_SETTINGS);
   });
   it('clamps volume to 0..1', () => {
     expect(sanitizeSettings({ volume: 7 }).volume).toBe(1);
     expect(sanitizeSettings({ volume: -2 }).volume).toBe(0);
     expect(sanitizeSettings({ volume: Number.NaN }).volume).toBe(DEFAULT_SETTINGS.volume);
+  });
+});
+
+describe('premoves setting', () => {
+  it('defaults to on', () => {
+    expect(DEFAULT_SETTINGS.premoves).toBe(true);
+    expect(sanitizeSettings({}).premoves).toBe(true);
+  });
+  it('old stored settings without the field get the default', () => {
+    expect(sanitizeSettings({ sound: false, volume: 0.5 }).premoves).toBe(true);
+  });
+  it('keeps a boolean and rejects junk', () => {
+    expect(sanitizeSettings({ premoves: false }).premoves).toBe(false);
+    expect(sanitizeSettings({ premoves: 'no' }).premoves).toBe(true);
+    expect(sanitizeSettings({ premoves: 0 }).premoves).toBe(true);
   });
 });
 

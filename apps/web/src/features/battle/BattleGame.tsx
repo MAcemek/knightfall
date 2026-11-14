@@ -136,9 +136,15 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
           </>
         }
         board={board}
+        dock={
+          <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
+            <PuzzlePrompt runner={runner} idleText="Get ready…" className="text-base!" />
+            {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
+          </div>
+        }
         side={
           <Panel className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 max-lg:hidden">
               <PuzzlePrompt runner={runner} idleText="Get ready…" />
               {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
             </div>

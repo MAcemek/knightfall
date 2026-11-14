@@ -5,7 +5,7 @@ import { ProgressDots, PuzzlePrompt, usePuzzleRunner, type RunnerResult, type Ru
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
 import { sortThemes, themeLabel } from '../../shared/themes.ts';
 import { Button, GameLayout, Icons, PageHeader, Panel, Pill, Stat } from '../../shared/ui.tsx';
-import { Controls } from '../puzzles/components/Controls.tsx';
+import { ControlDock, Controls } from '../puzzles/components/Controls.tsx';
 import { SolutionStepper } from '../puzzles/components/SolutionStepper.tsx';
 import { burstFromSquare, TrainerBoard, type BoardGlow } from '../puzzles/components/TrainerBoard.tsx';
 import { useHotkeysWithHelp } from '../puzzles/useHotkeys.ts';
@@ -141,11 +141,12 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
   const header = (
     <>
       <PageHeader
+        compact
         title={title}
         subtitle={subtitle}
         icon={icon}
         right={
-          <Link to="/train" className="text-sm font-semibold text-ink-400 transition-colors hover:text-ink-100">
+          <Link to="/train" className="inline-flex min-h-11 items-center text-sm font-semibold text-ink-400 transition-colors hover:text-ink-100">
             End session
           </Link>
         }
@@ -183,6 +184,22 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
             </TrainerBoard>
           </div>
         }
+        dock={
+          <ControlDock
+            runner={runner}
+            prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
+            canHint={canHint}
+            canRetry={canRetry}
+            canSolution={canSolution}
+            canNext={canNext}
+            nextReady={over || retrying}
+            loading={loading}
+            onHint={runner.hint}
+            onRetry={runner.retry}
+            onSolution={runner.showSolution}
+            onNext={goNext}
+          />
+        }
         side={
           <div className="flex flex-col gap-3">
             {error && (
@@ -195,7 +212,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
             )}
             <Panel>
               <div className="flex items-start justify-between gap-3">
-                <PuzzlePrompt runner={runner} />
+                <PuzzlePrompt runner={runner} className="max-lg:hidden" />
                 {puzzle && <Pill className="shrink-0 font-mono">{puzzle.rating}</Pill>}
               </div>
               <div className="mt-3">
@@ -212,6 +229,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
               </div>
               <div className="mt-4 border-t border-ink-700/60 pt-4">
                 <Controls
+                  dock
                   canHint={canHint}
                   canRetry={canRetry}
                   canSolution={canSolution}

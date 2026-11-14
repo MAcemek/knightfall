@@ -6,10 +6,15 @@ import { Kbd } from './Controls.tsx';
  * ◀ Move 3 / 6 ▶ — steps through the finished line (board only, nothing is rated).
  * Always takes up its row (invisible until the puzzle is over) so the buttons below never jump.
  */
-export function SolutionStepper({ runner }: { runner: PuzzleRunner }) {
+export function stepAbility(runner: PuzzleRunner) {
   const steppable = runner.status === 'solved' || runner.status === 'solution';
   const backDisabled = !steppable || runner.review?.index === 0;
   const forwardDisabled = !steppable || (runner.review ? runner.review.index === runner.review.total : runner.status === 'solved');
+  return { steppable, backDisabled, forwardDisabled };
+}
+
+export function SolutionStepper({ runner }: { runner: PuzzleRunner }) {
+  const { steppable, backDisabled, forwardDisabled } = stepAbility(runner);
   return (
     <div
       className={`flex h-9 items-center justify-between gap-2 rounded-xl bg-ink-900/60 px-1 transition-opacity duration-200 ${steppable ? 'opacity-100' : 'pointer-events-none opacity-0'}`}

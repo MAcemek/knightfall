@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* Precise pointer + hover (mouse/trackpad): keyboard-shortcut hints use this so touch devices never see them. */
+@custom-variant fine (@media (hover: hover) and (pointer: fine));
+
 /* Knightfall design tokens: midnight ink + ember accent. Use these via Tailwind (e.g. bg-ink-900, text-ember-400). */
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -184,8 +187,15 @@ body,
   height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
   background: var(--color-ink-950);
   color: var(--color-ink-100);
   font-family: var(--font-sans);
@@ -256,4 +266,13 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* Taps: no 300ms delay / double-tap zoom on controls. */
+button,
+a,
+[role='button'],
+[role='switch'],
+[role='radio'] {
+  touch-action: manipulation;
 }

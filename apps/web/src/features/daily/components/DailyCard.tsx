@@ -63,7 +63,7 @@ export function DailyCard({ runner, date, today, record, practice, finished, chi
         </div>
       </div>
 
-      <PuzzlePrompt runner={runner} />
+      <PuzzlePrompt runner={runner} className="max-lg:hidden" />
       <div className="mt-3 flex items-center justify-between gap-3">
         <ProgressDots runner={runner} />
         {revealed && puzzle && (

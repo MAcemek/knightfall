@@ -138,6 +138,58 @@ describe('UciEngine', () => {
   });
 });
 
+describe('stop before the search has started', () => {
+  it('UciEngine: stop() during the handshake cancels the search instead of starting it', async () => {
+    const f = fakeTransport();
+    const engine = new UciEngine(f.transport);
+    const p = engine.analyse(START, { depth: 99, multiPv: 1, infinite: true });
+    expect(engine.busy).toBe(true);
+    engine.stop();
+    await expect(p).rejects.toSatisfy(isAbortError);
+    expect(f.sent).toEqual(['uci', 'isready']);
+    expect(engine.busy).toBe(false);
+    // The engine is still usable.
+    const again = engine.analyse(START, { depth: 99, multiPv: 1, infinite: true });
+    await tick();
+    expect(f.sent.at(-1)).toBe('go infinite');
+    f.emit('info depth 7 multipv 1 score cp 25 pv e2e4');
+    engine.stop();
+    expect((await again).depth).toBe(7);
+  });
+  it('UciEngine: stop() while waiting for ucinewgame cancels a fresh search', async () => {
+    const f = fakeTransport(['info depth 16 multipv 1 score cp 10 pv e2e4', 'bestmove e2e4']);
+    const engine = new UciEngine(f.transport);
+    await engine.analyse(START, { depth: 16, multiPv: 1 });
+    f.sent.length = 0;
+    const p = engine.analyse(START, { depth: 16, multiPv: 1, fresh: true });
+    await Promise.resolve(); // past ready(), now waiting for readyok after ucinewgame
+    engine.stop();
+    await expect(p).rejects.toSatisfy(isAbortError);
+    expect(f.sent).toEqual(['ucinewgame', 'isready']);
+  });
+  it('EnginePool: a job aborted while its engine is loading settles, and the engine takes the next job', async () => {
+    // Regression: the abort used to be dropped, "go infinite" was sent afterwards and never stopped,
+    // so the job never settled and the engine stayed busy for good.
+    const f = fakeTransport();
+    const pool = new EnginePool({ size: 1, create: () => new UciEngine(f.transport) });
+    const first = new AbortController();
+    const p = pool.evaluate({ fen: START, depth: 99, multiPv: 3, infinite: true, signal: first.signal });
+    first.abort();
+    await expect(p).rejects.toSatisfy(isAbortError);
+    expect(f.sent).not.toContain('go infinite');
+    expect(f.sent).not.toContain('<terminate>');
+    expect(pool.stats).toEqual({ engines: 1, busy: 0, queued: 0 });
+
+    const second = new AbortController();
+    const q = pool.evaluate({ fen: AFTER_E4, depth: 99, multiPv: 3, infinite: true, signal: second.signal });
+    await tick();
+    expect(f.sent.at(-1)).toBe('go infinite');
+    second.abort();
+    await expect(q).rejects.toSatisfy(isAbortError);
+    pool.dispose();
+  });
+});
+
 /** Engine whose searches are finished by the test. */
 class ManualEngine implements PoolEngine {
   static all: ManualEngine[] = [];

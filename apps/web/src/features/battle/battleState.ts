@@ -1,8 +1,8 @@
-import { BATTLE_MAX_STRIKES, BATTLE_REMATCH_WINDOW_MS, type BattleScore, type PlayerInfo, type ServerMessage } from '@knightfall/core';
+import { BATTLE_MAX_STRIKES, BATTLE_REMATCH_WINDOW_MS, eloUpdate, type BattleScore, type PlayerInfo, type ServerMessage } from '@knightfall/core';
 
 /**
  * Puzzle Battle client state machine (pure). Server messages and local events go through
- * `battleReducer`; side effects (socket, sounds, persistence) live in useBattle.
+ * `battleReducer`; side effects (socket, sounds, persistence) live in shared/battle/store.ts.
  */
 
 /** Shared with the server bot (packages/core protocol.ts) so bots' difficulty tracks what humans see. */
@@ -26,6 +26,8 @@ export interface MatchInfo {
   /** Server epoch ms; 0 until 'start' arrives. */
   startsAt: number;
   endsAt: number;
+  /** Friend challenge: casual, no rating change. Sticks to rematches. */
+  friendly?: boolean;
 }
 
 export interface EndInfo {
@@ -129,7 +131,7 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
         ...s,
         phase: 'matched',
         error: null,
-        match: { roomId: msg.roomId, seed: msg.seed, me, opponent: msg.opponent, startsAt: 0, endsAt: 0 },
+        match: { roomId: msg.roomId, seed: msg.seed, me, opponent: msg.opponent, startsAt: 0, endsAt: 0, ...(msg.friendly ? { friendly: true } : {}) },
         me: { solved: 0, strikes: 0 },
         opp: { solved: 0, strikes: 0 },
         oppTick: 0,
@@ -151,7 +153,7 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
       if (s.phase === 'searching' || s.phase === 'connecting') return { ...s, phase: 'lobby', error: msg.message };
       return s;
     default:
-      // 'end' is handled by useBattle (needs persistence) and dispatched as 'ended'; 'pong' adjusts the clock.
+      // 'end' is handled by the battle store (needs persistence) and dispatched as 'ended'; 'pong' adjusts the clock.
       return s;
   }
 }
@@ -163,3 +165,8 @@ export function tugShare(me: number, opp: number): number {
 
 /** Elo score for a result. */
 export const resultScore = (r: EndInfo['result']) => (r === 'win' ? 1 : r === 'draw' ? 0.5 : 0);
+
+/** Rating after a battle: friendly (casual) battles never move it. */
+export function ratingAfterBattle(match: Pick<MatchInfo, 'me' | 'opponent' | 'friendly'>, result: EndInfo['result']): number {
+  return match.friendly ? match.me.rating : eloUpdate(match.me.rating, match.opponent.rating, resultScore(result));
+}

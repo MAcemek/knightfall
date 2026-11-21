@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { FxLayer } from './shared/fx/index.ts';
 import { Icons } from './shared/ui.tsx';
@@ -6,6 +6,8 @@ import { useProfile } from './shared/profile.ts';
 import { ProgressWatcher, useReviewSummary } from './shared/progress/index.ts';
 import { setSetting, useSettings } from './shared/settings.ts';
 import { ToastHost } from './shared/toast.tsx';
+import { ChallengeInbox } from './shared/battle/ChallengeInbox.tsx';
+import { startBattleNetwork } from './shared/battle/store.ts';
 
 /**
  * Each mode lives in src/features/<mode>/ and default-exports its page from Page.tsx.
@@ -53,6 +55,12 @@ export function App() {
   // in-feature navigations) never remounts a page.
   const section = useLocation().pathname.split('/')[1] ?? '';
   const toggleSound = () => setSetting('sound', !settings.sound);
+
+  // One app-wide battle socket, opened shortly after load so friend invitations reach any page.
+  useEffect(() => {
+    const t = setTimeout(startBattleNetwork, 1200);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink-950 lg:flex-row">
@@ -162,6 +170,7 @@ export function App() {
       </nav>
       <ProgressWatcher />
       <ToastHost />
+      <ChallengeInbox />
       <FxLayer />
     </div>
   );

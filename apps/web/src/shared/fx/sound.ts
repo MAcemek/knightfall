@@ -151,6 +151,11 @@ export const sfx = {
   strike() {
     tone(150, { type: 'sawtooth', dur: 0.25, gain: 0.12, glideTo: 90 });
   },
+  /** A friend invitation arrived: two soft descending sine notes, quieter and lower than the solve chime. */
+  invite() {
+    tone(784, { type: 'sine', dur: 0.28, gain: 0.09 });
+    tone(587.3, { type: 'sine', dur: 0.42, gain: 0.08, delay: 0.13 });
+  },
   click() {
     tone(1500, { type: 'sine', dur: 0.04, gain: 0.08 });
   },

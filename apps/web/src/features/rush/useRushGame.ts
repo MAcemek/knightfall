@@ -4,6 +4,7 @@ import { usePuzzleRunner, type PuzzleRunner, type RunnerResult } from '../../sha
 import { prefetchSequence, sequencePuzzle } from '../../shared/puzzleSource.ts';
 import { db, type RushMode } from '../../shared/db.ts';
 import { sfx } from '../../shared/fx/index.ts';
+import { beginTimedPlay } from '../../shared/timedPlay.ts';
 import { applyResult, initialCore, RUSH_MODES, toRushRun, type RushModeConfig, type RunCore } from './rushLogic.ts';
 
 export type RushPhase = 'countdown' | 'playing' | 'ending' | 'over';
@@ -244,6 +245,12 @@ export function useRushGame(mode: RushMode): RushGame {
     }, 100);
     return () => clearInterval(id);
   }, [phase, cfg.durationMs, end]);
+
+  // Tell the rest of the app a run is in progress (friend invitations then show as a slim banner).
+  useEffect(() => {
+    if (phase !== 'playing' && phase !== 'countdown') return;
+    return beginTimedPlay();
+  }, [phase]);
 
   // Warn before closing the tab mid-run.
   useEffect(() => {

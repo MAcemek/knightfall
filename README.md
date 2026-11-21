@@ -16,7 +16,7 @@ game review for your own Lichess and chess.com games.
 | **Train** | `/train` | Theme training (forks, pins, mates…) and a spaced-repetition queue of puzzles you missed |
 | **Daily** | `/daily` | One puzzle per UTC day, identical for everyone. Daily streak, countdown to the next puzzle, month calendar; past days can be played late (shown on the calendar, not counted for the streak). Spoiler-free share text |
 | **Rush** | `/rush` | 3 min / 5 min / Survival. Difficulty ramps up, combos build, three strikes and you're out. Personal bests per mode, game-over stats and an untimed review of every puzzle in the run |
-| **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign |
+| **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign. Or challenge a friend by code (casual, unrated; invitations arrive on any page) |
 | **Custom** | `/custom` | Board editor → record the solution → optional engine check → add title, themes and difficulty → save locally. Play, edit, share as a self-contained link (`/custom/s#…`), export/import JSON |
 | **Game Review** | `/analysis` | Paste a Lichess or chess.com link or a PGN, or import recent games by username. Stockfish runs in your browser (plus Lichess cloud evals for known positions): accuracy per side, classified moves, eval graph, key moments, free exploration, and "practise your mistakes", which turns your errors into puzzles |
 | **Stats** | `/stats` | Rating chart, theme strengths, activity heatmap and achievements |
@@ -92,6 +92,8 @@ Knightfall talks only to public endpoints and never sends credentials:
 - A chess.com game link is resolved by Knightfall's own server, which looks the game up on chess.com
   (cached, rate-limited, numeric game IDs only).
 - Battles connect to Knightfall's own WebSocket server.
+- While the app is open it keeps a connection to Knightfall's battle server (for friend challenges and Puzzle Battle).
+  The connection shares your display name and battle rating with that server, plus a random friend code and token.
 
 ## Credits
 

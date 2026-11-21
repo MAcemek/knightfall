@@ -1,10 +1,14 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BATTLE_DURATION_MS, BATTLE_MAX_STRIKES } from '@knightfall/core';
+import { BATTLE_DURATION_MS, BATTLE_MAX_STRIKES, formatCode, normalizeCode } from '@knightfall/core';
 import { db, type BattleRecord } from '../../shared/db.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
+import { serverNow, useConnection } from '../../shared/battle/connection.ts';
+import { codeProblem, formatCodeInput, MOVED_TEXT, outgoingMessage } from '../../shared/battle/challengeLogic.ts';
+import { cancelChallenge, dismissChallengeResult, sendChallenge, useChallenges } from '../../shared/battle/store.ts';
 import type { BattleApi } from './useBattle.ts';
 import { formatClock, isInteractiveTarget, isTypingTarget, timeAgo, useNow } from './util.ts';
 
@@ -72,6 +76,8 @@ export function Lobby({ api }: { api: BattleApi }) {
           {searching ? <Searching api={api} /> : <Hero api={api} rating={profile?.battleRating} record={record} />}
         </Panel>
 
+        {!searching && <FriendCard />}
+
         <Panel>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">How it works</h2>
           <ul className="grid gap-3 text-sm text-ink-300 sm:grid-cols-3">
@@ -116,6 +122,137 @@ export function Lobby({ api }: { api: BattleApi }) {
         )}
       </Panel>
     </div>
+  );
+}
+
+/** "Play a friend": my code (copy / share), a box for a friend's code, and the state of a challenge in flight. */
+function FriendCard() {
+  const connection = useConnection();
+  const { outgoing } = useChallenges();
+  const [params] = useSearchParams();
+  // `/battle?challenge=CODE` prefills the box; the player still presses Challenge.
+  const [input, setInput] = useState(() => formatCodeInput(params.get('challenge') ?? ''));
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  useNow(250, outgoing.kind === 'waiting');
+
+  const code = connection.code;
+  const problem = codeProblem(input);
+  const typed = normalizeCode(input).length;
+  const message = outgoingMessage(outgoing, serverNow());
+  const link = code ? `${location.origin}/battle?challenge=${code}` : '';
+
+  const flash = (kind: 'code' | 'link') => {
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1600);
+  };
+  const copy = async (text: string, kind: 'code' | 'link') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      flash(kind);
+    } catch {
+      /* clipboard blocked: nothing to confirm */
+    }
+  };
+  const share = async () => {
+    if (!code) return;
+    if (!navigator.share) return void copy(link, 'link');
+    try {
+      await navigator.share({ title: 'Knightfall Puzzle Battle', text: `Challenge me to a Puzzle Battle on Knightfall! My code: ${formatCode(code)}`, url: link });
+    } catch (e) {
+      if ((e as DOMException)?.name !== 'AbortError') void copy(link, 'link');
+    }
+  };
+
+  const codeText = code
+    ? formatCode(code)
+    : connection.status === 'outdated'
+      ? 'Not available yet'
+      : connection.status === 'offline'
+        ? 'Server offline'
+        : 'Connecting…';
+
+  return (
+    <Panel>
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">Play a friend</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <div className="text-xs font-semibold text-ink-400">Your code</div>
+          <div className={`mt-1 font-mono font-black ${code ? 'text-3xl tracking-widest text-ink-100' : 'text-lg text-ink-400'}`} aria-live="polite" data-testid="my-code">
+            {codeText}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={!code} onClick={() => code && void copy(formatCode(code), 'code')}>
+              {copied === 'code' ? Icons.check('h-4 w-4') : null} {copied === 'code' ? 'Copied' : 'Copy'}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!code} onClick={() => void share()}>
+              {copied === 'link' ? Icons.check('h-4 w-4') : Icons.share('h-4 w-4')} {copied === 'link' ? 'Link copied' : 'Share'}
+            </Button>
+          </div>
+          {connection.status === 'outdated' && <p className="mt-2 text-xs text-ink-400">Battle server is updating, try again in a minute.</p>}
+          {connection.moved && (
+            <p className="mt-2 text-xs font-semibold text-ember-400" role="status" data-testid="moved-note">
+              {MOVED_TEXT}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="friend-code" className="text-xs font-semibold text-ink-400">
+            Enter a friend's code
+          </label>
+          {outgoing.kind === 'waiting' || outgoing.kind === 'sending' ? (
+            <div className="mt-1 flex flex-col gap-2" aria-live="polite">
+              <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
+                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ember-400 border-t-transparent" aria-hidden />
+                <span className="min-w-0 break-words">{message?.text}</span>
+              </div>
+              <Button size="sm" variant="secondary" className="self-start" onClick={cancelChallenge}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <form
+              className="mt-1 flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!problem && !connection.moved) sendChallenge(input);
+              }}
+            >
+              <div className="flex gap-2">
+                <input
+                  id="friend-code"
+                  value={input}
+                  onChange={(e) => {
+                    setInput(formatCodeInput(e.target.value));
+                    dismissChallengeResult();
+                  }}
+                  placeholder="ABC-123"
+                  maxLength={7}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-invalid={typed === 6 && !!problem}
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 font-mono text-lg font-bold uppercase tracking-widest text-ink-100 placeholder:text-ink-500 focus-visible:outline-2 focus-visible:outline-ember-400"
+                />
+                <Button type="submit" variant="primary" disabled={!!problem || connection.moved}>
+                  Challenge
+                </Button>
+              </div>
+              {typed === 6 && problem && <p className="text-xs text-bad-400">{problem}</p>}
+            </form>
+          )}
+        </div>
+      </div>
+      {outgoing.kind === 'result' && message && (
+        <div className="mt-3 flex animate-pop items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
+          <span>{message.text}</span>
+          <button className="flex h-8 w-8 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissChallengeResult} aria-label="Dismiss">
+            {Icons.x('h-4 w-4')}
+          </button>
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -194,6 +331,7 @@ function RecentRow({ b }: { b: BattleRecord }) {
         </div>
         <div className="text-xs text-ink-400">
           {timeAgo(b.at)}
+          {b.friendly && ' · Casual'}
           {b.reason === 'opponent-left' && ' · opponent left'}
           {b.reason === 'resigned' && ' · resigned'}
         </div>
@@ -203,7 +341,7 @@ function RecentRow({ b }: { b: BattleRecord }) {
           {b.you.solved}–{b.opponent.solved}
         </div>
         <div className={`font-mono text-xs font-semibold ${delta > 0 ? 'text-good-400' : delta < 0 ? 'text-bad-400' : 'text-ink-400'}`}>
-          {delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0'}
+          {b.friendly ? 'Casual' : delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0'}
         </div>
       </div>
     </li>

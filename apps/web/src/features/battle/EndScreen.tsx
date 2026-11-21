@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { burstAt, confetti, FloatingDelta, PALETTES, sfx, TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
-import type { BattleState, EndInfo, MatchInfo } from './battleState.ts';
+import { SERIES_NEXT_GAME_MS, seriesAfter, seriesText, type BattleState, type EndInfo, type MatchInfo } from './battleState.ts';
 import { Kbd } from './Lobby.tsx';
 import { PuzzleChips } from './PuzzleChips.tsx';
-import { isTypingTarget } from './util.ts';
+import { isTypingTarget, useNow } from './util.ts';
 
 const TITLES: Record<EndInfo['result'], { title: string; cls: string; glow: string }> = {
   win: { title: 'Victory!', cls: 'text-good-400', glow: 'from-good-500/25' },
@@ -44,6 +44,12 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
   const [deltaTrigger, setDeltaTrigger] = useState<number | null>(null);
   const titleRef = useRef<HTMLDivElement>(null);
 
+  // Best of 3: the score after this game, and a countdown while the server lines up the next one.
+  const series = match.series && match.series.length === 3 ? seriesAfter(match.series, end.result, end.reason) : null;
+  const running = series !== null && !series.over;
+  const now = useNow(250, running);
+  const nextIn = Math.ceil((end.endedAt + SERIES_NEXT_GAME_MS - now) / 1000);
+
   // Effects once per result.
   useEffect(() => {
     if (end.result === 'win') {
@@ -67,13 +73,14 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (k === 'r') onRematch();
+      if (k === 'escape') onLobby();
+      else if (running) return;
+      else if (k === 'r') onRematch();
       else if (k === 'n') onNewOpponent();
-      else if (k === 'escape') onLobby();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onRematch, onNewOpponent, onLobby]);
+  }, [onRematch, onNewOpponent, onLobby, running]);
 
   const rematchLabel =
     state.rematch === 'requested' ? 'Waiting for opponent…' : state.rematch === 'offered' ? 'Opponent wants a rematch!' : state.rematch === 'unavailable' ? 'Rematch unavailable' : 'Rematch';
@@ -93,6 +100,11 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
             {t.title}
           </motion.div>
           <div className="mt-1 text-sm font-semibold text-ink-400">{reasonText(end)}</div>
+          {series && (
+            <div className="mt-2 rounded-xl bg-ink-800/70 px-4 py-2 text-sm font-bold text-ink-100" role="status" data-testid="series-line">
+              {seriesText(series, end.reason, nextIn)}
+            </div>
+          )}
 
           {/* Scoreline */}
           <div className="mt-6 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
@@ -123,34 +135,44 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
           )}
 
           {/* Actions */}
-          <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
-            <Button
-              variant={state.rematch === 'offered' ? 'good' : 'primary'}
-              onClick={onRematch}
-              disabled={state.rematch === 'requested' || state.rematch === 'unavailable'}
-              className={state.rematch === 'offered' ? 'animate-pulse' : ''}
-            >
-              {state.rematch === 'requested' ? <Spinner /> : Icons.retry('h-4 w-4')}
-              {rematchLabel}
-            </Button>
-            <Button variant="secondary" onClick={onNewOpponent}>
-              {Icons.swords('h-4 w-4')} New opponent
-            </Button>
-            <Button variant="ghost" onClick={onLobby}>
-              Back to lobby
-            </Button>
-          </div>
-          <div className="mt-3 hidden gap-3 text-xs text-ink-500 fine:flex">
-            <span>
-              <Kbd>R</Kbd> rematch
-            </span>
-            <span>
-              <Kbd>N</Kbd> new opponent
-            </span>
-            <span>
-              <Kbd>Esc</Kbd> lobby
-            </span>
-          </div>
+          {running ? (
+            <div className="mt-6 grid w-full gap-2">
+              <Button variant="ghost" onClick={onLobby}>
+                Leave series
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
+                <Button
+                  variant={state.rematch === 'offered' ? 'good' : 'primary'}
+                  onClick={onRematch}
+                  disabled={state.rematch === 'requested' || state.rematch === 'unavailable'}
+                  className={state.rematch === 'offered' ? 'animate-pulse' : ''}
+                >
+                  {state.rematch === 'requested' ? <Spinner /> : Icons.retry('h-4 w-4')}
+                  {rematchLabel}
+                </Button>
+                <Button variant="secondary" onClick={onNewOpponent}>
+                  {Icons.swords('h-4 w-4')} New opponent
+                </Button>
+                <Button variant="ghost" onClick={onLobby}>
+                  Back to lobby
+                </Button>
+              </div>
+              <div className="mt-3 hidden gap-3 text-xs text-ink-500 fine:flex">
+                <span>
+                  <Kbd>R</Kbd> rematch
+                </span>
+                <span>
+                  <Kbd>N</Kbd> new opponent
+                </span>
+                <span>
+                  <Kbd>Esc</Kbd> lobby
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="border-t border-ink-700/60 px-5 py-4 sm:px-8">

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { REMATCH_WINDOW_MS, type BattleState } from './battleState.ts';
 import { serverNow, wakeBattleServer } from '../../shared/battle/connection.ts';
+import { initClubStore, leaveClub } from '../../shared/battle/clubStore.ts';
 import {
   backToLobby, cancelSearch, claim, clearError, expireRematch, findOpponent, goPlaying, initBattleStore, leaveBattlePage, rematch,
   reportResult, resign, useBattleState,
@@ -36,6 +37,7 @@ export function useBattle(): BattleApi {
   // Opening the Battle page makes sure the store is listening and starts waking a sleeping hosted server.
   useEffect(() => {
     initBattleStore();
+    initClubStore();
     wakeBattleServer();
   }, []);
 
@@ -62,7 +64,10 @@ export function useBattle(): BattleApi {
     return () => {
       mounted--;
       setTimeout(() => {
-        if (mounted === 0) leaveBattlePage();
+        if (mounted === 0) {
+          leaveBattlePage();
+          leaveClub();
+        }
       }, 0);
     };
   }, []);

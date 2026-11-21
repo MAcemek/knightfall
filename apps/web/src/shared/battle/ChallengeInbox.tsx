@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { sfx } from '../fx/index.ts';
 import { Button, Icons, Pill } from '../ui.tsx';
 import { useTimedPlay } from '../timedPlay.ts';
+import { describeSettings } from '../../features/battle/friendSettings.ts';
 import { useNow } from '../../features/battle/util.ts';
 import { serverNow } from './connection.ts';
 import { formatCountdown, inviteDisplay, secondsLeft, topInvite } from './challengeLogic.ts';
@@ -46,6 +47,7 @@ export function ChallengeInbox() {
   if (!invite) return null;
   const left = secondsLeft(invite.expiresAt, serverNow());
   const more = incoming.length - 1;
+  const options = describeSettings(invite.settings, invite.series);
 
   const wrap =
     'pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-[90] flex justify-center pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:px-0';
@@ -86,6 +88,7 @@ export function ChallengeInbox() {
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-200">
               <Pill className="bg-sky-400/20 text-sky-400">Casual</Pill>
+              {options && <span className="font-semibold text-ink-100">{options}</span>}
               <span className="font-mono">{invite.from.rating}</span>
               <span className="font-mono font-bold text-ember-400" aria-label={`${left} seconds left`}>
                 {formatCountdown(left)}

@@ -10,7 +10,7 @@ import { Icons, Panel } from '../../shared/ui.tsx';
 
 const MODES = [
   { to: '/puzzles', title: 'Puzzles', blurb: 'Rated tactics matched to your level. Build a streak.', icon: Icons.puzzle, tint: 'from-ember-500/25' },
-  { to: '/train', title: 'Train', blurb: 'Drill a theme or review the puzzles you missed. Unrated.', icon: Icons.target, tint: 'from-ember-300/20' },
+  { to: '/train', title: 'Train', blurb: 'Drill a theme, your own game mistakes, openings or endgames. Unrated.', icon: Icons.target, tint: 'from-ember-300/20' },
   { to: '/daily', title: 'Daily Puzzle', blurb: 'One hand-picked puzzle a day, same for everyone.', icon: Icons.calendar, tint: 'from-sky-400/25' },
   { to: '/rush', title: 'Puzzle Rush', blurb: 'Solve as many as you can. Three strikes and you are out.', icon: Icons.bolt, tint: 'from-good-500/25' },
   { to: '/battle', title: 'Puzzle Battle', blurb: 'Race a live opponent through the same puzzles.', icon: Icons.swords, tint: 'from-bad-500/25' },

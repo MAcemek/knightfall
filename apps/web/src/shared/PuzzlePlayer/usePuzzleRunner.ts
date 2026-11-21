@@ -1,9 +1,10 @@
 import { Chess, type Move } from 'chess.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { judgeMove, isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from '@knightfall/core';
+import { isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from '@knightfall/core';
 import type { BoardArrow, BoardMark } from '../Board/index.ts';
 import { sfx } from '../fx/sound.ts';
 import { getSettings } from '../settings.ts';
+import { altNotice, judgePuzzleMove } from './altLogic.ts';
 import { stepAbility as computeStepAbility, stepTarget, returnsToLive, boardInteractive } from './stepLogic.ts';
 
 export type RunnerStatus = 'idle' | 'intro' | 'player' | 'opponent' | 'solved' | 'failed' | 'solution';
@@ -55,6 +56,8 @@ export interface PuzzleRunner {
   retrying: boolean;
   /** The most recent solver move was wrong (cleared by the next correct move). */
   lastWrong: boolean;
+  /** Set when the solver played an equally good alternative (Puzzle.alts), e.g. "Also good. The engine's line continues with Nf3". */
+  notice: string | null;
   /** Queued premove (from, to), played as soon as the opponent's move lands. */
   premove: [string, string] | null;
   /** Solver moves found / total solver moves. */
@@ -142,6 +145,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const [mistakes, setMistakes] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [lastWrong, setLastWrong] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [premove, setPremoveState] = useState<[string, string] | null>(null);
   const [done, setDone] = useState(0);
   const [positionKey, setPositionKey] = useState(0);
@@ -213,8 +217,16 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     const ply = plyRef.current;
     const expected = p.moves[ply];
     const fenBefore = c.fen();
-    const verdict = judgeMove(fenBefore, expected, uci);
+    const judged = judgePuzzleMove(p, ply, fenBefore, uci);
     clearHints();
+    // An equally good alternative counts as correct: say so, then carry on with the engine's move.
+    const verdict = judged === 'alt' ? 'correct' : judged;
+    if (judged === 'alt') {
+      setNotice(altNotice(fenBefore, expected));
+      uci = expected;
+    } else {
+      setNotice(null);
+    }
 
     if (verdict === 'wrong') {
       mistakesRef.current++;
@@ -301,6 +313,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     setMistakes(0);
     setRetrying(false);
     setLastWrong(false);
+    setNotice(null);
     setMark(null);
     clearHints();
     clearPremove();
@@ -475,6 +488,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     mistakes,
     retrying,
     lastWrong,
+    notice,
     premove,
     progress: { done, total: puzzle ? playerMoveCount(puzzle) : 0 },
     positionKey,

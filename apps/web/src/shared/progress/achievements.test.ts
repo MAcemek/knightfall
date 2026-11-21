@@ -78,4 +78,8 @@ describe('buildSnapshot', () => {
     }));
     expect(s).toMatchObject({ rushBest: 21, rushBestCombo: 6, battleWins: 2, dailySolved: 2, dailyBestStreak: 2, bestStreak: 9, customCreated: 3 });
   });
+  it('does not count club race wins as battle wins', () => {
+    const s = buildSnapshot(input({ battles: [{ result: 'win', club: { place: 1, players: 4 } }, { result: 'win' }] }));
+    expect(s.battleWins).toBe(1);
+  });
 });

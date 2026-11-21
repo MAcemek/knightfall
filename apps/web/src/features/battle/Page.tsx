@@ -1,16 +1,20 @@
 import { useCallback, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { formatCode } from '@knightfall/core';
 import { Icons, PageHeader, Pill } from '../../shared/ui.tsx';
+import { useClub } from '../../shared/battle/clubStore.ts';
 import { useBattle } from './useBattle.ts';
 import { Lobby } from './Lobby.tsx';
 import { MatchIntro } from './MatchIntro.tsx';
 import { BattleGame } from './BattleGame.tsx';
 import { EndScreen } from './EndScreen.tsx';
+import { ClubRoom } from './ClubRoom.tsx';
 
 /** Puzzle Battle: real-time head-to-head puzzle race (falls back to a sparring bot when nobody is around). */
 export default function BattlePage() {
   const api = useBattle();
   const { state } = api;
+  const club = useClub().room;
   const match = state.match;
   const [introDoneFor, setIntroDoneFor] = useState<string | null>(null);
   const inMatch = state.phase === 'matched' || state.phase === 'playing';
@@ -18,8 +22,9 @@ export default function BattlePage() {
   const roomId = match?.roomId ?? null;
   const onIntroDone = useCallback(() => setIntroDoneFor(roomId), [roomId]);
 
-  const subtitle =
-    state.phase === 'playing'
+  const subtitle = club
+    ? `Club room ${formatCode(club.code)}`
+    : state.phase === 'playing'
       ? `vs ${match?.opponent.name ?? 'opponent'}`
       : state.phase === 'ended'
         ? 'Battle over'
@@ -40,7 +45,9 @@ export default function BattlePage() {
         }
       />
 
-      {match && inMatch ? (
+      {club ? (
+        <ClubRoom room={club} />
+      ) : match && inMatch ? (
         <BattleGame key={match.roomId} state={state} match={match} serverNow={api.serverNow} onResult={api.reportResult} onResign={api.resign} onClaim={api.claim} />
       ) : match && state.phase === 'ended' && state.end ? (
         <EndScreen state={state} match={match} onRematch={api.rematch} onNewOpponent={api.findOpponent} onLobby={api.backToLobby} />
@@ -50,7 +57,7 @@ export default function BattlePage() {
 
       <AnimatePresence>
         {showIntro && match && (
-          <MatchIntro key={match.roomId} me={match.me} opponent={match.opponent} startsAt={match.startsAt} serverNow={api.serverNow} onDone={onIntroDone} />
+          <MatchIntro key={match.roomId} me={match.me} opponent={match.opponent} startsAt={match.startsAt} serverNow={api.serverNow} onDone={onIntroDone} settings={match.settings} series={match.series} />
         )}
       </AnimatePresence>
     </>

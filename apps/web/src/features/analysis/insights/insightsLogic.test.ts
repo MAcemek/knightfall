@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REPORT_VERSION, type AnalysedMove, type GameReport, type MoveClass, type Motif } from '@knightfall/core';
 import {
-  accuracyAxis, accuracyGeometry, buildInsights, motifSummary, motifTheme, resolveSide, reviewHref, staleKeys, updateLine, weakestPhase,
+  accuracyAxis, accuracyGeometry, buildInsights, motifSummary, motifTheme, reviewHref, staleKeys, updateLine, weakestPhase,
   type InsightGameInfo, type InsightInput, type KnownUsers,
 } from './insightsLogic.ts';
 
@@ -51,17 +51,6 @@ function game(key: string, over: Partial<InsightGameInfo> = {}): InsightGameInfo
 }
 
 const input = (key: string, o: FakeOpts = {}, g: Partial<InsightGameInfo> = {}): InsightInput => ({ game: game(key, g), report: report(o) });
-
-describe('resolveSide', () => {
-  it('uses importedFor, then the remembered username of the source', () => {
-    const g = { source: 'lichess' as const, white: { name: 'Me' }, black: { name: 'Them' } };
-    expect(resolveSide({ ...g, importedFor: 'them' }, NO_USERS)).toBe('b');
-    expect(resolveSide(g, NO_USERS)).toBeNull();
-    expect(resolveSide(g, { lichessUser: 'ME', chesscomUser: '' })).toBe('w');
-    expect(resolveSide(g, { lichessUser: '', chesscomUser: 'me' })).toBeNull();
-    expect(resolveSide({ ...g, source: 'pgn' }, { lichessUser: 'me', chesscomUser: 'me' })).toBeNull();
-  });
-});
 
 describe('buildInsights: sides and accuracy', () => {
   it('averages the user side, split by colour, ordered by date; skips unknown sides and old versions', () => {

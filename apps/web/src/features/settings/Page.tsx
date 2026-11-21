@@ -128,6 +128,12 @@ export default function SettingsPage() {
           <h2 className="text-lg font-extrabold">Puzzles</h2>
           <Switch checked={s.autoAdvance} onChange={(v) => setSetting('autoAdvance', v)} label="Auto-advance" hint="Load the next rated puzzle automatically after a solve." />
           <Switch checked={s.premoves} onChange={(v) => setSetting('premoves', v)} label="Premoves" hint="Queue your next move while the opponent is moving." />
+          <Switch
+            checked={s.autoGamePuzzles}
+            onChange={(v) => setSetting('autoGamePuzzles', v)}
+            label="Add mistakes from my analysed games to Train"
+            hint="After a Game Review finishes, your blunders and misses become puzzles in Train, From my games."
+          />
         </Panel>
       </div>
 

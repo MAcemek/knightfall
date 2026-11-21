@@ -105,6 +105,12 @@ describe('totals / rush / battle', () => {
     expect(battleSummary([{ result: 'win', ratingAfter: 1216 }, { result: 'loss', ratingAfter: 1200 }, { result: 'draw', ratingAfter: 1201 }, { result: 'win', ratingAfter: 1230 }]))
       .toEqual({ played: 4, wins: 2, losses: 1, draws: 1, winRate: 0.5, peak: 1230 });
   });
+  it('battleSummary ignores club races', () => {
+    const club = { place: 1, players: 5 };
+    expect(battleSummary([{ result: 'win', ratingAfter: 1500, club }, { result: 'loss', ratingAfter: 1200 }]))
+      .toEqual({ played: 1, wins: 0, losses: 1, draws: 0, winRate: 0, peak: 1200 });
+    expect(battleSummary([{ result: 'win', ratingAfter: 1500, club }])).toEqual({ played: 0, wins: 0, losses: 0, draws: 0, winRate: null, peak: null });
+  });
 });
 
 describe('chartGeometry', () => {

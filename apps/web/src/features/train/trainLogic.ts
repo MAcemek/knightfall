@@ -1,3 +1,5 @@
+import type { ReviewOutcome } from '../../shared/progress/reviews.ts';
+import { formatInterval } from '../../shared/progress/srs.ts';
 import { isTrainableTheme } from '../../shared/themes.ts';
 
 /** Pure helpers for the Train pages (no React, no IndexedDB). */
@@ -65,4 +67,12 @@ export function tally(prev: SessionTally, solved: boolean): SessionTally {
 /** "83%" or "–" when nothing was attempted. */
 export function tallyAccuracy(t: SessionTally): string {
   return t.attempted ? `${Math.round((t.solved / t.attempted) * 100)}%` : '–';
+}
+
+/** The line shown under the prompt after a spaced-repetition result (Review mistakes, From my games); null when the puzzle was not queued. */
+export function reviewOutcomeLine(out: ReviewOutcome, solved: boolean, now: number): string | null {
+  if (out.graduated) return 'Mastered — removed from your queue';
+  if (!out.item) return null;
+  const wait = formatInterval(Math.max(60_000, out.item.due - now));
+  return solved ? `Next review in ${wait}` : `Back in ${wait}`;
 }

@@ -18,14 +18,7 @@ export function barLabel(score: EvalScore | undefined): string {
   return (Math.abs(score.cp) / 100).toFixed(1);
 }
 
-/** The side the user played, from the imported username; null when unknown. */
-export function userSide(game: { white: { name: string }; black: { name: string }; importedFor?: string }): 'w' | 'b' | null {
-  const me = game.importedFor?.trim().toLowerCase();
-  if (!me) return null;
-  const w = game.white.name.toLowerCase() === me;
-  const b = game.black.name.toLowerCase() === me;
-  return w === b ? null : w ? 'w' : 'b';
-}
+export { userSide } from '../../../shared/analysis/side.ts';
 
 /** Column and row (0 = top/left of the screen) of a square for the given board orientation. */
 export function squarePos(square: string, orientation: 'white' | 'black'): { col: number; row: number } {

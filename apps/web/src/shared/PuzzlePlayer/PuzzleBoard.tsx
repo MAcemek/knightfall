@@ -71,11 +71,11 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
       tone = 'text-ink-300';
       break;
     case 'opponent':
-      text = 'Correct! Keep going…';
+      text = runner.notice ?? 'Correct! Keep going…';
       tone = 'text-good-400';
       break;
     case 'solved':
-      text = 'Solved!';
+      text = runner.notice ?? 'Solved!';
       tone = 'text-good-400';
       break;
     case 'failed':
@@ -91,7 +91,7 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
         text = 'Not quite — try again';
         tone = 'text-ember-400';
       } else {
-        text = runner.progress.done > 0 ? 'Best move! Keep going' : `${side} to move`;
+        text = runner.notice ?? (runner.progress.done > 0 ? 'Best move! Keep going' : `${side} to move`);
         tone = runner.progress.done > 0 ? 'text-good-400' : 'text-ink-100';
       }
       break;

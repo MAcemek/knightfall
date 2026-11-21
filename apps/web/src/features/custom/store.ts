@@ -1,3 +1,4 @@
+import { isGamePuzzleId } from '../../shared/analysis/gamePuzzleLogic.ts';
 import { db, type CustomPuzzle } from '../../shared/db.ts';
 import { getPlayerName } from '../../shared/profile.ts';
 import { EXPORT_FORMAT, contentKey, newCustomId, parseImport, type PuzzleDraft } from './logic.ts';
@@ -67,7 +68,7 @@ export async function recordPlay(p: CustomPuzzle, r: { solved: boolean; hintsUse
 
 /** Download every custom puzzle as a JSON file. Returns how many were exported. */
 export async function exportAll(): Promise<number> {
-  const puzzles = await db.customPuzzles.orderBy('createdAt').toArray();
+  const puzzles = await db.customPuzzles.orderBy('createdAt').filter((p) => !isGamePuzzleId(p.id)).toArray();
   const body = {
     format: EXPORT_FORMAT,
     version: 1,

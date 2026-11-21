@@ -16,7 +16,8 @@
     "puzzles": "node scripts/build-puzzles.mjs",
     "engine": "node scripts/fetch-engine.mjs",
     "engine:deep": "node scripts/fetch-engine.mjs --deep",
-    "openings": "node scripts/build-openings.mjs"
+    "openings": "node scripts/build-openings.mjs",
+    "openings:lines": "node scripts/build-opening-lines.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

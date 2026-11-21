@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { isGamePuzzleId } from '../../../shared/analysis/gamePuzzleLogic.ts';
 import { db, type CustomPuzzle } from '../../../shared/db.ts';
 import { burstAt, PALETTES, sfx } from '../../../shared/fx/index.ts';
 import { pieceUrl } from '../../../shared/Board/index.ts';
@@ -20,7 +21,8 @@ export function PuzzleList() {
   const location = useLocation();
   const toast = useToast();
   const { share, modal: shareModal } = useShare();
-  const puzzles = useLiveQuery(() => db.customPuzzles.orderBy('updatedAt').reverse().toArray(), []);
+  // Puzzles made from your own games live in Train -> From my games, not here.
+  const puzzles = useLiveQuery(() => db.customPuzzles.orderBy('updatedAt').reverse().filter((p) => !isGamePuzzleId(p.id)).toArray(), []);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [limit, setLimit] = useState(PAGE);

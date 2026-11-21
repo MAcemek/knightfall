@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { battleReducer, initialBattleState, ratingAfterBattle, tugShare, type BattleState, type EndInfo } from './battleState.ts';
+import { battleReducer, initialBattleState, introTagline, ratingAfterBattle, resignText, seriesAfter, seriesText, tugShare, type BattleState, type EndInfo } from './battleState.ts';
 
 const me = { name: 'Me', rating: 1200 };
 const run = (s: BattleState, ...actions: Parameters<typeof battleReducer>[1][]) => actions.reduce(battleReducer, s);
@@ -85,5 +85,52 @@ describe('battleReducer', () => {
     expect(tugShare(0, 0)).toBe(0.5);
     expect(tugShare(5, 2)).toBeGreaterThan(0.5);
     expect(tugShare(2, 5)).toBeLessThan(0.5);
+  });
+});
+
+describe('matched extras', () => {
+  it('carries opponentCode, settings and series into the match', () => {
+    const settings = { durationMs: 60_000 as const, level: 'harder' as const };
+    const series = { length: 3 as const, game: 1, me: 0, opp: 0 };
+    const s = battleReducer(initialBattleState, {
+      type: 'server', me, msg: { type: 'matched', roomId: 'r', seed: 1, opponent: { name: 'Op', rating: 1 }, friendly: true, opponentCode: 'ABCDEF', settings, series },
+    });
+    expect(s.match).toMatchObject({ friendly: true, opponentCode: 'ABCDEF', settings, series });
+  });
+  it('leaves them out for a plain match', () => {
+    expect(matched().match).not.toHaveProperty('settings');
+  });
+});
+
+describe('series', () => {
+  const s = (game: number, me: number, opp: number) => ({ length: 3 as const, game, me, opp });
+  it('scores wins and draws and settles at 2 points or 3 games', () => {
+    expect(seriesAfter(s(1, 0, 0), 'win', 'time')).toMatchObject({ me: 1, opp: 0, over: false });
+    expect(seriesAfter(s(2, 1, 0), 'win', 'time')).toMatchObject({ me: 2, over: true });
+    expect(seriesAfter(s(2, 0.5, 1), 'loss', 'time')).toMatchObject({ opp: 2, over: true });
+    expect(seriesAfter(s(3, 1, 1), 'draw', 'time')).toMatchObject({ me: 1.5, opp: 1.5, over: true });
+    expect(seriesAfter(s(1, 0, 0), 'win', 'opponent-left').over).toBe(true);
+  });
+  it('words the state', () => {
+    expect(seriesText({ ...s(1, 1, 0), over: false }, 'time', 5)).toBe('Game 1 of 3 · You lead 1–0 · next game in 5…');
+    expect(seriesText({ ...s(2, 0, 1), over: false }, 'time', 0)).toBe('Game 2 of 3 · Opponent leads 0–1 · next game in 0…');
+    expect(seriesText({ ...s(3, 2, 1), over: true }, 'time', 0)).toBe('You won the series 2–1');
+    expect(seriesText({ ...s(3, 1, 2), over: true }, 'time', 0)).toBe('You lost the series 1–2');
+    expect(seriesText({ ...s(1, 1, 0), over: true }, 'opponent-left', 0)).toBe('Your opponent left · series ended 1–0');
+  });
+});
+
+describe('introTagline and resignText', () => {
+  const st = { durationMs: 60_000 } as Parameters<typeof introTagline>[0];
+  it('words the duration from settings and adds the game number', () => {
+    expect(introTagline()).toBe('Same puzzles. Three minutes. Three strikes.');
+    expect(introTagline({ ...st!, durationMs: 60_000 })).toBe('Same puzzles. One minute. Three strikes.');
+    expect(introTagline({ ...st!, durationMs: 300_000 })).toBe('Same puzzles. Five minutes. Three strikes.');
+    expect(introTagline({ ...st!, durationMs: 180_000 }, { game: 2, length: 3, me: 1, opp: 0 } as never)).toBe('Same puzzles. Three minutes. Three strikes. Game 2 of 3.');
+  });
+  it('warns that resigning ends a series', () => {
+    expect(resignText(true, { game: 1, length: 3, me: 0, opp: 0 } as never)).toContain('ends the whole series');
+    expect(resignText(true)).toContain('casual battle');
+    expect(resignText(false)).toContain('rating drops');
   });
 });

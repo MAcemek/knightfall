@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { liveQuery } from 'dexie';
-import { decode, encode, FRIEND_MOVED_MESSAGE, type ClientMessage, type PlayerInfo, type ServerMessage } from '@knightfall/core';
+import { CLIENT_CAPS, decode, encode, FRIEND_MOVED_MESSAGE, type ClientMessage, type PlayerInfo, type ServerMessage } from '@knightfall/core';
 import { defaults, getKV, KEYS, setKV } from '../db.ts';
 import { getPlayerName } from '../profile.ts';
 import {
@@ -56,17 +56,19 @@ export interface ConnSnapshot {
   socketOpen: boolean;
   /** Another tab of this browser took over the friend code: friend challenges only work there. */
   moved: boolean;
+  /** Features the server announced in `welcome`; empty until then (and for an older server that sends none). */
+  serverCaps: string[];
 }
 
 export type ConnEvent = { type: 'message'; msg: ServerMessage } | { type: 'open' } | { type: 'closed' };
 
-let snap: ConnSnapshot = { status: 'connecting', code: null, socketOpen: false, moved: false };
+let snap: ConnSnapshot = { status: 'connecting', code: null, socketOpen: false, moved: false, serverCaps: [] };
 const snapListeners = new Set<() => void>();
 const eventListeners = new Set<(e: ConnEvent) => void>();
 
 function setSnap(patch: Partial<ConnSnapshot>): void {
   const next = { ...snap, ...patch };
-  if (next.status === snap.status && next.code === snap.code && next.socketOpen === snap.socketOpen && next.moved === snap.moved) return;
+  if (next.status === snap.status && next.code === snap.code && next.socketOpen === snap.socketOpen && next.moved === snap.moved && next.serverCaps === snap.serverCaps) return;
   snap = next;
   snapListeners.forEach((fn) => fn());
 }
@@ -133,7 +135,7 @@ function sendHello(): void {
   void identityReady.then(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN || !helloChanged(lastHello, me)) return;
     lastHello = { ...me };
-    send({ type: 'hello', player: lastHello, ...(stored.code && stored.token ? { code: stored.code, token: stored.token } : {}) });
+    send({ type: 'hello', player: lastHello, caps: [...CLIENT_CAPS], ...(stored.code && stored.token ? { code: stored.code, token: stored.token } : {}) });
   });
 }
 
@@ -175,7 +177,7 @@ function connect(): void {
     backoff = BACKOFF_MIN_MS;
     bestRtt = Infinity;
     lastHello = null;
-    setSnap({ socketOpen: true, status: 'connecting', moved: false });
+    setSnap({ socketOpen: true, status: 'connecting', moved: false, serverCaps: [] });
     ping();
     pinger = setInterval(ping, PING_EVERY_MS);
     sendHello();
@@ -201,7 +203,7 @@ function connect(): void {
     if (ws !== sock) return;
     ws = null;
     if (opened) {
-      setSnap({ socketOpen: false, status: 'connecting' });
+      setSnap({ socketOpen: false, status: 'connecting', serverCaps: [] });
       outageStart = Date.now();
       backoff = BACKOFF_MIN_MS;
       emit({ type: 'closed' });
@@ -214,7 +216,7 @@ function connect(): void {
 
 function failed(): void {
   ws = null;
-  setSnap({ socketOpen: false, status: statusAfterFailure(WAKE_WINDOW_MS, outageStart, Date.now()) });
+  setSnap({ socketOpen: false, serverCaps: [], status: statusAfterFailure(WAKE_WINDOW_MS, outageStart, Date.now()) });
   wakeBattleServer();
   scheduleRetry();
 }
@@ -233,7 +235,7 @@ function onMessage(msg: ServerMessage): void {
     case 'welcome':
       stored = { code: msg.code, token: msg.token };
       void Promise.all([setKV(KEYS.battleCode, msg.code), setKV(KEYS.battleToken, msg.token)]).catch(() => {});
-      setSnap({ status: 'online', code: msg.code, moved: false });
+      setSnap({ status: 'online', code: msg.code, moved: false, serverCaps: Array.isArray(msg.caps) ? msg.caps.filter((c): c is string => typeof c === 'string') : [] });
       return;
     case 'error':
       if (msg.message === FRIEND_MOVED_MESSAGE) setSnap({ moved: true });

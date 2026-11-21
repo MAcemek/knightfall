@@ -85,17 +85,20 @@ export const SummaryView = memo(function SummaryView(props: {
   geom: GraphGeometry;
   dots: GraphDot[];
   mistakeCount: number;
+  /** False when the user's side is unknown: Practise first asks "Which side were you?". */
+  sideKnown: boolean;
   practiseBusy: boolean;
   staleEngine: boolean;
   onStart: () => void;
   onSeek: (index: number) => void;
   /** Open the review at `side`'s first move of class `cls`. */
   onOpenClass: (side: Side, cls: MoveClass) => void;
-  onPractise: () => void;
+  onPractise: (side?: Side) => void;
   onReanalyse: () => void;
 }) {
-  const { report, game, mySide, geom, dots, mistakeCount, practiseBusy, staleEngine } = props;
+  const { report, game, mySide, geom, dots, mistakeCount, sideKnown, practiseBusy, staleEngine } = props;
   const [open, setOpen] = useState(true);
+  const [asking, setAsking] = useState(false);
   const instant = motionOff();
 
   const rows = REPORT_TABLE_CLASSES.map((c) => ({ c, w: report.counts.white[c], b: report.counts.black[c] }));
@@ -189,9 +192,28 @@ export const SummaryView = memo(function SummaryView(props: {
         <Button variant="good" size="lg" className="w-full text-lg" onClick={props.onStart}>
           Start Review
         </Button>
-        <Button variant="secondary" className="w-full" disabled={mistakeCount === 0 || practiseBusy} onClick={props.onPractise}>
-          Practise {mistakeCount} mistake{mistakeCount === 1 ? '' : 's'}
-        </Button>
+        {sideKnown || !asking ? (
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={(sideKnown && mistakeCount === 0) || practiseBusy}
+            onClick={() => (sideKnown ? props.onPractise() : setAsking(true))}
+          >
+            {sideKnown ? `Practise ${mistakeCount} mistake${mistakeCount === 1 ? '' : 's'}` : 'Practise my mistakes'}
+          </Button>
+        ) : (
+          <div className="space-y-2" role="group" aria-label="Which side were you?">
+            <p className="text-center text-sm font-semibold text-ink-300">Which side were you?</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" disabled={practiseBusy} onClick={() => props.onPractise('w')}>
+                White
+              </Button>
+              <Button variant="secondary" disabled={practiseBusy} onClick={() => props.onPractise('b')}>
+                Black
+              </Button>
+            </div>
+          </div>
+        )}
         <Link to="/train/review" className="block text-center text-xs font-semibold text-ink-400 underline hover:text-ink-200">
           Open Review mistakes
         </Link>

@@ -194,7 +194,11 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
 
       <Modal open={confirmResign} onClose={() => setConfirmResign(false)}>
         <h2 className="text-xl font-extrabold">Resign this battle?</h2>
-        <p className="mt-2 text-sm text-ink-300">Your opponent takes the win and your battle rating drops.</p>
+        <p className="mt-2 text-sm text-ink-300">
+          {match.friendly
+            ? 'Your opponent takes the win. This is a casual battle, so your battle rating stays the same.'
+            : 'Your opponent takes the win and your battle rating drops.'}
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setConfirmResign(false)}>
             Keep playing

@@ -6,6 +6,7 @@ import { Button, GameLayout, Icons, Panel, Pill } from '../../../shared/ui.tsx';
 import { Kbd, ThemeTag, useHotkeys } from '../bits.tsx';
 import { displayTitle } from '../logic.ts';
 import { ControlDock } from '../../puzzles/components/Controls.tsx';
+import { SolutionStepper } from '../../puzzles/components/SolutionStepper.tsx';
 import { ratingTier } from '../editor/DetailsStep.tsx';
 
 export interface CustomPlayerProps {
@@ -78,6 +79,8 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
     h: runner.hint,
     r: () => (finished ? again() : runner.retry()),
     s: runner.showSolution,
+    ArrowLeft: () => void runner.stepBack(),
+    ArrowRight: () => void runner.stepForward(),
     n: () => (finished && onNext ? onNext() : finished ? again() : undefined),
   });
 
@@ -134,6 +137,9 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
             <div className="space-y-2 rounded-xl bg-ink-900 p-3">
               <PuzzlePrompt runner={runner} className="max-lg:hidden" />
               <ProgressDots runner={runner} />
+              <div className="max-lg:hidden">
+                <SolutionStepper runner={runner} />
+              </div>
             </div>
 
             {result && (

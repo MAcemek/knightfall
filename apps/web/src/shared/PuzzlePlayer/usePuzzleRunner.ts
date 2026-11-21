@@ -4,6 +4,7 @@ import { judgeMove, isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from 
 import type { BoardArrow, BoardMark } from '../Board/index.ts';
 import { sfx } from '../fx/sound.ts';
 import { getSettings } from '../settings.ts';
+import { stepAbility as computeStepAbility, stepTarget, returnsToLive, boardInteractive } from './stepLogic.ts';
 
 export type RunnerStatus = 'idle' | 'intro' | 'player' | 'opponent' | 'solved' | 'failed' | 'solution';
 
@@ -63,19 +64,27 @@ export interface PuzzleRunner {
   /** Bumps every time a puzzle is solved. Pass to <Board sweepKey>. */
   solvedKey: number;
   /**
-   * Set while the user steps through the finished line with stepBack/stepForward:
-   * the board shows the position after `index` of `total` plies (0 = starting position). Null otherwise.
+   * Set while the user steps through the line with stepBack/stepForward: the board shows the position
+   * after `index` of `total` plies (0 = starting position). Null otherwise. While the puzzle is still in
+   * progress `total` is the number of plies played so far (Forward ends the view at that live position).
    */
   review: { index: number; total: number } | null;
+  /** The board accepts solving moves (solver to move and not viewing an earlier position). */
+  interactive: boolean;
+  /** Back/Forward are available in this phase (in progress, solved, or solution). */
+  steppable: boolean;
+  canStepBack: boolean;
+  canStepForward: boolean;
   playMove: (uci: string) => void;
   setPremove: (uci: string | null) => void;
   hint: () => void;
   retry: () => void;
   showSolution: () => void;
   /**
-   * Step one ply back/forward through the full line. Only once the puzzle is over (status 'solved' or
-   * 'solution'); board-only, nothing is reported or rated. Stops a running solution playback.
-   * Returns false when stepping is not available or the end of the line is reached.
+   * Step one ply back/forward. Available on the solver's turn (back to the position before the opponent's
+   * setup move; forward returns to the live position) and once the puzzle is over (the full line).
+   * Board-only: nothing is reported, rated or counted as a hint/miss. Stops a running solution playback.
+   * Returns false when stepping is not available or the end of the range is reached.
    */
   stepBack: () => boolean;
   stepForward: () => boolean;
@@ -199,6 +208,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     const p = puzzleRef.current;
     const c = chessRef.current;
     if (!p || !c || statusRef.current !== 'player') return;
+    // Viewing an earlier position: the board is not interactive, so a stray call is ignored.
+    if (viewRef.current !== null) return;
     const ply = plyRef.current;
     const expected = p.moves[ply];
     const fenBefore = c.fen();
@@ -333,6 +344,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const hint = useCallback(() => {
     const p = puzzleRef.current;
     if (!p || statusRef.current !== 'player') return;
+    exitView(); // a hint refers to the live position
     const expected = p.moves[plyRef.current];
     const from = expected.slice(0, 2);
     const to = expected.slice(2, 4);
@@ -370,6 +382,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     if (!p || s === 'solution' || s === 'solved') return;
     clearTimers();
     clearPremove();
+    viewRef.current = null;
+    setReview(null);
     report(false);
     setStatus('solution');
     clearHints();
@@ -391,14 +405,29 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Show the line after `v` plies. `dir` only picks the sound. */
+  /** Leave any in-progress view and show the live position again (no sound). */
+  const exitView = () => {
+    const p = puzzleRef.current;
+    const c = chessRef.current;
+    if (viewRef.current === null || !p || !c) return;
+    viewRef.current = null;
+    setReview(null);
+    setFen(c.fen());
+    const prev = plyRef.current > 0 ? p.moves[plyRef.current - 1] : null;
+    setLastMove(prev ? [prev.slice(0, 2), prev.slice(2, 4)] : null);
+  };
+
+  /**
+   * Show the line after `v` plies. `dir` only picks the sound. While the puzzle is in progress the
+   * range is 0..live and reaching live ends the view (see stepLogic.ts).
+   */
   const step = (dir: 1 | -1): boolean => {
     const p = puzzleRef.current;
     const s = statusRef.current;
-    if (!p || (s !== 'solved' && s !== 'solution')) return false;
-    const from = viewRef.current ?? Math.min(plyRef.current, p.moves.length);
-    const v = from + dir;
-    if (v < 0 || v > p.moves.length) return false;
+    if (!p) return false;
+    const total = p.moves.length;
+    const v = stepTarget(s, viewRef.current, plyRef.current, total, dir);
+    if (v === null) return false;
     let last: Move | null = null;
     const replay = new Chess(p.fen);
     try {
@@ -407,17 +436,29 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
       return false;
     }
     clearTimers(); // stop a running solution playback
-    viewRef.current = v;
-    setFen(replay.fen());
-    setLastMove(last ? [last.from, last.to] : null);
     setMark(null);
-    setReview({ index: v, total: p.moves.length });
+    // v = 0 with a setup move: show the position BEFORE it, highlighting the move the opponent played.
+    const setup = v === 0 && p.opponentFirst ? p.moves[0] : null;
+    const hl: [string, string] | null = last ? [last.from, last.to] : setup ? [setup.slice(0, 2), setup.slice(2, 4)] : null;
+    if (returnsToLive(s, v, plyRef.current)) {
+      viewRef.current = null;
+      setReview(null);
+      setFen(chessRef.current!.fen());
+      setLastMove(hl);
+    } else {
+      viewRef.current = v;
+      setFen(replay.fen());
+      setLastMove(hl);
+      setReview({ index: v, total: s === 'player' ? Math.min(plyRef.current, total) : total });
+    }
     if (dir === 1 && last) playMoveSound(last);
     else sfx.move();
     return true;
   };
   const stepBack = useCallback(() => step(-1), []); // eslint-disable-line react-hooks/exhaustive-deps
   const stepForward = useCallback(() => step(1), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ability = computeStepAbility(status, review ? review.index : null, plyRef.current, puzzle ? puzzle.moves.length : 0);
 
   return {
     puzzle,
@@ -439,6 +480,10 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     positionKey,
     solvedKey,
     review,
+    interactive: boardInteractive(status, review !== null),
+    steppable: ability.steppable,
+    canStepBack: ability.canBack,
+    canStepForward: ability.canForward,
     playMove,
     setPremove,
     hint,

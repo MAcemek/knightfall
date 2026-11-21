@@ -7,6 +7,7 @@ import { PuzzlePrompt, usePuzzleRunner, type RunnerResult, type RunnerStatus } f
 import { dailyPuzzle } from '../../shared/puzzleSource.ts';
 import { Button, GameLayout, Icons, Panel } from '../../shared/ui.tsx';
 import { ControlDock, Controls } from '../puzzles/components/Controls.tsx';
+import { SolutionStepper } from '../puzzles/components/SolutionStepper.tsx';
 import { burstFromSquare, TrainerBoard, type BoardGlow } from '../puzzles/components/TrainerBoard.tsx';
 import { useHotkeysWithHelp } from '../puzzles/useHotkeys.ts';
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
@@ -22,7 +23,7 @@ const DAILY_SHORTCUTS: ShortcutGroup[] = [
       { keys: ['H'], label: 'Hint' },
       { keys: ['R'], label: 'Retry after a miss' },
       { keys: ['S'], label: 'Show the solution' },
-      { keys: ['←', '→'], label: 'Previous / next day' },
+      { keys: ['←', '→'], label: 'Step back / forward through the moves (when none left: previous / next day)' },
       { keys: ['F'], label: 'Flip the board' },
       { keys: ['?'], label: 'Show this help' },
     ],
@@ -174,8 +175,9 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
       r: () => (canRetry ? runner.retry() : false),
       s: () => (canSolution ? runner.showSolution() : false),
       f: () => setFlipped((f) => !f),
-      arrowleft: () => (canPrev ? go(prevDay) : false),
-      arrowright: () => (canNext ? go(nextDay) : false),
+      // Arrows step through the moves first; once there is nothing to step to they change the day.
+      arrowleft: () => (runner.canStepBack ? runner.stepBack() : canPrev ? go(prevDay) : false),
+      arrowright: () => (runner.canStepForward ? runner.stepForward() : canNext ? go(nextDay) : false),
     },
     !modalOpen,
   );
@@ -240,6 +242,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
                   onRetry={runner.retry}
                   onSolution={runner.showSolution}
                   onFlip={() => setFlipped((f) => !f)}
+                  stepper={<SolutionStepper runner={runner} />}
                   action={dayAction}
                   extra={
                     <div className="flex items-center gap-1">

@@ -16,7 +16,7 @@ export function PuzzleBoard({ runner, orientation, className, children }: {
     <Board
       fen={runner.fen}
       orientation={orientation ?? runner.orientation}
-      interactive={runner.status === 'player'}
+      interactive={runner.interactive}
       movableColor={runner.solverColor}
       lastMove={runner.lastMove}
       mark={runner.mark}
@@ -47,6 +47,14 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
   const swatch = runner.solverColor === 'w' ? 'bg-ink-100' : 'bg-ink-950 ring-1 ring-ink-400';
   let text: string;
   let tone = 'text-ink-100';
+  if (runner.review && runner.status === 'player') {
+    return (
+      <div className={`flex items-center gap-2.5 text-lg font-bold text-sky-400 ${className}`}>
+        <span className={`inline-block h-4 w-4 rounded-sm ${swatch}`} />
+        <span>Earlier position · Forward to play on</span>
+      </div>
+    );
+  }
   if (runner.review) {
     return (
       <div className={`flex items-center gap-2.5 text-lg font-bold text-sky-400 ${className}`}>

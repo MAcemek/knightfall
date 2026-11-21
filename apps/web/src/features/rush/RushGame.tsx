@@ -3,6 +3,8 @@ import type { RushMode } from '../../shared/db.ts';
 import { PuzzleBoard, PuzzlePrompt } from '../../shared/PuzzlePlayer/index.ts';
 import { Button, GameLayout, Icons, PageHeader, Panel, Pill } from '../../shared/ui.tsx';
 import { CountdownOverlay, EndingOverlay, GoFlash, LoadErrorOverlay, ResultFlash } from './BoardOverlays.tsx';
+import { PhoneStepper, SolutionStepper } from '../puzzles/components/SolutionStepper.tsx';
+import { useHotkeys } from '../puzzles/useHotkeys.ts';
 import { GameOver } from './GameOver.tsx';
 import { DANGER_MS } from './rushLogic.ts';
 import { RushHud } from './RushHud.tsx';
@@ -34,6 +36,8 @@ function EndRunButton({ onQuit, disabled }: { onQuit: () => void; disabled: bool
 export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; onPlayAgain: () => void; onChangeMode: () => void }) {
   const g = useRushGame(mode);
   const { cfg, phase, runner, core } = g;
+  // ←/→ step back to the opponent's last move and forward again (the clock keeps running).
+  useHotkeys({ arrowleft: () => runner.stepBack(), arrowright: () => runner.stepForward() }, phase === 'playing');
 
   if (phase === 'over') {
     return <GameOver cfg={cfg} core={core} endReason={g.endReason} save={g.save} onPlayAgain={onPlayAgain} onChangeMode={onChangeMode} />;
@@ -78,6 +82,7 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
           </Pill>
         )}
       </div>
+      <PhoneStepper runner={runner} />
       <EndRunButton onQuit={g.quit} disabled={!live} />
     </div>
   );
@@ -91,6 +96,9 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
             {runner.puzzle.rating}
           </Pill>
         )}
+      </div>
+      <div className="max-lg:hidden">
+        <SolutionStepper runner={runner} />
       </div>
       <RunTiles attempts={core.attempts} current={current} />
       <div className="max-lg:hidden">

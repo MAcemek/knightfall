@@ -19,6 +19,7 @@ const Rush = lazy(() => import('./features/rush/Page.tsx'));
 const Battle = lazy(() => import('./features/battle/Page.tsx'));
 const Custom = lazy(() => import('./features/custom/Page.tsx'));
 const Analysis = lazy(() => import('./features/analysis/Page.tsx'));
+const AnalysisInsights = lazy(() => import('./features/analysis/insights/Page.tsx'));
 const Stats = lazy(() => import('./features/stats/Page.tsx'));
 const Settings = lazy(() => import('./features/settings/Page.tsx'));
 
@@ -134,6 +135,7 @@ export function App() {
               <Route path="/rush/*" element={<Rush />} />
               <Route path="/battle/*" element={<Battle />} />
               <Route path="/custom/*" element={<Custom />} />
+              <Route path="/analysis/insights" element={<AnalysisInsights />} />
               <Route path="/analysis/*" element={<Analysis />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/settings" element={<Settings />} />

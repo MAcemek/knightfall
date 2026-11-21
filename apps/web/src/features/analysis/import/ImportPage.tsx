@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { deleteGame, importGames, importUserGames, setAnalysisPrefs, useAnalysedKeys, useAnalysisPrefs, useRecentAnalyses, useUserGames } from '../../../shared/analysis/index.ts';
 import type { StoredGame } from '../../../shared/db.ts';
 import { deepEngineAvailable } from '../../../shared/engine/engines.ts';
@@ -203,7 +203,16 @@ export function ImportPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="Game Review" subtitle="Analyse any game with Stockfish" icon={Icons.search('h-6 w-6')} />
+      <PageHeader
+        title="Game Review"
+        subtitle="Analyse any game with Stockfish"
+        icon={Icons.search('h-6 w-6')}
+        right={
+          <Link to="/analysis/insights" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 font-bold text-ember-400 hover:underline">
+            {Icons.chart('h-4 w-4')} Insights across games
+          </Link>
+        }
+      />
 
       <Panel className="mb-4 animate-rise">
         <label htmlFor="kf-paste" className="mb-2 block text-lg font-extrabold">

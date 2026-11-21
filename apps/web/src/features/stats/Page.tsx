@@ -55,6 +55,10 @@ export default function StatsPage() {
         <h2 className="mb-3 text-lg font-extrabold">Rating over time</h2>
         <RatingChart points={series} />
       </Panel>
+      <Link to="/analysis/insights" className="flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-ink-700/60 bg-ink-850 px-4 py-3 font-bold transition-colors hover:bg-ink-800">
+        <span className="flex items-center gap-2">{Icons.search('h-5 w-5 text-ember-400')} Game insights: patterns across your reviewed games</span>
+        <span className="text-ember-400">{Icons.chevRight('h-5 w-5')}</span>
+      </Link>
       <Panel>
         <h2 className="mb-3 text-lg font-extrabold">Strengths and weaknesses</h2>
         <ThemeBreakdown rows={rows} />

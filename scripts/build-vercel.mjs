@@ -45,6 +45,10 @@ await writeFile(
       version: 3,
       routes: [
         { src: '^/assets/(.*)$', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, continue: true },
+        // Service worker and manifest must revalidate so a new deploy reaches installed apps.
+        { src: '^/(sw\\.js|registerSW\\.js|manifest\\.webmanifest)$', headers: { 'Cache-Control': 'no-cache' }, continue: true },
+        // workbox-<hash>.js is content-hashed, so it can stay immutable.
+        { src: '^/workbox-[^/]+\\.js$', headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }, continue: true },
         { src: '^/(api(?:/.*)?)$', dest: '/api?path=/$1' },
         { handle: 'filesystem' },
         { src: '^/(.*)$', dest: '/index.html' },

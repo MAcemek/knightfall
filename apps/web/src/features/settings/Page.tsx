@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Board } from '../../shared/Board/index.ts';
 import { sfx } from '../../shared/fx/index.ts';
+import { useInstall } from '../../shared/pwa/install.ts';
 import { setPlayerName, useProfile } from '../../shared/profile.ts';
 import { resetSettings, setSetting, useSettings } from '../../shared/settings.ts';
 import { ANIM_SPEEDS, BOARD_THEMES } from '../../shared/settingsLogic.ts';
@@ -12,6 +13,7 @@ export default function SettingsPage() {
   const profile = useProfile();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const { view: installState, install } = useInstall();
 
   useEffect(() => {
     if (profile) setName(profile.name);
@@ -128,6 +130,22 @@ export default function SettingsPage() {
           <Switch checked={s.premoves} onChange={(v) => setSetting('premoves', v)} label="Premoves" hint="Queue your next move while the opponent is moving." />
         </Panel>
       </div>
+
+      {installState !== 'none' && (
+        <div className="animate-rise" style={{ animationDelay: '200ms' }}>
+          <Panel className="space-y-4">
+            <h2 className="text-lg font-extrabold">Install Knightfall</h2>
+            {installState === 'prompt' && (
+              <>
+                <p className="text-sm text-ink-400">Add Knightfall to your device to open it like an app. Puzzles and saved reviews work offline.</p>
+                <Button onClick={() => void install()}>Install Knightfall</Button>
+              </>
+            )}
+            {installState === 'installed' && <p className="text-sm font-semibold text-ink-200">Installed</p>}
+            {installState === 'ios-hint' && <p className="text-sm text-ink-400">To install on iPhone or iPad: Share → Add to Home Screen.</p>}
+          </Panel>
+        </div>
+      )}
 
       <Button
         variant="ghost"

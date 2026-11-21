@@ -29,3 +29,13 @@ text-based UCI protocol.
 ## Piece set "cburnett" — CC BY-SA 3.0 / GPL
 
 - By Colin M.L. Burnett, via Lichess (https://github.com/lichess-org/lila/tree/master/public/piece/cburnett)
+- The app icons in `apps/web/public/icons/` (home screen / install icons) are rendered from this set's
+  white knight by `scripts/build-pwa-icons.mjs`, so they are derivative works under the same license
+  (CC BY-SA 3.0, Colin M.L. Burnett).
+
+## Workbox — MIT
+
+- Google's Workbox runtime (precaching, routing and caching strategies) is bundled into the generated
+  service worker (`sw.js` and `workbox-*.js` in the build output).
+- Source: https://github.com/GoogleChrome/workbox
+- `vite-plugin-pwa` (MIT) is a build-time tool only; none of its code ships to users.

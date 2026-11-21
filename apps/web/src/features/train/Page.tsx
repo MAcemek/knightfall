@@ -8,6 +8,7 @@ import { TrainHub } from './TrainHub.tsx';
 
 const OpeningsPage = lazy(() => import('../openings/Page.tsx'));
 const EndgamesPage = lazy(() => import('../endgames/Page.tsx'));
+const VisionPage = lazy(() => import('../vision/Page.tsx'));
 
 /**
  * Train (all unrated).
@@ -18,6 +19,7 @@ const EndgamesPage = lazy(() => import('../endgames/Page.tsx'));
  *   /train/games/play      their session (?m=due|all)
  *   /train/openings/*      opening trainer
  *   /train/endgames/*      endgame drills (tablebase)
+ *   /train/vision/*        board vision drills (find / name the square, knight routes)
  */
 export default function TrainPage() {
   return (
@@ -29,6 +31,7 @@ export default function TrainPage() {
       <Route path="games/play" element={<GamesTrainerRoute />} />
       <Route path="openings/*" element={<Suspense fallback={null}><OpeningsPage /></Suspense>} />
       <Route path="endgames/*" element={<Suspense fallback={null}><EndgamesPage /></Suspense>} />
+      <Route path="vision/*" element={<Suspense fallback={null}><VisionPage /></Suspense>} />
       <Route path="*" element={<Navigate to="/train" replace />} />
     </Routes>
   );

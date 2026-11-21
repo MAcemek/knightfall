@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatInterval, useReviewSummary } from '../../shared/progress/index.ts';
 import { THEME_GROUPS, themeLabel } from '../../shared/themes.ts';
+import { sfx } from '../../shared/fx/index.ts';
 import { Button, Icons, PageHeader, Panel, Segmented } from '../../shared/ui.tsx';
 import { DIFFICULTIES, MAX_THEMES, parseDifficulty, parseThemeParam, themeParam, toggleTheme, type Difficulty } from './trainLogic.ts';
 
@@ -17,20 +18,24 @@ function readLast(): { themes: string[]; difficulty: Difficulty } {
   }
 }
 
+/** One training mode. The whole card is the button, so on a phone it is one tap and one short row. */
 function HubCard({ icon, title, text, onOpen }: { icon: (c?: string) => ReactNode; title: string; text: string; onOpen: () => void }) {
   return (
-    <Panel className="mb-4 flex animate-rise flex-wrap items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-ember-400">{icon('h-6 w-6')}</div>
-        <div className="min-w-0">
-          <h2 className="text-lg font-extrabold">{title}</h2>
-          <p className="text-sm text-ink-400">{text}</p>
-        </div>
+    <button
+      type="button"
+      onClick={() => {
+        sfx.click();
+        onOpen();
+      }}
+      className="group flex w-full animate-rise items-center gap-3 rounded-2xl border border-ink-700/60 bg-ink-850 p-4 text-left shadow-xl shadow-black/20 transition-colors hover:border-ink-500 hover:bg-ink-800/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400"
+    >
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-ember-400">{icon('h-6 w-6')}</div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-lg font-extrabold leading-tight">{title}</h2>
+        <p className="text-sm text-ink-400">{text}</p>
       </div>
-      <Button variant="secondary" onClick={onOpen}>
-        {icon('h-4 w-4')} Open
-      </Button>
-    </Panel>
+      <span className="shrink-0 text-ink-400 transition-transform group-hover:translate-x-0.5 group-hover:text-ink-100">{Icons.chevRight('h-5 w-5')}</span>
+    </button>
   );
 }
 
@@ -49,6 +54,7 @@ export function TrainHub() {
     }
   }, [selected, difficulty]);
 
+  const startThemes = () => navigate(`/train/theme/${themeParam(selected)}?d=${difficulty}`);
   const due = summary?.due ?? 0;
   let reviewLine = '';
   if (summary) {
@@ -76,9 +82,12 @@ export function TrainHub() {
         </Button>
       </Panel>
 
-      <HubCard icon={Icons.search} title="From my games" text="Your own mistakes from analysed games, as puzzles." onOpen={() => navigate('/train/games')} />
-      <HubCard icon={Icons.bulb} title="Openings" text="Learn the named lines move by move, then get tested on them." onOpen={() => navigate('/train/openings')} />
-      <HubCard icon={Icons.trophy} title="Endgames" text="Play key endings against perfect defence." onOpen={() => navigate('/train/endgames')} />
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <HubCard icon={Icons.search} title="From my games" text="Your own mistakes from analysed games, as puzzles." onOpen={() => navigate('/train/games')} />
+        <HubCard icon={Icons.bulb} title="Openings" text="Learn the named lines move by move, then get tested on them." onOpen={() => navigate('/train/openings')} />
+        <HubCard icon={Icons.trophy} title="Endgames" text="Play key endings against perfect defence." onOpen={() => navigate('/train/endgames')} />
+        <HubCard icon={Icons.eye} title="Board vision" text="Find and name squares, plan knight routes. Quick timed drills." onOpen={() => navigate('/train/vision')} />
+      </div>
 
       <div className="animate-rise" style={{ animationDelay: '60ms' }}>
         <Panel className="space-y-4">
@@ -111,11 +120,21 @@ export function TrainHub() {
           ))}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700/60 pt-4">
             <Segmented label="Difficulty" options={DIFFICULTIES} value={difficulty} onChange={setDifficulty} />
-            <Button variant="primary" size="lg" disabled={!selected.length} onClick={() => navigate(`/train/theme/${themeParam(selected)}?d=${difficulty}`)}>
+            <Button variant="primary" size="lg" className="max-lg:hidden" disabled={!selected.length} onClick={startThemes}>
               {Icons.target('h-5 w-5')} Start training
             </Button>
           </div>
-          <p className="min-h-5 text-sm text-ink-500">{selected.length ? '' : 'Pick one to three themes. Puzzles that match any of them are served near your rating.'}</p>
+          {selected.length ? (
+            // Phones: the theme list is long, so the Start button rides along at the bottom of the screen
+            // instead of waiting below the last theme.
+            <div className="sticky bottom-[calc(3.5rem+1px+env(safe-area-inset-bottom))] z-10 -mx-4 -mb-4 rounded-b-2xl bg-ink-850/95 px-4 pb-4 pt-3 backdrop-blur lg:hidden">
+              <Button variant="primary" className="h-12 w-full text-lg" onClick={startThemes}>
+                {Icons.target('h-5 w-5')} Start training · {selected.length} {selected.length === 1 ? 'theme' : 'themes'}
+              </Button>
+            </div>
+          ) : (
+            <p className="min-h-5 text-sm text-ink-500">Pick one to three themes. Puzzles that match any of them are served near your rating.</p>
+          )}
         </Panel>
       </div>
     </div>

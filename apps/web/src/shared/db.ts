@@ -242,6 +242,8 @@ export const KEYS = {
   recentOpponents: 'recentOpponents',
   /** Solved endgame drills (features/endgames): id to { solved, best }. */
   endgameProgress: 'endgameProgress',
+  /** Board vision drills (features/vision): best score per drill and side, keyed "find-w" and so on. */
+  visionBest: 'visionBest',
 } as const;
 
 export interface StreakState {

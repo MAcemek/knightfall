@@ -10,7 +10,7 @@ import { Icons, Panel } from '../../shared/ui.tsx';
 
 const MODES = [
   { to: '/puzzles', title: 'Puzzles', blurb: 'Rated tactics matched to your level. Build a streak.', icon: Icons.puzzle, tint: 'from-ember-500/25' },
-  { to: '/train', title: 'Train', blurb: 'Drill a theme, your own game mistakes, openings or endgames. Unrated.', icon: Icons.target, tint: 'from-ember-300/20' },
+  { to: '/train', title: 'Train', blurb: 'Drill a theme, your own game mistakes, openings, endgames or board vision. Unrated.', icon: Icons.target, tint: 'from-ember-300/20' },
   { to: '/daily', title: 'Daily Puzzle', blurb: 'One hand-picked puzzle a day, same for everyone.', icon: Icons.calendar, tint: 'from-sky-400/25' },
   { to: '/rush', title: 'Puzzle Rush', blurb: 'Solve as many as you can. Three strikes and you are out.', icon: Icons.bolt, tint: 'from-good-500/25' },
   { to: '/battle', title: 'Puzzle Battle', blurb: 'Race a live opponent through the same puzzles.', icon: Icons.swords, tint: 'from-bad-500/25' },
@@ -42,23 +42,23 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <section className="relative mb-8 overflow-hidden rounded-3xl border border-ink-800 bg-gradient-to-br from-ink-850 via-ink-900 to-ink-950 p-7 sm:p-10">
+      <section className="relative mb-5 overflow-hidden rounded-3xl border border-ink-800 bg-gradient-to-br from-ink-850 via-ink-900 to-ink-950 p-5 sm:mb-8 sm:p-10">
         <img src="/pieces/bN.svg" alt="" className="pointer-events-none absolute -right-8 -top-6 h-64 w-64 rotate-12 opacity-[0.07]" />
         <p className="text-sm font-bold uppercase tracking-[0.2em] text-ember-400">Train your tactics</p>
-        <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
+        <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">
           Find the move.
           <br />
           <span className="text-ink-400">Feel the click.</span>
         </h1>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link to="/puzzles" className="rounded-xl bg-ember-500 px-6 py-3 font-bold text-ink-950 shadow-[0_4px_0_0_var(--color-ember-600)] transition hover:bg-ember-400">
+        <div className="mt-5 flex gap-3 sm:mt-6">
+          <Link to="/puzzles" className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-xl bg-ember-500 px-6 py-3 font-bold max-sm:flex-1 max-sm:px-3 text-ink-950 shadow-[0_4px_0_0_var(--color-ember-600)] transition hover:bg-ember-400">
             Start solving
           </Link>
-          <Link to="/rush" className="rounded-xl bg-ink-700 px-6 py-3 font-bold shadow-[0_4px_0_0_var(--color-ink-800)] transition hover:bg-ink-600">
+          <Link to="/rush" className="flex min-h-12 items-center justify-center whitespace-nowrap rounded-xl bg-ink-700 px-6 py-3 font-bold max-sm:flex-1 max-sm:px-3 shadow-[0_4px_0_0_var(--color-ink-800)] transition hover:bg-ink-600">
             Play Rush
           </Link>
         </div>
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-8 sm:grid-cols-4 sm:gap-3">
           <HeroStat label="Puzzle rating" value={profile ? Math.round(profile.puzzleRating.rating) : '—'} />
           <HeroStat label="Streak" value={profile ? `${profile.puzzleStreak.current} 🔥` : '—'} />
           <HeroStat label="Daily streak" value={stats ? `${stats.dailyStreak} days` : '—'} />
@@ -100,17 +100,20 @@ export default function HomePage() {
         </Link>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Phones: compact rows (icon beside the text) so every mode fits in about two screens. */}
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
         {MODES.map((m, i) => (
           <Link
             key={m.to}
             to={m.to}
             style={{ animationDelay: `${i * 45}ms` }}
-            className={`group relative animate-rise overflow-hidden rounded-2xl border border-ink-800 bg-gradient-to-br ${m.tint} to-ink-900 to-60% p-5 transition hover:-translate-y-0.5 hover:border-ink-600`}
+            className={`group relative animate-rise flex items-center gap-3 overflow-hidden rounded-2xl border border-ink-800 bg-gradient-to-br ${m.tint} to-ink-900 to-60% p-4 transition hover:-translate-y-0.5 hover:border-ink-600 sm:block sm:p-5`}
           >
-            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-ink-950/60 text-ember-400 transition group-hover:scale-110">{m.icon('h-6 w-6')}</div>
-            <h2 className="text-lg font-extrabold">{m.title}</h2>
-            <p className="mt-1 text-sm text-ink-400">{m.blurb}</p>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-950/60 text-ember-400 transition group-hover:scale-110 sm:mb-3">{m.icon('h-6 w-6')}</div>
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold leading-tight sm:leading-normal">{m.title}</h2>
+              <p className="mt-0.5 text-sm text-ink-400 sm:mt-1">{m.blurb}</p>
+            </div>
           </Link>
         ))}
       </div>
@@ -120,7 +123,7 @@ export default function HomePage() {
 
 function HeroStat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-ink-950/50 px-4 py-3">
+    <div className="rounded-xl bg-ink-950/50 px-3 py-2.5 sm:px-4 sm:py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">{label}</div>
       <div className="mt-0.5 font-mono text-xl font-bold">{value}</div>
     </div>

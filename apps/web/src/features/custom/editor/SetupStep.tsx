@@ -214,7 +214,7 @@ export function SetupStep({ position, setPosition, orientation, setOrientation, 
                   key={s}
                   type="button"
                   onClick={() => setTurn(s)}
-                  className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-bold transition ${
+                  className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-bold transition max-lg:min-h-11 ${
                     position.turn === s ? 'bg-ink-700 text-ink-100 shadow' : 'text-ink-400 hover:text-ink-200'
                   }`}
                 >

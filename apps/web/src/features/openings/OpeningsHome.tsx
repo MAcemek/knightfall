@@ -117,7 +117,7 @@ export function OpeningsHome() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name or ECO code (Sicilian, C50)"
+              placeholder="Search openings or ECO (C50)"
               aria-label="Search openings"
               className="mb-3 h-11 w-full rounded-xl border border-ink-700 bg-ink-900 px-3 text-base text-ink-100 placeholder:text-ink-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400"
             />

@@ -186,8 +186,9 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
   return (
     <Panel>
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">Play a friend</h2>
+      {/* Phones show one column in the order you use it: your code, settings, the friend's code + Challenge. */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
+        <div className="max-sm:order-1">
           <div className="text-xs font-semibold text-ink-400">Your code</div>
           <div className={`mt-1 font-mono font-black ${code ? 'text-3xl tracking-widest text-ink-100' : 'text-lg text-ink-400'}`} aria-live="polite" data-testid="my-code">
             {codeText}
@@ -208,7 +209,7 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
           )}
         </div>
 
-        <div>
+        <div className="max-sm:order-3">
           <label htmlFor="friend-code" className="text-xs font-semibold text-ink-400">
             Enter a friend's code
           </label>
@@ -255,17 +256,17 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
             </form>
           )}
         </div>
-      </div>
-      <div className="mt-4">
-        <div className="mb-1.5 text-xs font-semibold text-ink-400">Battle settings</div>
-        <SettingsControls prefs={prefs} onChange={onPrefs} withSeries disabled={settingsUnavailable} />
-        {settingsUnavailable && <p className="mt-1.5 text-xs text-ink-400">Custom settings need the updated battle server</p>}
+        <div className="sm:col-span-2 max-sm:order-2">
+          <div className="mb-1.5 text-xs font-semibold text-ink-400">Battle settings</div>
+          <SettingsControls prefs={prefs} onChange={onPrefs} withSeries disabled={settingsUnavailable} />
+          {settingsUnavailable && <p className="mt-1.5 text-xs text-ink-400">Custom settings need the updated battle server</p>}
+        </div>
       </div>
       <RecentOpponents prefs={prefs} busy={outgoing.kind === 'waiting' || outgoing.kind === 'sending' || connection.moved} />
       {outgoing.kind === 'result' && message && (
         <div className="mt-3 flex animate-pop items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
           <span>{message.text}</span>
-          <button className="flex h-8 w-8 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissChallengeResult} aria-label="Dismiss">
+          <button className="-my-1 flex h-10 w-10 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissChallengeResult} aria-label="Dismiss">
             {Icons.x('h-4 w-4')}
           </button>
         </div>

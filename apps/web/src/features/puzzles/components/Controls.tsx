@@ -145,14 +145,14 @@ export function ControlDock(p: ControlDockProps) {
 /** Small accessible switch. */
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex cursor-pointer select-none items-center gap-2 text-sm font-semibold text-ink-300">
+    <label className="flex min-h-11 cursor-pointer select-none items-center gap-2 text-sm font-semibold text-ink-300">
       {label}
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-ember-500' : 'bg-ink-700'}`}
+        className={`relative h-6 w-11 rounded-full transition-colors after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] ${checked ? 'bg-ember-500' : 'bg-ink-700'}`}
       >
         <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
       </button>

@@ -54,8 +54,13 @@ export default function SettingsPage() {
             />
             <Button onClick={() => void saveName()}>Save</Button>
           </div>
-          <p className="min-h-5 text-sm text-bad-400">{nameError}</p>
-          <p className="text-sm text-ink-400">Shown to your opponent in Battle.</p>
+          {nameError ? (
+            <p className="text-sm text-bad-400" role="alert">
+              {nameError}
+            </p>
+          ) : (
+            <p className="text-sm text-ink-400">Shown to your opponent in Battle.</p>
+          )}
         </Panel>
       </div>
 

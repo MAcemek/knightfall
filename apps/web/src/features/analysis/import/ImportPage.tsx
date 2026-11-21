@@ -390,7 +390,7 @@ export function ImportPage() {
                       type="button"
                       aria-label={`Delete review of ${game.white.name} vs ${game.black.name}`}
                       onClick={() => void remove(game)}
-                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 hover:bg-bad-500/20 hover:text-bad-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400"
+                      className="absolute right-1 top-1 flex h-11 w-11 items-center lg:right-2 lg:top-2 lg:h-8 lg:w-8 justify-center rounded-lg text-ink-400 hover:bg-bad-500/20 hover:text-bad-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400"
                     >
                       {Icons.x('h-4 w-4')}
                     </button>

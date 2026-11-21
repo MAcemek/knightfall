@@ -53,8 +53,15 @@ export function App() {
   const due = reviews?.due ?? 0;
   // Page transition is keyed on the first path segment only, so /rush → /rush/play/3min (and the other
   // in-feature navigations) never remounts a page.
-  const section = useLocation().pathname.split('/')[1] ?? '';
+  const { pathname } = useLocation();
+  const section = pathname.split('/')[1] ?? '';
   const toggleSound = () => setSetting('sound', !settings.sound);
+
+  // A new page starts at the top. Without this, opening a game from a scrolled lobby (Rush, a review,
+  // a drill) on a phone keeps the old scroll offset and hides the clock or the top of the board.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   // One app-wide battle socket, opened shortly after load so friend invitations reach any page.
   useEffect(() => {

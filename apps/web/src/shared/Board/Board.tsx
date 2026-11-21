@@ -741,12 +741,12 @@ const SquaresLayer = memo(function SquaresLayer({ orientation, lastMove, selecte
             )}
             {pulse?.includes(sq) && <div className="kf-hint-fill absolute inset-0" />}
             {coords && col === 0 && (
-              <span className={`absolute left-[3%] top-[2%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
+              <span className={`absolute left-[3%] top-[2%] text-[clamp(10px,2.6vw,13px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
                 {sq[1]}
               </span>
             )}
             {coords && row === 7 && (
-              <span className={`absolute bottom-[1%] right-[4%] text-[clamp(8px,1.6vw,12px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
+              <span className={`absolute bottom-[1%] right-[4%] text-[clamp(10px,2.6vw,13px)] font-semibold ${light ? 'text-[var(--color-sq-dark)]' : 'text-[var(--color-sq-light)]'}`}>
                 {sq[0]}
               </span>
             )}

@@ -426,6 +426,11 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     showLine();
   };
 
+  // Entering review mode from the long summary: start at the top so the board and controls are on screen.
+  useEffect(() => {
+    if (mode === 'review') window.scrollTo(0, 0);
+  }, [mode]);
+
   /* Hotkeys */
   const reviewing = classified && mode === 'review';
   const enterReview = () => {
@@ -564,6 +569,20 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         </div>
       </div>
       <div className="mt-1 flex items-center justify-end gap-1.5 lg:mt-3">
+        {report && mode === 'summary' && (
+          // Phones: the summary is long and its Start Review button sits at the bottom; this one is right here.
+          <Button
+            size="sm"
+            variant="good"
+            className="mr-auto lg:hidden"
+            onClick={() => {
+              goTo(0, false);
+              setMode('review');
+            }}
+          >
+            Start Review
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={() => setFlipped((f) => !f)} aria-label="Flip board (F)">
           {Icons.flip('h-4 w-4')} Flip
         </Button>

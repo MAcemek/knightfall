@@ -78,27 +78,43 @@ function ModeCard({ mode, hist, selected, hotkey, onSelect, onStart }: {
       }`}
     >
       {selected && <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-ember-500/20 blur-2xl" />}
-      <div className="relative flex items-start justify-between">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl transition ${selected ? 'bg-ember-500 text-ink-950' : 'bg-ink-700 text-ember-400 group-hover:bg-ink-600'}`}>
+      {/* Phones: one compact row per mode, so all three modes and the Start button fit on one screen. */}
+      <div className="relative flex items-center gap-3 md:hidden">
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${selected ? 'bg-ember-500 text-ink-950' : 'bg-ink-700 text-ember-400'}`}>
           {MODE_ICON[mode]('h-6 w-6')}
         </div>
-        <kbd className="hidden rounded-md border border-ink-600 px-1.5 py-0.5 font-mono text-[11px] text-ink-400 fine:inline">{hotkey}</kbd>
-      </div>
-      <div className="relative mt-3 text-xl font-extrabold tracking-tight">{cfg.label}</div>
-      <div className="relative mt-0.5 min-h-10 text-sm text-ink-400">{cfg.blurb}</div>
-
-      <div className="relative mt-4 flex items-end justify-between gap-3 border-t border-ink-700/60 pt-3">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Best</div>
-          <div className={`flex items-center gap-1.5 font-mono text-3xl font-black tabular ${hist?.best ? 'text-ember-400' : 'text-ink-600'}`}>
-            {hist?.best ? Icons.trophy('h-5 w-5') : null}
-            {hist?.best ?? '–'}
-          </div>
-          <div className="text-[11px] text-ink-500">{hist?.runs ? `${hist.runs} ${hist.runs === 1 ? 'run' : 'runs'}` : 'Not played yet'}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-lg font-extrabold leading-tight tracking-tight">{cfg.label}</div>
+          <div className="text-sm leading-snug text-ink-400">{cfg.blurb}</div>
         </div>
-        <div className="w-28 shrink-0">
-          <div className="mb-1 text-right text-[11px] font-bold uppercase tracking-wider text-ink-400">Last 5</div>
-          <RecentBars scores={hist?.last ?? []} best={hist?.best ?? null} />
+        <div className="shrink-0 text-right">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Best</div>
+          <div className={`font-mono text-2xl font-black tabular ${hist?.best ? 'text-ember-400' : 'text-ink-600'}`}>{hist?.best ?? '–'}</div>
+        </div>
+      </div>
+      <div className="relative flex flex-col max-md:hidden">
+        <div className="relative flex items-start justify-between">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-xl transition ${selected ? 'bg-ember-500 text-ink-950' : 'bg-ink-700 text-ember-400 group-hover:bg-ink-600'}`}>
+            {MODE_ICON[mode]('h-6 w-6')}
+          </div>
+          <kbd className="hidden rounded-md border border-ink-600 px-1.5 py-0.5 font-mono text-[11px] text-ink-400 fine:inline">{hotkey}</kbd>
+        </div>
+        <div className="relative mt-3 text-xl font-extrabold tracking-tight">{cfg.label}</div>
+        <div className="relative mt-0.5 min-h-10 text-sm text-ink-400">{cfg.blurb}</div>
+
+        <div className="relative mt-4 flex items-end justify-between gap-3 border-t border-ink-700/60 pt-3">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-ink-400">Best</div>
+            <div className={`flex items-center gap-1.5 font-mono text-3xl font-black tabular ${hist?.best ? 'text-ember-400' : 'text-ink-600'}`}>
+              {hist?.best ? Icons.trophy('h-5 w-5') : null}
+              {hist?.best ?? '–'}
+            </div>
+            <div className="text-[11px] text-ink-500">{hist?.runs ? `${hist.runs} ${hist.runs === 1 ? 'run' : 'runs'}` : 'Not played yet'}</div>
+          </div>
+          <div className="w-28 shrink-0">
+            <div className="mb-1 text-right text-[11px] font-bold uppercase tracking-wider text-ink-400">Last 5</div>
+            <RecentBars scores={hist?.last ?? []} best={hist?.best ?? null} />
+          </div>
         </div>
       </div>
     </button>

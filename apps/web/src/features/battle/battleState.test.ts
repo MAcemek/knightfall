@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { battleReducer, initialBattleState, tugShare, type BattleState, type EndInfo } from './battleState.ts';
+import { battleReducer, initialBattleState, ratingAfterBattle, tugShare, type BattleState, type EndInfo } from './battleState.ts';
 
 const me = { name: 'Me', rating: 1200 };
 const run = (s: BattleState, ...actions: Parameters<typeof battleReducer>[1][]) => actions.reduce(battleReducer, s);
@@ -62,6 +62,23 @@ describe('battleReducer', () => {
     const s = battleReducer(battleReducer(matched(), { type: 'go' }), { type: 'connection-lost' });
     expect(s.phase).toBe('lobby');
     expect(s.error).toMatch(/lost/i);
+  });
+
+  it('marks a friend challenge match as friendly and keeps random matches unmarked', () => {
+    const friendly = battleReducer(initialBattleState, { type: 'server', me, msg: { type: 'matched', roomId: 'f1', seed: 1, opponent: { name: 'Pal', rating: 1100 }, friendly: true } });
+    expect(friendly).toMatchObject({ phase: 'matched', match: { roomId: 'f1', friendly: true } });
+    expect(matched().match?.friendly).toBeUndefined();
+    // A rematch of a casual battle arrives flagged again; a random one does not inherit the flag.
+    const next = battleReducer(friendly, { type: 'server', me, msg: { type: 'matched', roomId: 'f2', seed: 2, opponent: { name: 'Pal', rating: 1100 } } });
+    expect(next.match?.friendly).toBeUndefined();
+  });
+
+  it('friendly battles leave the rating alone, random ones use Elo', () => {
+    const m = { me, opponent: { name: 'Op', rating: 1250 } };
+    expect(ratingAfterBattle({ ...m, friendly: true }, 'win')).toBe(1200);
+    expect(ratingAfterBattle({ ...m, friendly: true }, 'loss')).toBe(1200);
+    expect(ratingAfterBattle(m, 'win')).toBeGreaterThan(1200);
+    expect(ratingAfterBattle(m, 'loss')).toBeLessThan(1200);
   });
 
   it('tug share is balanced when level and leans toward the leader', () => {

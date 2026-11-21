@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { burstAt, confetti, FloatingDelta, PALETTES, sfx, TickerNumber } from '../../shared/fx/index.ts';
-import { Button, Icons, Panel } from '../../shared/ui.tsx';
+import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
 import type { BattleState, EndInfo, MatchInfo } from './battleState.ts';
 import { Kbd } from './Lobby.tsx';
 import { PuzzleChips } from './PuzzleChips.tsx';
@@ -39,6 +39,7 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
   const end = state.end!;
   const t = TITLES[end.result];
   const delta = end.ratingAfter - end.ratingBefore;
+  const friendly = match.friendly === true;
   const [shownRating, setShownRating] = useState(end.ratingBefore);
   const [deltaTrigger, setDeltaTrigger] = useState<number | null>(null);
   const titleRef = useRef<HTMLDivElement>(null);
@@ -100,19 +101,26 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
             <ScoreCol name={match.opponent.name} label="Opponent" score={end.opponent.solved} strikes={end.opponent.strikes} tone="text-sky-400" winner={end.result === 'loss'} />
           </div>
 
-          {/* Rating */}
-          <div className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-800/70 px-5 py-3">
-            <div className="text-left">
-              <div className="text-xs font-bold uppercase tracking-wider text-ink-400">Battle rating</div>
-              <div className="relative font-mono text-3xl font-black">
-                <TickerNumber value={shownRating} duration={0.9} />
-                <FloatingDelta delta={delta} trigger={deltaTrigger} className="-top-5" />
+          {/* Rating (friend battles are casual: no rating change) */}
+          {friendly ? (
+            <div className="mt-6 flex items-center gap-3 rounded-2xl bg-ink-800/70 px-5 py-3 text-left">
+              <Pill className="bg-sky-400/15 text-sky-400">Casual</Pill>
+              <div className="text-sm text-ink-300">Friend battle. Your battle rating is unchanged.</div>
+            </div>
+          ) : (
+            <div className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-800/70 px-5 py-3">
+              <div className="text-left">
+                <div className="text-xs font-bold uppercase tracking-wider text-ink-400">Battle rating</div>
+                <div className="relative font-mono text-3xl font-black">
+                  <TickerNumber value={shownRating} duration={0.9} />
+                  <FloatingDelta delta={delta} trigger={deltaTrigger} className="-top-5" />
+                </div>
+              </div>
+              <div className={`rounded-lg px-2.5 py-1 font-mono text-lg font-bold ${delta > 0 ? 'bg-good-500/15 text-good-400' : delta < 0 ? 'bg-bad-500/15 text-bad-400' : 'bg-ink-700 text-ink-300'}`}>
+                {delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0'}
               </div>
             </div>
-            <div className={`rounded-lg px-2.5 py-1 font-mono text-lg font-bold ${delta > 0 ? 'bg-good-500/15 text-good-400' : delta < 0 ? 'bg-bad-500/15 text-bad-400' : 'bg-ink-700 text-ink-300'}`}>
-              {delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0'}
-            </div>
-          </div>
+          )}
 
           {/* Actions */}
           <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">

@@ -66,6 +66,8 @@ export interface BattleRecord {
   opponent: { solved: number; strikes: number };
   ratingBefore: number;
   ratingAfter: number;
+  /** Friend challenge: casual, rating unchanged. Absent on older rows. Not indexed. */
+  friendly?: boolean;
 }
 
 export interface CustomPuzzle extends Puzzle {
@@ -205,6 +207,9 @@ export const KEYS = {
   achievementsSeeded: 'achievementsSeeded',
   /** Game Review preferences (shared/analysis/prefs.ts): engine choice and last used usernames. */
   analysisPrefs: 'analysisPrefs',
+  /** Friend-challenge code and secret token issued by the battle server (string), so the code survives reloads. */
+  battleCode: 'battleCode',
+  battleToken: 'battleToken',
 } as const;
 
 export interface StreakState {

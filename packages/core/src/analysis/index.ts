@@ -4,6 +4,7 @@ export * from './expectedPoints.ts';
 export * from './pieceSafety.ts';
 export * from './rating.ts';
 export * from './coach.ts';
+export * from './insight.ts';
 export * from './classify.ts';
 export * from './gameLink.ts';
 export * from './pgn.ts';

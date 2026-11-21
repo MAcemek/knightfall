@@ -1,5 +1,7 @@
 /** Shared types of the game-analysis feature (pure data, no engine or DOM). */
 
+import type { MoveInsight } from './insight.ts';
+
 export type Side = 'w' | 'b';
 
 /**
@@ -65,6 +67,8 @@ export interface AnalysedMove {
   cpLoss: number;
   /** The engine's first choice before the move (absent in terminal/unknown cases). */
   best?: { uci: string; san: string };
+  /** Why the move was good or bad (absent when there is nothing verified to say). */
+  insight?: MoveInsight;
 }
 
 export interface SideNumbers {
@@ -73,7 +77,7 @@ export interface SideNumbers {
 }
 
 /** Version of the classification rules. A stored report with another version is rebuilt from its evals. */
-export const REPORT_VERSION = 2;
+export const REPORT_VERSION = 3;
 
 export interface GameReport {
   version: typeof REPORT_VERSION;
@@ -87,8 +91,8 @@ export interface GameReport {
   ratingAccuracy: SideNumbers;
   /** Estimated rating of each side's play in this game. */
   estimatedRating: SideNumbers;
-  /** Advanced stats: mean accuracy on opening moves, tactical moments and the other (strategic) moves. */
-  advanced: { opening: SideNumbers; tactics: SideNumbers; strategy: SideNumbers };
+  /** Advanced stats: mean accuracy on opening moves, tactical moments, the other (strategic) moves and endgame moves. */
+  advanced: { opening: SideNumbers; tactics: SideNumbers; strategy: SideNumbers; endgame: SideNumbers };
   acpl: SideNumbers;
   counts: { white: Record<MoveClass, number>; black: Record<MoveClass, number> };
   phases: Record<GamePhase, SideNumbers>;

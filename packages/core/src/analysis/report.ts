@@ -2,6 +2,7 @@ import { Chess } from 'chess.js';
 import type { Puzzle } from '../types.ts';
 import { uciToMove, validateLine } from '../validate.ts';
 import { classifyMove, GREAT_SECOND_LOSS } from './classify.ts';
+import { moveInsight } from './insight.ts';
 import { epMoveAccuracy, expectedPointsLoss } from './expectedPoints.ts';
 import { pieceMaterial } from './pieceSafety.ts';
 import { estimateGameRating } from './rating.ts';
@@ -155,6 +156,8 @@ export function buildReport(input: ReportInput): GameReport {
       cpLoss: centipawnLoss(before.score, after.score, color),
       ...(bestUci && bestSan ? { best: { uci: bestUci, san: bestSan } } : {}),
     });
+    const insight = moveInsight({ fenBefore: fens[i], fenAfter: fens[i + 1], uci: ucis[i], mover: color, class: cls, evalBefore: before, evalAfter: after, opening: opening?.name ?? null });
+    if (insight.motif !== 'none' || insight.best) moves[moves.length - 1].insight = insight;
   }
 
   const whiteWin = evals.map((e) => winPercent(e.score));
@@ -178,6 +181,7 @@ export function buildReport(input: ReportInput): GameReport {
     opening: perSide((ms) => meanAcc(ms.filter((m) => m.phase === 'opening'))),
     tactics: perSide((ms) => meanAcc(ms.filter((m) => m.phase !== 'opening' && tactical(m)))),
     strategy: perSide((ms) => meanAcc(ms.filter((m) => m.phase !== 'opening' && !tactical(m)))),
+    endgame: perSide((ms) => meanAcc(ms.filter((m) => m.phase === 'endgame'))),
   };
   const ratingAccuracy: SideNumbers = { white: gameAccuracy(whiteWin, 'w', firstMover), black: gameAccuracy(whiteWin, 'b', firstMover) };
 

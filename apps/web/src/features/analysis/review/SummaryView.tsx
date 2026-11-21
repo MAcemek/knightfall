@@ -54,6 +54,24 @@ function Avatar({ name, side, mine }: { name: string; side: Side; mine: boolean 
   );
 }
 
+/** One count of the table. A non-zero count is a button that opens the review at that side's first such move. */
+function CountCell({ side, cls, n, onOpen }: { side: Side; cls: MoveClass; n: number; onOpen: (side: Side, cls: MoveClass) => void }) {
+  const m = MOVE_CLASS_META[cls];
+  const align = side === 'w' ? 'text-right' : 'text-left';
+  if (n === 0) return <span className={`${align} font-mono font-bold text-ink-500`}>0</span>;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(side, cls)}
+      aria-label={`${side === 'w' ? 'White' : 'Black'}: ${n} ${m.label.toLowerCase()}. Show these moves`}
+      title="Show these moves"
+      className={`${align} -my-1 min-h-9 w-full rounded-md font-mono font-bold underline decoration-dotted underline-offset-4 hover:bg-ink-800 focus-visible:outline-2 focus-visible:outline-ember-400 ${m.text}`}
+    >
+      {n}
+    </button>
+  );
+}
+
 function GradeIcon({ value }: { value: number | null }) {
   const cls = accuracyGrade(value);
   if (!cls) return <span className="text-center text-ink-500" aria-label="Not available">{'—'}</span>;
@@ -71,6 +89,8 @@ export const SummaryView = memo(function SummaryView(props: {
   staleEngine: boolean;
   onStart: () => void;
   onSeek: (index: number) => void;
+  /** Open the review at `side`'s first move of class `cls`. */
+  onOpenClass: (side: Side, cls: MoveClass) => void;
   onPractise: () => void;
   onReanalyse: () => void;
 }) {
@@ -84,6 +104,7 @@ export const SummaryView = memo(function SummaryView(props: {
     { label: 'Opening', v: report.advanced.opening },
     { label: 'Tactics', v: report.advanced.tactics },
     { label: 'Strategy', v: report.advanced.strategy },
+    { label: 'Endgame', v: report.advanced.endgame },
   ];
 
   const countRow = (r: { c: MoveClass; w: number; b: number }) => {
@@ -91,9 +112,9 @@ export const SummaryView = memo(function SummaryView(props: {
     return (
       <div key={r.c} className="grid grid-cols-[1fr_2.5rem_1.5rem_2.5rem] items-center gap-2 py-1 text-sm">
         <span className="font-semibold text-ink-200">{m.label}</span>
-        <span className={`text-right font-mono font-bold ${r.w ? m.text : 'text-ink-500'}`}>{r.w}</span>
+        <CountCell side="w" cls={r.c} n={r.w} onOpen={props.onOpenClass} />
         <MoveGlyph cls={r.c} size={20} className="mx-auto" title={m.label} />
-        <span className={`text-left font-mono font-bold ${r.b ? m.text : 'text-ink-500'}`}>{r.b}</span>
+        <CountCell side="b" cls={r.c} n={r.b} onOpen={props.onOpenClass} />
       </div>
     );
   };

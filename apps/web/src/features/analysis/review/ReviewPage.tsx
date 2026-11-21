@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { MoveClass, PositionEval } from '@knightfall/core';
+import { coachExplainText, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
 import { addMistakesToPractice, practicePuzzles, useAnalysisSession } from '../../../shared/analysis/index.ts';
 import { Board, type BoardArrow } from '../../../shared/Board/index.ts';
 import { ENGINES, getEnginePool } from '../../../shared/engine/index.ts';
@@ -11,10 +11,11 @@ import { toast } from '../../../shared/toast.tsx';
 import { Button, EmptyState, GameLayout, Icons, Panel } from '../../../shared/ui.tsx';
 import { useHotkeysWithHelp } from '../../puzzles/useHotkeys.ts';
 import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
-import { ReviewNav, ReviewView } from './ReviewView.tsx';
+import { ActionRow, PhoneCoach, ReviewNav, ReviewView, type ClassFilterView, type ReviewActions, type TipMode } from './ReviewView.tsx';
 import { SummaryView } from './SummaryView.tsx';
 import { lineSteps, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
-import { barFraction, graphGeometry, initialPly, lineToSan, playUci } from './reviewLogic.ts';
+import { barFraction, graphGeometry, initialPly, lineToSan, movesOfClass, playUci, positionInClass, stepInClass } from './reviewLogic.ts';
+import { judgeRetryMove, retryCanMove, retryFinished, retryHint, retryJudge, retryMessage, retryResume, retryStart, type RetryState } from './retryLogic.ts';
 import { MOVE_CLASS_META } from '../../../shared/analysis/index.ts';
 
 const SHORTCUTS: ShortcutGroup[] = [
@@ -26,13 +27,18 @@ const SHORTCUTS: ShortcutGroup[] = [
       { keys: ['Home'], label: 'Start of the game' },
       { keys: ['End'], label: 'End of the game' },
       { keys: ['F'], label: 'Flip the board' },
-      { keys: ['Esc'], label: 'Leave a variation' },
+      { keys: ['Esc'], label: 'Leave a variation, Explain, Best or Retry' },
       { keys: ['?'], label: 'Show this help' },
     ],
   },
   { title: 'Explore', items: [{ keys: ['Drag'], label: 'Play a different move to start a variation' }] },
   BOARD_SHORTCUTS,
 ];
+
+/** Classes that offer Retry. */
+const RETRY_CLASSES: ReadonlySet<MoveClass> = new Set<MoveClass>(['inaccuracy', 'mistake', 'miss', 'blunder']);
+/** Classes where the played move already was the best (the Best button stays disabled). */
+const BEST_FREE: ReadonlySet<MoveClass> = new Set<MoveClass>(['best', 'great', 'brilliant', 'book', 'forced']);
 
 const GRAPH_CLASSES: ReadonlySet<MoveClass> = new Set<MoveClass>(['brilliant', 'great', 'miss', 'mistake', 'blunder', 'inaccuracy']);
 
@@ -87,7 +93,18 @@ interface Exploration {
   cursor: number;
 }
 
+/** Retry: the user replays the position before the move at ply. */
+interface RetryRun {
+  /** move.ply of the retried move. */
+  ply: number;
+  state: RetryState;
+  /** The move the user just tried (shown on the board). */
+  tried: Step | null;
+}
+
 interface Preview {
+  /** explain = the opponent punishing line (red arrows), best = the engine line before the move. */
+  kind: 'best' | 'explain';
   startFen: string;
   steps: LineStep[];
   /** -1 = start, steps.length = holding on the last position. */
@@ -100,6 +117,7 @@ const ReviewBoard = memo(function ReviewBoard(props: {
   lastMove: [string, string] | null;
   tints: Record<string, string> | undefined;
   arrows: BoardArrow[] | undefined;
+  pulse: string[] | undefined;
   interactive: boolean;
   movableColor: 'w' | 'b';
   onMove: (uci: string) => void;
@@ -135,6 +153,9 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   const [explore, setExplore] = useState<Exploration | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [live, setLive] = useState<{ fen: string; e: PositionEval } | null>(null);
+  const [retry, setRetry] = useState<RetryRun | null>(null);
+  const [tipMode, setTipMode] = useState<TipMode>('move');
+  const [classFilter, setClassFilter] = useState<{ side: Side; cls: MoveClass } | null>(null);
 
   /* URL sync */
   useEffect(() => {
@@ -164,6 +185,8 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
       if (sound && (next !== plyRef.current || exploreRef.current) && next > 0) play(soundKind(moves[next - 1].san));
       setPreview(null);
       setExplore(null);
+      setRetry(null);
+      setTipMode('move');
       setPly(next);
     },
     [N, moves],
@@ -186,7 +209,12 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   };
 
   /* What the board shows */
+  const retryMove = retry ? moves[retry.ply] : null;
   const view = useMemo(() => {
+    if (retry && retryMove) {
+      const st = retry.tried;
+      return { fen: st ? st.fen : retryMove.fenBefore, last: st ? ([st.from, st.to] as [string, string]) : null };
+    }
     if (preview) {
       const i = Math.min(preview.idx, preview.steps.length - 1);
       const st = i >= 0 ? preview.steps[i] : null;
@@ -198,15 +226,28 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     }
     const m = ply > 0 ? moves[ply - 1] : null;
     return { fen: p.fens[ply], last: m ? ([m.uci.slice(0, 2), m.uci.slice(2, 4)] as [string, string]) : null };
-  }, [preview, explore, ply, moves, p]);
+  }, [retry, retryMove, preview, explore, ply, moves, p]);
 
-  const move = !exploring && !preview && ply > 0 ? moves[ply - 1] : null;
+  const move = !exploring && !preview && !retry && ply > 0 ? moves[ply - 1] : null;
   const shownMove = ply > 0 ? moves[ply - 1] : null;
 
   const arrows = useMemo<BoardArrow[] | undefined>(() => {
-    if (!move || !classified || !move.best || move.best.uci === move.uci) return undefined;
-    return [{ from: move.best.uci.slice(0, 2), to: move.best.uci.slice(2, 4), color: 'green' }];
-  }, [move, classified]);
+    if (retry) return undefined;
+    if (preview) {
+      // Explain walks the opponent line: the first position shows the threat, every move after it is drawn in red.
+      if (preview.kind !== 'explain') return undefined;
+      const st = preview.idx >= 0 ? preview.steps[Math.min(preview.idx, preview.steps.length - 1)] : null;
+      if (st) return [{ from: st.from, to: st.to, color: 'red' }];
+      const t = shownMove?.insight?.threat;
+      return t ? [{ from: t.from, to: t.to, color: 'red' }] : undefined;
+    }
+    if (!move || !classified) return undefined;
+    const out: BoardArrow[] = [];
+    if (move.best && move.best.uci !== move.uci) out.push({ from: move.best.uci.slice(0, 2), to: move.best.uci.slice(2, 4), color: 'green' });
+    const t = move.insight?.threat;
+    if (t) out.push({ from: t.from, to: t.to, color: 'red' });
+    return out.length ? out : undefined;
+  }, [move, classified, preview, retry, shownMove]);
 
   const badge = useMemo(
     () => (move && classified ? <MoveBadge square={move.uci.slice(2, 4)} orientation={orientation} cls={move.class} /> : null),
@@ -214,17 +255,37 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   );
 
   const tints = useMemo<Record<string, string> | undefined>(() => {
+    if (retry) {
+      const st = retry.tried;
+      if (!st) return undefined;
+      const key = retry.state.phase === 'best' ? 'best' : retry.state.phase === 'good' ? 'good' : 'blunder';
+      const c = `${MOVE_CLASS_META[key].color}73`;
+      return { [st.from]: c, [st.to]: c };
+    }
     if (!move || !classified || preview) return undefined;
     const c = `${MOVE_CLASS_META[move.class].color}73`; // ~45% opacity
     return { [move.uci.slice(0, 2)]: c, [move.uci.slice(2, 4)]: c };
-  }, [move, classified, preview]);
+  }, [move, classified, preview, retry]);
 
   /* Dragging a move */
-  const latest = useRef({ ply, explore, view, moves, N });
-  latest.current = { ply, explore, view, moves, N };
+  const latest = useRef({ ply, explore, view, moves, N, retry, evals });
+  latest.current = { ply, explore, view, moves, N, retry, evals };
   const onMove = useCallback(
     (uci: string) => {
-      const { ply: cur, explore: ex, view: v, moves: ms, N: n } = latest.current;
+      const { ply: cur, explore: ex, view: v, moves: ms, N: n, retry: rt, evals: evs } = latest.current;
+      if (rt) {
+        // Retry has priority over exploring: judge the move against the stored engine lines.
+        if (!retryCanMove(rt.state)) return;
+        const mv = ms[rt.ply];
+        const r = playUci(mv.fenBefore, uci);
+        if (!r) return;
+        const verdict = judgeRetryMove(evs[mv.ply], uci, mv.color);
+        if (verdict === 'best') sfx.correct();
+        else if (verdict === 'wrong') sfx.wrong();
+        else play(soundKind(r.san));
+        setRetry({ ply: rt.ply, state: retryJudge(rt.state, verdict), tried: { fen: r.fen, san: r.san, from: r.from, to: r.to } });
+        return;
+      }
       if (!ex && cur < n && ms[cur].uci === uci) {
         goTo(cur + 1);
         return;
@@ -234,6 +295,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
       play(soundKind(r.san));
       const st: Step = { fen: r.fen, san: r.san, from: r.from, to: r.to };
       setPreview(null);
+      setTipMode('move');
       setExplore(ex ? { ...ex, moves: [...ex.moves.slice(0, ex.cursor), st], cursor: ex.cursor + 1 } : { startFen: v.fen, basePly: cur, moves: [st], cursor: 1 });
     },
     [goTo],
@@ -298,12 +360,69 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     return () => clearTimeout(t);
   }, [preview]);
 
-  const bestPv = move && report ? report.evals[move.ply]?.lines[0]?.pv : undefined;
-  const bestLine = useMemo(() => (move && bestPv ? lineToSan(move.fenBefore, bestPv, 8) : []), [move, bestPv]);
+  /* Retry: a wrong move stays on the board for a beat, then the position resets */
+  const retryWrong = retry?.state.phase === 'wrong';
+  useEffect(() => {
+    if (!retryWrong) return;
+    const t = setTimeout(() => setRetry((r) => (r ? { ...r, state: retryResume(r.state), tried: null } : r)), 900 * motionScale());
+    return () => clearTimeout(t);
+  }, [retryWrong]);
+
+  const bestPv = shownMove && report ? report.evals[shownMove.ply]?.lines[0]?.pv : undefined;
+  const bestLine = useMemo(() => (shownMove && bestPv ? lineToSan(shownMove.fenBefore, bestPv, 8) : []), [shownMove, bestPv]);
   const showLine = () => {
-    if (!move || !bestPv) return;
-    const steps = lineSteps(move.fenBefore, bestPv, 8);
-    if (steps.length) setPreview({ startFen: move.fenBefore, steps, idx: -1 });
+    if (!shownMove || !bestPv || exploreRef.current) return;
+    const steps = lineSteps(shownMove.fenBefore, bestPv, 8);
+    if (steps.length) {
+      setRetry(null);
+      setPreview({ kind: 'best', startFen: shownMove.fenBefore, steps, idx: -1 });
+    }
+  };
+
+  /* Explain / Best / Retry buttons */
+  const canBest = !!shownMove && !exploring && !!bestPv && !!shownMove.best && shownMove.best.uci !== shownMove.uci && !BEST_FREE.has(shownMove.class);
+  const explainText = shownMove && classified ? coachExplainText(shownMove, shownMove.insight, mySide) : '';
+  const explainPv = shownMove && report ? report.evals[shownMove.ply + 1]?.lines[0]?.pv : undefined;
+  const canExplain = !!shownMove && !exploring && classified && explainText !== '';
+  const canRetry = !!shownMove && !exploring && classified && RETRY_CLASSES.has(shownMove.class) && !!evals[shownMove.ply]?.lines.length;
+  const toggleExplain = () => {
+    if (!shownMove || !canExplain) return;
+    if (tipMode === 'explain') {
+      setPreview(null);
+      setTipMode('move');
+      return;
+    }
+    setRetry(null);
+    setPlaying(false);
+    setTipMode('explain');
+    const steps = explainPv ? lineSteps(shownMove.fenAfter, explainPv, 5) : [];
+    setPreview(steps.length ? { kind: 'explain', startFen: shownMove.fenAfter, steps, idx: -1 } : null);
+  };
+  const toggleBest = () => {
+    if (!canBest) return;
+    if (tipMode === 'best') {
+      setPreview(null);
+      setTipMode('move');
+      return;
+    }
+    setPlaying(false);
+    setTipMode('best');
+    showLine();
+  };
+  const toggleRetry = () => {
+    if (!shownMove || !canRetry) return;
+    if (retry && !retryFinished(retry.state)) {
+      setRetry(null);
+      return;
+    }
+    setPreview(null);
+    setPlaying(false);
+    setTipMode('move');
+    setRetry({ ply: shownMove.ply, state: retryStart(), tried: null });
+  };
+  const showAnswer = () => {
+    setTipMode('best');
+    showLine();
   };
 
   /* Hotkeys */
@@ -330,13 +449,13 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   /* Autoplay: one move per second until the end */
   useEffect(() => {
     if (!playing) return;
-    if (explore || preview || ply >= N) {
+    if (explore || preview || retry || ply >= N) {
       setPlaying(false);
       return;
     }
     const t = setTimeout(() => goTo(plyRef.current + 1), 1000);
     return () => clearTimeout(t);
-  }, [playing, ply, explore, preview, N, goTo]);
+  }, [playing, ply, explore, preview, retry, N, goTo]);
 
   const help = useHotkeysWithHelp({
     arrowleft: () => stepBy(-1),
@@ -347,9 +466,11 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     end: last,
     f: () => setFlipped((f) => !f),
     escape: () => {
-      if (explore || preview) {
+      if (explore || preview || retry || tipMode !== 'move') {
         setExplore(null);
         setPreview(null);
+        setRetry(null);
+        setTipMode('move');
         return true;
       }
       return false;
@@ -357,7 +478,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   });
 
   /* Eval shown in the bar */
-  const shownEval: PositionEval | undefined = exploring ? (live && live.fen === view.fen ? live.e : undefined) : evals[preview ? Math.max(0, ply - 1) : ply];
+  const shownEval: PositionEval | undefined = exploring ? (live && live.fen === view.fen ? live.e : undefined) : evals[retry || preview?.kind === 'best' ? Math.max(0, ply - 1) : ply];
   const fraction = barFraction(shownEval);
 
   /* Graph */
@@ -397,7 +518,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   };
 
   const boardFen = view.fen;
-  const movableColor = sideToMoveOf(boardFen);
+  const movableColor = retryMove ? retryMove.color : sideToMoveOf(boardFen);
   const curIndex = explore ? explore.basePly : ply;
 
   const startLabel = useMemo(() => {
@@ -406,8 +527,17 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     return { number: Number(f[5]) || 1, black: f[1] === 'b' };
   }, [explore]);
 
+  // Hint after two wrong tries: light up the piece the engine would move.
+  const retryPulse = useMemo(() => {
+    if (!retry || !retryHint(retry.state)) return undefined;
+    const best = moves[retry.ply]?.best?.uci;
+    return best ? [best.slice(0, 2)] : undefined;
+  }, [retry, moves]);
+
+  // Phones in review mode: the board column is capped so board + coach strip + action row + nav bar fit one screen.
+  const phoneCoach = report !== null && mode === 'review';
   const board = (
-    <div>
+    <div className={phoneCoach ? 'max-lg:mx-auto max-lg:max-w-[max(15rem,calc(100dvh-29rem))]' : undefined}>
       <div className="flex items-stretch gap-2">
         <EvalBar fraction={fraction} e={shownEval} orientation={orientation} />
         <div className="min-w-0 flex-1">
@@ -416,12 +546,13 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
             orientation={orientation}
             lastMove={view.last}
             tints={tints}
-            arrows={preview ? undefined : arrows}
-            interactive={!preview}
+            arrows={arrows}
+            pulse={retryPulse}
+            interactive={retry ? retryCanMove(retry.state) : !preview}
             movableColor={movableColor}
             onMove={onMove}
             positionKey={gameKey}
-            badge={preview ? null : badge}
+            badge={preview || retry ? null : badge}
           />
         </div>
       </div>
@@ -437,6 +568,32 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   const startReview = () => {
     goTo(0, false);
     setMode('review');
+  };
+  const filterPlies = useMemo(() => (classFilter ? movesOfClass(moves, classFilter.side, classFilter.cls) : []), [classFilter, moves]);
+  const openClass = (side: Side, cls: MoveClass) => {
+    const plies = movesOfClass(moves, side, cls);
+    if (!plies.length) return;
+    setClassFilter({ side, cls });
+    goTo(plies[0] + 1, false);
+    setMode('review');
+  };
+  const stepFilter = (dir: 1 | -1) => {
+    const target = stepInClass(filterPlies, ply - 1, dir);
+    if (target === null) return;
+    setPlaying(false);
+    goTo(target + 1);
+  };
+  const filterView: ClassFilterView | null =
+    classFilter && filterPlies.length ? { ...classFilter, index: positionInClass(filterPlies, ply - 1), total: filterPlies.length } : null;
+  const retryInfo = retry && retryMove ? retryMessage(retry.state, retryMove.san) : null;
+  const actions: ReviewActions = {
+    canExplain,
+    canBest,
+    canRetry,
+    canNext: ply < N,
+    explainOn: tipMode === 'explain',
+    bestOn: tipMode === 'best',
+    retryOn: !!retry,
   };
   const seekFromSummary = (i: number) => {
     goTo(i, false);
@@ -466,6 +623,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           staleEngine={s.staleEngine}
           onStart={startReview}
           onSeek={seekFromSummary}
+          onOpenClass={openClass}
           onPractise={() => void practise()}
           onReanalyse={() => s.restart('lite')}
         />
@@ -495,11 +653,24 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         geom={geom}
         dots={dots}
         playing={playing}
+        perspective={mySide}
+        tipMode={tipMode}
+        retry={retryInfo}
+        filter={filterView}
+        actions={actions}
+        onExplain={toggleExplain}
+        onBest={toggleBest}
+        onRetry={toggleRetry}
+        onShowAnswer={showAnswer}
+        onFilterStep={stepFilter}
+        onFilterClear={() => setClassFilter(null)}
         onShowLine={showLine}
         onSummary={() => {
           setPlaying(false);
           setExplore(null);
           setPreview(null);
+          setRetry(null);
+          setClassFilter(null);
           setMode('summary');
         }}
         onFirst={first}
@@ -532,9 +703,28 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         board={board}
         side={side$}
         wideSide
+        top={
+          phoneCoach ? (
+            <div className="mb-2 lg:hidden">
+              <PhoneCoach
+                move={shownMove}
+                evalAfter={evals[ply]}
+                bestLine={bestLine}
+                previewing={preview !== null}
+                exploring={exploring}
+                perspective={mySide}
+                tipMode={tipMode}
+                retry={retryInfo}
+                onShowLine={showLine}
+                onShowAnswer={showAnswer}
+              />
+            </div>
+          ) : undefined
+        }
         dock={
           report && reviewing ? (
-            <div className="lg:hidden">
+            <div className="space-y-2 lg:hidden">
+              <ActionRow a={actions} onExplain={toggleExplain} onBest={toggleBest} onRetry={toggleRetry} onNext={() => stepBy(1)} />
               <ReviewNav explore={!!explore} ply={curIndex} count={N} playing={playing} onFirst={first} onBack={() => stepBy(-1)} onNext={() => stepBy(1)} onLast={last} onTogglePlay={() => setPlaying((v) => !v)} />
             </div>
           ) : undefined

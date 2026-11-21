@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysedMove, EvalScore, PositionEval } from '@knightfall/core';
-import { barFraction, formatAccuracy, graphGeometry, initialPly, lineToSan, moveRows, nearestPoint, playUci, resultLabel } from './reviewLogic.ts';
+import { barFraction, formatAccuracy, graphGeometry, initialPly, lineToSan, moveRows, movesOfClass, nearestPoint, playUci, positionInClass, resultLabel, stepInClass } from './reviewLogic.ts';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const ev = (score: EvalScore): PositionEval => ({ fen: START, depth: 16, source: 'engine', lines: [], score });
@@ -88,5 +88,33 @@ describe('labels', () => {
     expect(initialPly('-1', 40)).toBe(0);
     expect(initialPly('abc', 40)).toBe(0);
     expect(initialPly(null, 40)).toBe(0);
+  });
+});
+
+describe('class filter helpers', () => {
+  const m = (ply: number, color: 'w' | 'b', cls: AnalysedMove['class']): AnalysedMove => ({ ...mv(ply, color, Math.floor(ply / 2) + 1), class: cls });
+  const moves = [m(0, 'w', 'mistake'), m(1, 'b', 'mistake'), m(2, 'w', 'good'), m(3, 'b', 'blunder'), m(4, 'w', 'mistake'), m(6, 'w', 'mistake')];
+  it("lists one side's moves of a class in game order", () => {
+    expect(movesOfClass(moves, 'w', 'mistake')).toEqual([0, 4, 6]);
+    expect(movesOfClass(moves, 'b', 'mistake')).toEqual([1]);
+    expect(movesOfClass(moves, 'w', 'blunder')).toEqual([]);
+  });
+  it('steps forward and back with wrap-around', () => {
+    const list = [0, 4, 6];
+    expect(stepInClass(list, 0, 1)).toBe(4);
+    expect(stepInClass(list, 6, 1)).toBe(0);
+    expect(stepInClass(list, 4, -1)).toBe(0);
+    expect(stepInClass(list, 0, -1)).toBe(6);
+  });
+  it('steps from a move that is not in the list', () => {
+    const list = [0, 4, 6];
+    expect(stepInClass(list, 2, 1)).toBe(4);
+    expect(stepInClass(list, 2, -1)).toBe(0);
+    expect(stepInClass(list, 9, 1)).toBe(0);
+    expect(stepInClass([], 2, 1)).toBeNull();
+  });
+  it('reports the 1-based position', () => {
+    expect(positionInClass([0, 4, 6], 4)).toBe(2);
+    expect(positionInClass([0, 4, 6], 5)).toBe(0);
   });
 });

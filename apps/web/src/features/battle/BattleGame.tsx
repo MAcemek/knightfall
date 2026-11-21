@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { BATTLE_MAX_STRIKES, type Puzzle } from '@knightfall/core';
 import { Board } from '../../shared/Board/index.ts';
 import { PuzzleBoard, PuzzlePrompt, ProgressDots, usePuzzleRunner } from '../../shared/PuzzlePlayer/index.ts';
+import { PhoneStepper, SolutionStepper } from '../puzzles/components/SolutionStepper.tsx';
+import { useHotkeys } from '../puzzles/useHotkeys.ts';
 import { prefetchSequence, sequencePuzzle } from '../../shared/puzzleSource.ts';
 import { burstAt, PALETTES, sfx } from '../../shared/fx/index.ts';
 import { Button, GameLayout, Icons, Modal, Panel, Pill } from '../../shared/ui.tsx';
@@ -81,6 +83,9 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
     },
   });
 
+  // ←/→ step back to the opponent's last move and forward again (the clock keeps running).
+  useHotkeys({ arrowleft: () => runner.stepBack(), arrowright: () => runner.stepForward() }, playing);
+
   const locked = out || timeUp;
   // Opponent (a bot) is out of lives: once you're ahead the win is yours — claim it or keep solving.
   const oppOut = state.opp.strikes >= BATTLE_MAX_STRIKES;
@@ -137,9 +142,12 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
         }
         board={board}
         dock={
-          <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
-            <PuzzlePrompt runner={runner} idleText="Get ready…" className="text-base!" />
-            {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
+          <div className="mt-3 space-y-2 lg:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <PuzzlePrompt runner={runner} idleText="Get ready…" className="text-base!" />
+              {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
+            </div>
+            <PhoneStepper runner={runner} />
           </div>
         }
         side={
@@ -147,6 +155,9 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
             <div className="flex items-center justify-between gap-3 max-lg:hidden">
               <PuzzlePrompt runner={runner} idleText="Get ready…" />
               {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
+            </div>
+            <div className="max-lg:hidden">
+              <SolutionStepper runner={runner} />
             </div>
             <div className="flex min-h-2 items-center justify-between gap-2">
               <ProgressDots runner={runner} />

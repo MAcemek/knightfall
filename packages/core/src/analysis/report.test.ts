@@ -156,8 +156,8 @@ describe('buildReport', () => {
     expect(report.counts.black).toMatchObject({ book: 1, best: 1, blunder: 1 });
     expect(Object.values(report.counts.white).reduce((a, b) => a + b, 0)).toBe(4);
   });
-  it('is version 2 and carries the Lichess-formula accuracy and the game-rating estimate', () => {
-    expect(report.version).toBe(2);
+  it('is version 3 and carries the Lichess-formula accuracy and the game-rating estimate', () => {
+    expect(report.version).toBe(3);
     expect(report.ratingAccuracy.white!).toBeGreaterThan(85);
     expect(report.ratingAccuracy.black!).toBeLessThan(25);
     // No known ratings: anchored on 1600, moved by the (clamped) accuracy gap.

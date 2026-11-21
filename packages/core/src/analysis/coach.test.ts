@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { accuracyGrade, CLASS_PHRASE, coachSummary, decisiveMoment, materialBalance, moveSentence, showsBestMove } from './coach.ts';
-import { MOVE_CLASSES, type AnalysedMove, type EvalScore, type GamePhase, type GameReport, type MoveClass } from './types.ts';
+import { accuracyGrade, CLASS_PHRASE, coachBestText, coachExplainText, coachMoveText, coachSummary, judgeRetry, decisiveMoment, materialBalance, moveSentence, showsBestMove } from './coach.ts';
+import { MOVE_CLASSES, type AnalysedMove, type EvalScore, type GamePhase, type GameReport, type MoveClass, type PositionEval, type Side } from './types.ts';
+import type { MoveInsight } from './insight.ts';
+
+type BestInsight = NonNullable<MoveInsight['best']>;
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const NO_BLACK_QUEEN = 'rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -108,5 +111,110 @@ describe('coachSummary', () => {
     expect(coachSummary(fake([0, 10, 0], { accuracy: 93 }), { perspective: 'w' })).toBe('Sharp, accurate play from start to finish!');
     expect(coachSummary(fake([0, 10, 0], { accuracy: 93 }), { perspective: null })).toBe("A game with chances for both sides. Let's look at the key moments.");
     expect(coachSummary(fake([0, 10, 0], { accuracy: 80 }), { perspective: 'w' })).toBe("A game with chances for both sides. Let's look at the key moments.");
+  });
+});
+
+describe('per-move coach text', () => {
+  const mv = (ply: number, color: Side = 'w', uci = 'a2a3') => ({ ply, color, uci, best: { san: 'Nd2' } });
+  const hang: MoveInsight = { motif: 'hangs-piece', piece: 'n', square: 'f3', material: 3, replySan: 'exf3' };
+
+  it('hangs-piece in each perspective, left behind vs moved onto', () => {
+    expect(coachMoveText(mv(0), hang, 'w')).toBe('That leaves your knight on f3 hanging. They can just take it.');
+    expect(coachMoveText(mv(0), hang, 'b')).toBe('That leaves their knight on f3 hanging. You can just take it.');
+    expect(coachMoveText(mv(0), hang, null)).toBe("That leaves White's knight on f3 hanging. Black can just take it.");
+    expect(coachMoveText(mv(0, 'w', 'd2f3'), hang, 'w')).toBe('That puts your knight on f3 where it can just be captured.');
+    expect(coachExplainText(mv(0), hang, 'w')).toBe('After exf3 you are a knight down.');
+    expect(coachExplainText(mv(1), hang, null)).toBe('Black plays exf3 and White ends up a knight down.');
+    expect(coachExplainText(mv(0), { ...hang, material: 2 }, 'w')).toBe('After exf3 you are 2 points of material down.');
+  });
+
+  const motifs: MoveInsight[] = [
+    { motif: 'allows-mate', mateIn: 2, replySan: 'Qh7+' },
+    { motif: 'allows-mate', mateIn: 1 },
+    { motif: 'misses-mate', mateIn: 3 },
+    hang,
+    { motif: 'misses-free-piece', piece: 'r', square: 'c4', material: 5 },
+    { motif: 'loses-material', material: 3, replySan: 'e4' },
+    { motif: 'misses-material', material: 2 },
+    { motif: 'walks-into-fork', piece: 'n', square: 'c2', material: 5, replySan: 'Nc2+' },
+    { motif: 'lets-off-hook' },
+    { motif: 'throws-win' },
+    { motif: 'drifts' },
+    { motif: 'sacrifice', piece: 'b', square: 'e6' },
+    { motif: 'only-move' },
+    { motif: 'checkmate' },
+    { motif: 'wins-free-piece', piece: 'q', square: 'd5', material: 9 },
+    { motif: 'book' },
+    { motif: 'forced' },
+  ];
+  it('says something sensible for every motif, every phrasing, every perspective', () => {
+    for (const ins of motifs) {
+      for (const persp of ['w', 'b', null] as (Side | null)[]) {
+        for (let ply = 0; ply < 6; ply++) {
+          for (const fn of [coachMoveText, coachExplainText]) {
+            const t = fn(mv(ply), ins, persp);
+            expect(t, `${ins.motif} ${persp} ${ply}`).not.toBe('');
+            expect(t).not.toMatch(/undefined|NaN|null|\[object/);
+            if (persp === null) expect(t).not.toMatch(/\b(you|your|they|their)\b/i);
+          }
+        }
+      }
+    }
+  });
+  it('uses you/they or White/Black by perspective', () => {
+    const miss: MoveInsight = { motif: 'misses-free-piece', piece: 'r', square: 'c4', material: 5 };
+    expect(coachMoveText(mv(0), miss, 'w')).toBe('You could have won a free rook on c4.');
+    expect(coachMoveText(mv(0), miss, 'b')).toBe('They could have won a free rook on c4.');
+    expect(coachMoveText(mv(0), miss, null)).toBe('White could have won a free rook on c4.');
+    expect(coachMoveText(mv(0, 'b'), miss, null)).toBe('Black could have won a free rook on c4.');
+    expect(coachMoveText(mv(0), { motif: 'allows-mate', mateIn: 1 }, 'w')).toBe('That lets them force checkmate next move.');
+  });
+  it('rotates phrasings by ply', () => {
+    const a = coachMoveText(mv(0), { motif: 'drifts' }, 'w');
+    expect(coachMoveText(mv(1), { motif: 'drifts' }, 'w')).not.toBe(a);
+    expect(coachMoveText(mv(2), { motif: 'drifts' }, 'w')).toBe(a);
+  });
+  it('is empty when there is nothing to add', () => {
+    expect(coachMoveText(mv(0), { motif: 'none' }, 'w')).toBe('');
+    expect(coachMoveText(mv(0), undefined, 'w')).toBe('');
+    expect(coachExplainText(mv(0), undefined, 'w')).toBe('');
+    expect(coachBestText(mv(0), { motif: 'drifts' }, 'w')).toBe('');
+    expect(coachBestText({ ply: 0, color: 'w', uci: 'a2a3' }, { motif: 'drifts', best: { reason: 'holds' } }, 'w')).toBe('');
+  });
+  it('coachBestText names the move for each reason', () => {
+    const reasons: BestInsight[] = [
+      { reason: 'mates', mateIn: 1 }, { reason: 'mates', mateIn: 3 },
+      { reason: 'wins-piece', piece: 'r', square: 'c4' }, { reason: 'wins-material', material: 2 },
+      { reason: 'saves-piece', piece: 'n' }, { reason: 'defends', piece: 'b', square: 'c1' },
+      { reason: 'castles' }, { reason: 'develops', piece: 'n' }, { reason: 'trades-when-ahead' },
+      { reason: 'keeps-advantage' }, { reason: 'holds' },
+    ];
+    for (const best of reasons) {
+      for (const persp of ['w', 'b', null] as (Side | null)[]) {
+        for (let ply = 0; ply < 3; ply++) {
+          const t = coachBestText(mv(ply), { motif: 'drifts', best }, persp);
+          expect(t).toMatch(/^Nd2 /);
+          expect(t).not.toMatch(/undefined|NaN/);
+        }
+      }
+    }
+    expect(coachBestText(mv(0), { motif: 'drifts', best: { reason: 'saves-piece', piece: 'n' } }, 'w')).toBe('Nd2 moves the knight out of danger.');
+  });
+});
+
+describe('judgeRetry', () => {
+  const l = (cp: number, ...pv: string[]) => ({ score: { cp }, pv });
+  const evalOf = (...lines: ReturnType<typeof l>[]): PositionEval => ({ fen: START, depth: 14, source: 'engine', lines, score: lines[0].score });
+  it('best / good / wrong, from either side', () => {
+    const w = evalOf(l(100, 'e2e4'), l(80, 'd2d4'), l(-200, 'a2a3'));
+    expect(judgeRetry(w, 'e2e4', 'w')).toBe('best');
+    expect(judgeRetry(w, 'd2d4', 'w')).toBe('good');
+    expect(judgeRetry(w, 'a2a3', 'w')).toBe('wrong');
+    expect(judgeRetry(w, 'h2h3', 'w')).toBe('wrong');
+    const b = evalOf(l(-100, 'e7e5'), l(50, 'd7d5'));
+    expect(judgeRetry(b, 'e7e5', 'b')).toBe('best');
+    expect(judgeRetry(b, 'd7d5', 'b')).toBe('wrong');
+    expect(judgeRetry(evalOf(l(-100, 'e7e5'), l(-120, 'd7d5')), 'd7d5', 'b')).toBe('good');
+    expect(judgeRetry({ ...w, lines: [] }, 'e2e4', 'w')).toBe('wrong');
   });
 });

@@ -12,7 +12,7 @@ Run from the repo root (npm workspaces).
 | --- | --- |
 | `npm run dev` | Web on :5173 and the battle/API server on :8787 |
 | `npm run typecheck` | `tsc` in every workspace |
-| `npm test` | All unit tests (vitest, about 450 tests, about 6 s) |
+| `npm test` | All unit tests (vitest, about 800 tests, about 6 s) |
 | `npm run build` | Production build of web and server |
 
 A change is done when `npm run typecheck`, `npm test` and `npm run build` all pass. CI runs the same three

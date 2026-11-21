@@ -2,13 +2,20 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BATTLE_DURATION_MS, BATTLE_MAX_STRIKES, formatCode, normalizeCode } from '@knightfall/core';
-import { db, type BattleRecord } from '../../shared/db.ts';
+import { db, getKV, KEYS, type BattleRecord } from '../../shared/db.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
 import { serverNow, useConnection } from '../../shared/battle/connection.ts';
+import { serverSupports } from '../../shared/battle/connectionLogic.ts';
 import { codeProblem, formatCodeInput, MOVED_TEXT, outgoingMessage } from '../../shared/battle/challengeLogic.ts';
-import { cancelChallenge, dismissChallengeResult, sendChallenge, useChallenges } from '../../shared/battle/store.ts';
+import { cancelChallenge, dismissChallengeResult, forgetOpponent, sendChallenge, useChallenges } from '../../shared/battle/store.ts';
+import { ClubCard } from './ClubCard.tsx';
+import { clubLabel } from './clubLogic.ts';
+import { sanitizeRecent } from './recentOpponents.ts';
+import { SettingsControls } from './SettingsControls.tsx';
+import { useFriendPrefs, type PrefsPatch } from './useFriendPrefs.ts';
+import type { FriendPrefs } from './friendSettings.ts';
 import type { BattleApi } from './useBattle.ts';
 import { formatClock, isInteractiveTarget, isTypingTarget, timeAgo, useNow } from './util.ts';
 
@@ -21,6 +28,7 @@ const RESULT_STYLE: Record<BattleRecord['result'], { letter: string; cls: string
 function tally(battles: BattleRecord[]) {
   const r = { win: 0, loss: 0, draw: 0, best: 0 };
   for (const b of battles) {
+    if (b.club) continue; // club races are not 1-on-1 battles
     r[b.result]++;
     r.best = Math.max(r.best, b.you.solved);
   }
@@ -34,6 +42,7 @@ export function Lobby({ api }: { api: BattleApi }) {
   const all = useLiveQuery(() => db.battles.orderBy('at').reverse().toArray(), []);
   const recent = useMemo(() => all?.slice(0, 12), [all]);
   const searching = state.phase === 'searching' || state.phase === 'connecting';
+  const [prefs, setPrefs] = useFriendPrefs();
 
   // Career totals (hero pills) over every battle; the side panel lists the latest 12.
   const record = useMemo(() => tally(all ?? []), [all]);
@@ -76,7 +85,8 @@ export function Lobby({ api }: { api: BattleApi }) {
           {searching ? <Searching api={api} /> : <Hero api={api} rating={profile?.battleRating} record={record} />}
         </Panel>
 
-        {!searching && <FriendCard />}
+        {!searching && <FriendCard prefs={prefs} onPrefs={setPrefs} />}
+        {!searching && <ClubCard prefs={prefs} onPrefs={setPrefs} />}
 
         <Panel>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">How it works</h2>
@@ -126,7 +136,7 @@ export function Lobby({ api }: { api: BattleApi }) {
 }
 
 /** "Play a friend": my code (copy / share), a box for a friend's code, and the state of a challenge in flight. */
-function FriendCard() {
+function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: PrefsPatch) => void }) {
   const connection = useConnection();
   const { outgoing } = useChallenges();
   const [params] = useSearchParams();
@@ -136,6 +146,8 @@ function FriendCard() {
   useNow(250, outgoing.kind === 'waiting');
 
   const code = connection.code;
+  // Only once the server has answered `hello`: before that its capabilities are not known yet.
+  const settingsUnavailable = (connection.status === 'online' || connection.status === 'outdated') && !serverSupports(connection.serverCaps, 'settings');
   const problem = codeProblem(input);
   const typed = normalizeCode(input).length;
   const message = outgoingMessage(outgoing, serverNow());
@@ -215,7 +227,7 @@ function FriendCard() {
               className="mt-1 flex flex-col gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!problem && !connection.moved) sendChallenge(input);
+                if (!problem && !connection.moved) sendChallenge(input, prefs.settings, prefs.series);
               }}
             >
               <div className="flex gap-2">
@@ -233,7 +245,7 @@ function FriendCard() {
                   autoCorrect="off"
                   spellCheck={false}
                   aria-invalid={typed === 6 && !!problem}
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 font-mono text-lg font-bold uppercase tracking-widest text-ink-100 placeholder:text-ink-500 focus-visible:outline-2 focus-visible:outline-ember-400"
+                  className="h-11 w-0 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 font-mono text-lg font-bold uppercase tracking-widest text-ink-100 placeholder:text-ink-500 focus-visible:outline-2 focus-visible:outline-ember-400"
                 />
                 <Button type="submit" variant="primary" disabled={!!problem || connection.moved}>
                   Challenge
@@ -244,6 +256,12 @@ function FriendCard() {
           )}
         </div>
       </div>
+      <div className="mt-4">
+        <div className="mb-1.5 text-xs font-semibold text-ink-400">Battle settings</div>
+        <SettingsControls prefs={prefs} onChange={onPrefs} withSeries disabled={settingsUnavailable} />
+        {settingsUnavailable && <p className="mt-1.5 text-xs text-ink-400">Custom settings need the updated battle server</p>}
+      </div>
+      <RecentOpponents prefs={prefs} busy={outgoing.kind === 'waiting' || outgoing.kind === 'sending' || connection.moved} />
       {outgoing.kind === 'result' && message && (
         <div className="mt-3 flex animate-pop items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
           <span>{message.text}</span>
@@ -253,6 +271,42 @@ function FriendCard() {
         </div>
       )}
     </Panel>
+  );
+}
+
+/** Friends played in friend battles: one tap to challenge again with the current settings. */
+function RecentOpponents({ prefs, busy }: { prefs: FriendPrefs; busy: boolean }) {
+  const list = useLiveQuery(async () => sanitizeRecent(await getKV<unknown>(KEYS.recentOpponents, [])), []);
+  if (!list?.length) return null;
+  return (
+    <div className="mt-4">
+      <div className="mb-1.5 text-xs font-semibold text-ink-400">Recent opponents</div>
+      <ul className="space-y-1.5">
+        {list.map((o) => (
+          <li key={o.code} className="flex items-center gap-2 rounded-xl bg-ink-800/60 py-1.5 pl-3 pr-1.5">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">
+                {o.name} <span className="font-mono text-xs text-ink-400">({o.rating})</span>
+              </div>
+              <div className="font-mono text-xs text-ink-400">
+                <span className="text-good-400">{o.w}W</span>-<span className="text-bad-400">{o.l}L</span>-{o.d}D
+              </div>
+            </div>
+            <Button size="sm" variant="secondary" className="min-h-11" disabled={busy} onClick={() => sendChallenge(o.code, prefs.settings, prefs.series)}>
+              Challenge
+            </Button>
+            <button
+              type="button"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-400 hover:text-ink-100"
+              onClick={() => forgetOpponent(o.code)}
+              aria-label={`Remove ${o.name}`}
+            >
+              {Icons.x('h-4 w-4')}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -324,21 +378,28 @@ function RecentRow({ b }: { b: BattleRecord }) {
   const delta = b.ratingAfter - b.ratingBefore;
   return (
     <li className="flex items-center gap-3 rounded-xl bg-ink-800/60 px-3 py-2.5">
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black ring-1 ${st.cls}`}>{st.letter}</span>
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black ring-1 ${st.cls}`}>{b.club ? b.club.place : st.letter}</span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold">
-          {b.opponentName} <span className="font-mono text-xs text-ink-400">({b.opponentRating})</span>
+          {b.club ? (
+            clubLabel(b.club)
+          ) : (
+            <>
+              {b.opponentName} <span className="font-mono text-xs text-ink-400">({b.opponentRating})</span>
+            </>
+          )}
         </div>
         <div className="text-xs text-ink-400">
           {timeAgo(b.at)}
-          {b.friendly && ' · Casual'}
+          {b.friendly && !b.club && ' · Casual'}
+          {b.series && b.series.length === 3 && ` · Best of 3 (${b.series.me}–${b.series.opp})`}
           {b.reason === 'opponent-left' && ' · opponent left'}
           {b.reason === 'resigned' && ' · resigned'}
         </div>
       </div>
       <div className="text-right">
         <div className="font-mono text-sm font-bold">
-          {b.you.solved}–{b.opponent.solved}
+          {b.club ? b.you.solved : `${b.you.solved}–${b.opponent.solved}`}
         </div>
         <div className={`font-mono text-xs font-semibold ${delta > 0 ? 'text-good-400' : delta < 0 ? 'text-bad-400' : 'text-ink-400'}`}>
           {b.friendly ? 'Casual' : delta > 0 ? `+${delta}` : delta < 0 ? `−${Math.abs(delta)}` : '±0'}

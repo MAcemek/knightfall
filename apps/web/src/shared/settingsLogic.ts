@@ -17,6 +17,8 @@ export interface Settings {
   autoAdvance: boolean;
   /** Queue a move while the opponent is replying (puzzles, Rush, Battle). */
   premoves: boolean;
+  /** Add mistakes from analysed games to Train automatically. */
+  autoGamePuzzles: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showCoords: true,
   autoAdvance: false,
   premoves: true,
+  autoGamePuzzles: true,
 };
 
 export interface BoardTheme {
@@ -71,6 +74,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     showCoords: typeof r.showCoords === 'boolean' ? r.showCoords : d.showCoords,
     autoAdvance: typeof r.autoAdvance === 'boolean' ? r.autoAdvance : d.autoAdvance,
     premoves: typeof r.premoves === 'boolean' ? r.premoves : d.premoves,
+    autoGamePuzzles: typeof r.autoGamePuzzles === 'boolean' ? r.autoGamePuzzles : d.autoGamePuzzles,
   };
 }
 

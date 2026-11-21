@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatInterval, useReviewSummary } from '../../shared/progress/index.ts';
 import { THEME_GROUPS, themeLabel } from '../../shared/themes.ts';
@@ -15,6 +15,23 @@ function readLast(): { themes: string[]; difficulty: Difficulty } {
   } catch {
     return { themes: [], difficulty: 'normal' };
   }
+}
+
+function HubCard({ icon, title, text, onOpen }: { icon: (c?: string) => ReactNode; title: string; text: string; onOpen: () => void }) {
+  return (
+    <Panel className="mb-4 flex animate-rise flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-ink-800 text-ember-400">{icon('h-6 w-6')}</div>
+        <div className="min-w-0">
+          <h2 className="text-lg font-extrabold">{title}</h2>
+          <p className="text-sm text-ink-400">{text}</p>
+        </div>
+      </div>
+      <Button variant="secondary" onClick={onOpen}>
+        {icon('h-4 w-4')} Open
+      </Button>
+    </Panel>
+  );
 }
 
 /** /train — review queue status + theme picker. */
@@ -35,7 +52,7 @@ export function TrainHub() {
   const due = summary?.due ?? 0;
   let reviewLine = '';
   if (summary) {
-    if (summary.total === 0) reviewLine = 'Puzzles you miss in Puzzles, Rush or theme training land here automatically.';
+    if (summary.total === 0) reviewLine = 'Puzzles you miss in Puzzles, Rush or theme training, and mistakes from your analysed games, land here automatically.';
     else if (due === 0) {
       const wait = formatInterval(Math.max(60_000, (summary.nextDueAt ?? Date.now()) - Date.now()));
       reviewLine = `All caught up · ${summary.total} in rotation · next in ${wait}`;
@@ -58,6 +75,10 @@ export function TrainHub() {
           {Icons.layers('h-4 w-4')} {due ? `Review ${due}` : 'Nothing due'}
         </Button>
       </Panel>
+
+      <HubCard icon={Icons.search} title="From my games" text="Your own mistakes from analysed games, as puzzles." onOpen={() => navigate('/train/games')} />
+      <HubCard icon={Icons.bulb} title="Openings" text="Learn the named lines move by move, then get tested on them." onOpen={() => navigate('/train/openings')} />
+      <HubCard icon={Icons.trophy} title="Endgames" text="Play key endings against perfect defence." onOpen={() => navigate('/train/endgames')} />
 
       <div className="animate-rise" style={{ animationDelay: '60ms' }}>
         <Panel className="space-y-4">

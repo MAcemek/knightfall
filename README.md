@@ -13,10 +13,10 @@ game review for your own Lichess and chess.com games.
 | Mode | Route | What it is |
 | --- | --- | --- |
 | **Puzzles** | `/puzzles` | Glicko-2 rated puzzles picked near your rating. Clean solves gain rating, hinted solves are neutral, misses cost rating. Solve streak with milestones, hints (H), retry (R, unrated), solution (S), flip (F), auto-next, and a replayable history strip |
-| **Train** | `/train` | Theme training (forks, pins, mates…) and a spaced-repetition queue of puzzles you missed |
+| **Train** | `/train` | Theme training (forks, pins, mates…) and a spaced-repetition queue of puzzles you missed. **From my games** (`/train/games`) turns the mistakes in your analysed games into puzzles automatically; **Openings** (`/train/openings`) drills the named lines of the openings you pick with spaced repetition; **Endgames** (`/train/endgames`) plays key endings against perfect defence from the Lichess tablebase |
 | **Daily** | `/daily` | One puzzle per UTC day, identical for everyone. Daily streak, countdown to the next puzzle, month calendar; past days can be played late (shown on the calendar, not counted for the streak). Spoiler-free share text |
 | **Rush** | `/rush` | 3 min / 5 min / Survival. Difficulty ramps up, combos build, three strikes and you're out. Personal bests per mode, game-over stats and an untimed review of every puzzle in the run |
-| **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign. Or challenge a friend by code (casual, unrated; invitations arrive on any page) |
+| **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign. Or challenge a friend by code (casual, unrated; invitations arrive on any page) with your choice of time (1/3/5 min), difficulty and best of 1 or 3, and re-challenge **recent opponents** in one tap. A **club room** lets a host open a room code where everyone races the same puzzles at once with a live ranking (single race, spectators can join mid-race) |
 | **Custom** | `/custom` | Board editor → record the solution → optional engine check → add title, themes and difficulty → save locally. Play, edit, share as a self-contained link (`/custom/s#…`), export/import JSON |
 | **Game Review** | `/analysis` | Paste a Lichess or chess.com link or a PGN, or import recent games by username. Stockfish runs in your browser (plus Lichess cloud evals for known positions): accuracy per side, classified moves, eval graph, key moments, free exploration, and "practise your mistakes", which turns your errors into puzzles |
 | **Stats** | `/stats` | Rating chart, theme strengths, activity heatmap and achievements |
@@ -91,9 +91,10 @@ Knightfall talks only to public endpoints and never sends credentials:
   Lichess cloud-eval API.
 - A chess.com game link is resolved by Knightfall's own server, which looks the game up on chess.com
   (cached, rate-limited, numeric game IDs only).
+- Endgame drills query the Lichess tablebase at `tablebase.lichess.ovh` (GET, position FEN only, no credentials; not cached offline).
 - Battles connect to Knightfall's own WebSocket server.
 - While the app is open it keeps a connection to Knightfall's battle server (for friend challenges and Puzzle Battle).
-  The connection shares your display name and battle rating with that server, plus a random friend code and token.
+  The connection shares your display name and battle rating with that server, plus a random friend code and token. In a friend battle your friend code is shared with your opponent so they can re-challenge you.
 
 ## Credits
 

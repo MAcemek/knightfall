@@ -1,4 +1,4 @@
-import { BATTLE_MAX_STRIKES, BATTLE_REMATCH_WINDOW_MS, eloUpdate, type BattleScore, type PlayerInfo, type ServerMessage } from '@knightfall/core';
+import { BATTLE_MAX_STRIKES, BATTLE_REMATCH_WINDOW_MS, eloUpdate, type BattleScore, type BattleSettings, type PlayerInfo, type SeriesInfo, type ServerMessage } from '@knightfall/core';
 
 /**
  * Puzzle Battle client state machine (pure). Server messages and local events go through
@@ -8,6 +8,8 @@ import { BATTLE_MAX_STRIKES, BATTLE_REMATCH_WINDOW_MS, eloUpdate, type BattleSco
 /** Shared with the server bot (packages/core protocol.ts) so bots' difficulty tracks what humans see. */
 export { BATTLE_RAMP } from '@knightfall/core';
 export const REMATCH_WINDOW_MS = BATTLE_REMATCH_WINDOW_MS;
+/** The server starts the next game of an undecided series this long after a game ends. */
+export const SERIES_NEXT_GAME_MS = 6000;
 
 export type Phase = 'lobby' | 'connecting' | 'searching' | 'matched' | 'playing' | 'ended';
 export type RematchState = 'none' | 'requested' | 'offered' | 'unavailable';
@@ -28,6 +30,11 @@ export interface MatchInfo {
   endsAt: number;
   /** Friend challenge: casual, no rating change. Sticks to rematches. */
   friendly?: boolean;
+  /** Friend code of the opponent (friendly games only). */
+  opponentCode?: string;
+  settings?: BattleSettings;
+  /** Best-of-3 state before this game. */
+  series?: SeriesInfo;
 }
 
 export interface EndInfo {
@@ -131,7 +138,7 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
         ...s,
         phase: 'matched',
         error: null,
-        match: { roomId: msg.roomId, seed: msg.seed, me, opponent: msg.opponent, startsAt: 0, endsAt: 0, ...(msg.friendly ? { friendly: true } : {}) },
+        match: { roomId: msg.roomId, seed: msg.seed, me, opponent: msg.opponent, startsAt: 0, endsAt: 0, ...(msg.friendly ? { friendly: true } : {}), ...(msg.opponentCode ? { opponentCode: msg.opponentCode } : {}), ...(msg.settings ? { settings: msg.settings } : {}), ...(msg.series ? { series: msg.series } : {}) },
         me: { solved: 0, strikes: 0 },
         opp: { solved: 0, strikes: 0 },
         oppTick: 0,
@@ -169,4 +176,38 @@ export const resultScore = (r: EndInfo['result']) => (r === 'win' ? 1 : r === 'd
 /** Rating after a battle: friendly (casual) battles never move it. */
 export function ratingAfterBattle(match: Pick<MatchInfo, 'me' | 'opponent' | 'friendly'>, result: EndInfo['result']): number {
   return match.friendly ? match.me.rating : eloUpdate(match.me.rating, match.opponent.rating, resultScore(result));
+}
+
+/** A best-of-3 after one more game: points (1 per win, 0.5 per draw) and whether it is settled. */
+export function seriesAfter(series: SeriesInfo, result: EndInfo['result'], reason: EndInfo['reason']): SeriesInfo & { over: boolean } {
+  const me = series.me + (result === 'win' ? 1 : result === 'draw' ? 0.5 : 0);
+  const opp = series.opp + (result === 'loss' ? 1 : result === 'draw' ? 0.5 : 0);
+  const left = reason === 'opponent-left' || reason === 'resigned';
+  return { ...series, me, opp, over: left || me >= 2 || opp >= 2 || series.game >= series.length };
+}
+
+/** Intro-card line: "Same puzzles. Three minutes. Three strikes." plus the game number in a best-of-3. */
+export function introTagline(settings?: BattleSettings, series?: SeriesInfo): string {
+  const ms = settings?.durationMs;
+  const word = ms === 60_000 ? 'One minute' : ms === 300_000 ? 'Five minutes' : 'Three minutes';
+  const game = series && series.length === 3 ? ` Game ${series.game} of 3.` : '';
+  return `Same puzzles. ${word}. Three strikes.${game}`;
+}
+
+/** Resign-modal body text. */
+export function resignText(friendly: boolean | undefined, series?: SeriesInfo): string {
+  if (series?.length === 3) return 'Your opponent takes the win, and this ends the whole series. Casual, so your battle rating stays the same.';
+  return friendly
+    ? 'Your opponent takes the win. This is a casual battle, so your battle rating stays the same.'
+    : 'Your opponent takes the win and your battle rating drops.';
+}
+
+/** End-screen line for a series. `nextIn` is whole seconds until the next game starts. */
+export function seriesText(s: SeriesInfo & { over: boolean }, reason: EndInfo['reason'], nextIn: number): string {
+  const score = `${s.me}–${s.opp}`;
+  if (reason === 'opponent-left') return `Your opponent left · series ended ${score}`;
+  if (reason === 'resigned') return `You left the series at ${score}`;
+  if (s.over) return s.me > s.opp ? `You won the series ${score}` : s.me < s.opp ? `You lost the series ${score}` : `Series drawn ${score}`;
+  const lead = s.me > s.opp ? `You lead ${score}` : s.me < s.opp ? `Opponent leads ${score}` : `Tied ${score}`;
+  return `Game ${s.game} of ${s.length} · ${lead} · next game in ${Math.max(0, nextIn)}…`;
 }

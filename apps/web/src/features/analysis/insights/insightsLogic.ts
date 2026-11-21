@@ -1,6 +1,8 @@
 import type { GamePhase, GameReport, MoveClass, Motif } from '@knightfall/core';
 import type { StoredGame } from '../../../shared/db.ts';
-import { userSide } from '../review/reviewExtras.ts';
+import { resolveSide, type KnownUsers } from '../../../shared/analysis/side.ts';
+
+export type { KnownUsers };
 
 /** Pure aggregation for the Insights page (no React, no IndexedDB). */
 
@@ -12,22 +14,6 @@ export type InsightGameInfo = Pick<StoredGame, 'key' | 'source' | 'white' | 'bla
 export interface InsightInput {
   game: InsightGameInfo;
   report: GameReport;
-}
-
-export interface KnownUsers {
-  lichessUser: string;
-  chesscomUser: string;
-}
-
-/**
- * The side the user played: the username the game was imported for, or else the remembered username of that
- * site (analysis prefs). Null when neither matches (pasted games, other players' games).
- */
-export function resolveSide(game: Pick<InsightGameInfo, 'source' | 'white' | 'black' | 'importedFor'>, users: KnownUsers): 'w' | 'b' | null {
-  const fromImport = userSide(game);
-  if (fromImport) return fromImport;
-  const remembered = game.source === 'lichess' ? users.lichessUser : game.source === 'chesscom' ? users.chesscomUser : '';
-  return remembered ? userSide({ white: game.white, black: game.black, importedFor: remembered }) : null;
 }
 
 /* ---------- mistake motifs ---------- */

@@ -174,7 +174,9 @@ export interface BattleSummary {
   peak: number | null;
 }
 
-export function battleSummary(battles: readonly Pick<BattleRecord, 'result' | 'ratingAfter'>[]): BattleSummary {
+/** Club races are not 1-on-1 battles, so they stay out of the record. */
+export function battleSummary(all: readonly Pick<BattleRecord, 'result' | 'ratingAfter' | 'club'>[]): BattleSummary {
+  const battles = all.filter((b) => !b.club);
   const wins = battles.filter((b) => b.result === 'win').length;
   const losses = battles.filter((b) => b.result === 'loss').length;
   return {

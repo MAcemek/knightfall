@@ -1,7 +1,7 @@
 import type { PlayedPuzzle } from './battleState.ts';
 
 /** Compact ✓/✗ chips for the puzzles played in a battle (newest last). */
-export function PuzzleChips({ history, links = false }: { history: PlayedPuzzle[]; links?: boolean }) {
+export function PuzzleChips({ history, links = false }: { history: readonly PlayedPuzzle[]; links?: boolean }) {
   return (
     <ol className="flex flex-wrap gap-1.5">
       {history.map((p, i) => {

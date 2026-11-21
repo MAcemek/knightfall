@@ -3,6 +3,7 @@ import { parsePgnGame, REPORT_VERSION, type GameReport, type ParsedGame, type Po
 import type { StoredGame } from '../db.ts';
 import { analysePositions, cloudEval, ENGINE_BUILD, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
 import { buildReportOffThread } from './reportClient.ts';
+import { autoAddGamePuzzles } from './practice.ts';
 import { getAnalysis, getAnalysisPrefs, getGame, saveAnalysis } from './store.ts';
 
 /**
@@ -97,6 +98,8 @@ function createSession(gameKey: string): AnalysisSession {
       await saveAnalysis({ gameKey, analysedAt, engine, depth, report, engineBuild: ENGINE_BUILD });
       if (mine !== run) return;
       set({ status: 'done', report, evals: all, done: all.length, analysedAt });
+      // Automatic "puzzles from your games"; a failure here must not affect the finished review.
+      void autoAddGamePuzzles(game, report).catch(() => {});
     } catch (e) {
       if (mine !== run || isAbortError(e)) return;
       set({ status: 'error', error: e instanceof Error ? e.message : 'The analysis failed.' });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { difficultyOffset, EMPTY_TALLY, MAX_THEMES, parseDifficulty, parseThemeParam, tally, tallyAccuracy, themeParam, toggleTheme, trainTargetRating } from './trainLogic.ts';
+import type { ReviewItem } from '../../shared/db.ts';
+import { difficultyOffset, EMPTY_TALLY, MAX_THEMES, parseDifficulty, parseThemeParam, reviewOutcomeLine, tally, tallyAccuracy, themeParam, toggleTheme, trainTargetRating } from './trainLogic.ts';
 
 describe('parseThemeParam / themeParam', () => {
   it('keeps valid themes, drops junk and duplicates', () => {
@@ -46,5 +47,15 @@ describe('tally', () => {
     for (const s of [true, true, false, true]) t = tally(t, s);
     expect(t).toEqual({ attempted: 4, solved: 3, streak: 1, bestStreak: 2 });
     expect(tallyAccuracy(t)).toBe('75%');
+  });
+});
+
+describe('reviewOutcomeLine', () => {
+  const item = { due: 1_000_000 + 2 * 24 * 3600_000 } as ReviewItem;
+  it('announces graduation, the next review or the comeback', () => {
+    expect(reviewOutcomeLine({ item: null, graduated: true }, true, 0)).toBe('Mastered — removed from your queue');
+    expect(reviewOutcomeLine({ item: null, graduated: false }, true, 0)).toBeNull();
+    expect(reviewOutcomeLine({ item, graduated: false }, true, 1_000_000)).toMatch(/^Next review in /);
+    expect(reviewOutcomeLine({ item, graduated: false }, false, 1_000_000)).toMatch(/^Back in /);
   });
 });

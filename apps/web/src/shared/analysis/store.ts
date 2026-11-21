@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { OpeningTable } from '@knightfall/core';
+import { GAME_PUZZLE_PREFIX, type OpeningTable } from '@knightfall/core';
 import { db, getKV, KEYS, setKV, type GameSource, type StoredAnalysis, type StoredGame } from '../db.ts';
 import type { EngineId } from '../engine/index.ts';
 import { fetchChesscomUserGames, fetchLichessUserGames, resolveGameInput } from '../importers/index.ts';
+import { isPuzzleOfGame } from './gamePuzzleLogic.ts';
 
 /** IndexedDB side of Game Review: imported games, finished analyses, preferences, and the import entry points. */
 
@@ -64,11 +65,15 @@ export async function saveAnalysis(row: StoredAnalysis): Promise<void> {
   await db.analyses.put(row);
 }
 
-/** Remove a game and its analysis. Practice puzzles made from it are kept. */
+/** Remove a game, its analysis, and the practice puzzles (with their review rows) made from it. */
 export async function deleteGame(key: string): Promise<void> {
-  await db.transaction('rw', db.games, db.analyses, async () => {
+  await db.transaction('rw', db.games, db.analyses, db.customPuzzles, db.reviews, async () => {
     await db.games.delete(key);
     await db.analyses.delete(key);
+    const ids = (await db.customPuzzles.where('id').startsWith(`${GAME_PUZZLE_PREFIX}${key}-`).primaryKeys()) as string[];
+    const own = ids.filter((id) => isPuzzleOfGame(id, key));
+    await db.customPuzzles.bulkDelete(own);
+    await db.reviews.bulkDelete(own);
   });
 }
 

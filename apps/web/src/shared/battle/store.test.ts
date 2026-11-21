@@ -35,7 +35,7 @@ vi.mock('./connection.ts', () => ({
 vi.mock('../db.ts', () => ({
   db: { battles: { add: fake.battlesAdd } },
   defaults: { battleRating: 1200 },
-  KEYS: { battleRating: 'battleRating' },
+  KEYS: { battleRating: 'battleRating', recentOpponents: 'recentOpponents' },
   getKV: (_k: string, d: unknown) => Promise.resolve(d),
   setKV: fake.setKV,
 }));
@@ -46,7 +46,7 @@ type Store = typeof import('./store.ts');
 let store: Store;
 
 const emit = (msg: ServerMessage) => fake.listeners.forEach((fn) => fn({ type: 'message', msg }));
-const online = (patch: Partial<ConnSnapshot> = {}): ConnSnapshot => ({ status: 'online', code: 'ABCDEF', socketOpen: true, moved: false, ...patch });
+const online = (patch: Partial<ConnSnapshot> = {}): ConnSnapshot => ({ status: 'online', code: 'ABCDEF', socketOpen: true, moved: false, serverCaps: ['settings', 'club'], ...patch });
 
 beforeEach(async () => {
   vi.resetModules();
@@ -87,6 +87,19 @@ describe('friend flow', () => {
     expect(fake.sent.filter((m) => m.type === 'challenge')).toEqual([]);
   });
 
+  it('a server without the settings capability still gets plain challenges, but not custom settings or a series', () => {
+    fake.snap = online({ serverCaps: [] });
+    store.sendChallenge('GHJKMN', { durationMs: 60_000, level: 'harder' }, 1);
+    expect(store.getChallengeSnapshot().outgoing).toEqual({ kind: 'result', status: 'server-outdated', name: null });
+    store.dismissChallengeResult();
+    store.sendChallenge('GHJKMN', undefined, 3);
+    expect(store.getChallengeSnapshot().outgoing).toMatchObject({ kind: 'result', status: 'server-outdated' });
+    expect(fake.sent.filter((m) => m.type === 'challenge')).toEqual([]);
+    store.dismissChallengeResult();
+    store.sendChallenge('GHJKMN');
+    expect(fake.sent.filter((m) => m.type === 'challenge')).toEqual([{ type: 'challenge', code: 'GHJKMN' }]);
+  });
+
   it('a friendly battle leaves the battle rating unchanged and is stored as friendly', () => {
     emit({ type: 'matched', roomId: 'r2', seed: 1, opponent: { name: 'Bo', rating: 1000 }, friendly: true });
     emit({ type: 'end', result: 'win', reason: 'time', you: { solved: 5, strikes: 0 }, opponent: { solved: 1, strikes: 1 } });
@@ -117,5 +130,31 @@ describe('friend flow', () => {
     store.sendChallenge('GHJKMN');
     expect(store.getChallengeSnapshot().outgoing).toMatchObject({ kind: 'result', status: 'server-moved' });
     expect(fake.sent).toEqual([]);
+  });
+});
+
+describe('friend settings and recent opponents', () => {
+  it('a plain challenge sends no extra fields; custom options are sent', () => {
+    store.sendChallenge('GHJKMN');
+    expect(fake.sent.filter((m) => m.type === 'challenge')).toEqual([{ type: 'challenge', code: 'GHJKMN' }]);
+    store.cancelChallenge();
+    fake.sent = [];
+    const settings = { durationMs: 60_000 as const, level: 'harder' as const };
+    store.sendChallenge('PQRSTV', settings, 3);
+    expect(fake.sent.filter((m) => m.type === 'challenge')).toEqual([{ type: 'challenge', code: 'PQRSTV', settings, series: 3 }]);
+  });
+
+  it('keeps the settings on an invitation', () => {
+    const settings = { durationMs: 300_000 as const, level: 'easier' as const };
+    emit({ type: 'challenge-received', id: 'c9', from: { name: 'Ann', rating: 1000 }, expiresAt: Date.now() + 60_000, serverNow: Date.now(), settings, series: 3 });
+    expect(store.getChallengeSnapshot().incoming[0]).toMatchObject({ id: 'c9', settings, series: 3 });
+  });
+
+  it('remembers a friendly opponent on matched and counts the result on end', async () => {
+    emit({ type: 'matched', roomId: 'r9', seed: 1, opponent: { name: 'Bo', rating: 1000 }, friendly: true, opponentCode: 'ABCDEF', series: { length: 3, game: 1, me: 0, opp: 0 } });
+    emit({ type: 'end', result: 'win', reason: 'time', you: { solved: 5, strikes: 0 }, opponent: { solved: 1, strikes: 1 } });
+    await vi.waitFor(() => expect(fake.setKV).toHaveBeenCalledTimes(2));
+    expect(fake.setKV).toHaveBeenNthCalledWith(1, 'recentOpponents', [expect.objectContaining({ code: 'ABCDEF', name: 'Bo', rating: 1000, w: 0 })]);
+    expect(fake.battlesAdd).toHaveBeenCalledWith(expect.objectContaining({ opponentCode: 'ABCDEF', series: expect.objectContaining({ me: 1, opp: 0, over: false }) }));
   });
 });

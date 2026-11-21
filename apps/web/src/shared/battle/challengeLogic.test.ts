@@ -104,7 +104,7 @@ describe('countdown and code input', () => {
 describe('messages', () => {
   const all: ChallengeResult[] = [
     'declined', 'expired', 'cancelled', 'offline', 'busy', 'self', 'invalid', 'rate-limited', 'unavailable',
-    'server-offline', 'server-waking', 'server-connecting', 'server-outdated',
+    'server-offline', 'server-waking', 'server-connecting', 'server-outdated', 'outdated',
   ];
   it('has a distinct sentence for every outcome', () => {
     const texts = all.map((s) => resultText(s, 'Ann'));
@@ -142,5 +142,6 @@ describe('inviteDisplay', () => {
 
   it('has text for the another-tab outcome', () => {
     expect(resultText('server-moved', null)).toBe('Friend challenges are active in another tab.');
+    expect(resultText('outdated', 'Ann')).toBe('They need to reload Knightfall to play with custom settings.');
   });
 });

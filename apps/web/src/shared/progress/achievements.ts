@@ -117,7 +117,7 @@ export const ESTABLISHED_AFTER = 10;
 export interface SnapshotInput {
   attempts: readonly Pick<Attempt, 'mode' | 'solved'>[];
   rushRuns: readonly Pick<RushRun, 'score' | 'bestCombo'>[];
-  battles: readonly Pick<BattleRecord, 'result'>[];
+  battles: readonly Pick<BattleRecord, 'result' | 'club'>[];
   daily: readonly Pick<DailyRecord, 'date' | 'solved'>[];
   puzzleRating: number;
   puzzleStreak: StreakState;
@@ -146,7 +146,7 @@ export function buildSnapshot(i: SnapshotInput): ProgressSnapshot {
     dailyBestStreak: longestDayRun(solvedDays),
     rushBest: i.rushRuns.reduce((m, r) => Math.max(m, r.score), 0),
     rushBestCombo: i.rushRuns.reduce((m, r) => Math.max(m, r.bestCombo), 0),
-    battleWins: i.battles.filter((b) => b.result === 'win').length,
+    battleWins: i.battles.filter((b) => !b.club && b.result === 'win').length,
     themeSolved,
     reviewSolved,
     customCreated: i.customCount,

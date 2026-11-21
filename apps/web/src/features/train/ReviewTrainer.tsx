@@ -4,6 +4,7 @@ import type { ReviewItem } from '../../shared/db.ts';
 import { formatInterval, listDueReviews, recordReview, removeReview, useReviewSummary } from '../../shared/progress/index.ts';
 import { findPuzzle } from '../../shared/puzzleSource.ts';
 import { EmptyState, Icons } from '../../shared/ui.tsx';
+import { reviewOutcomeLine } from './trainLogic.ts';
 import { TrainSession, type TrainSource } from './TrainSession.tsx';
 
 /** /train/review — due puzzles from the spaced-repetition queue, most overdue first. Unrated. */
@@ -28,10 +29,7 @@ export function ReviewTrainer() {
       },
       record: async (r) => {
         const out = await recordReview(r.puzzle, { solved: r.solved, hintsUsed: r.hintsUsed, mistakes: r.mistakes, timeMs: r.timeMs });
-        if (out.graduated) return 'Mastered — removed from your queue';
-        if (!out.item) return null;
-        const wait = formatInterval(Math.max(60_000, out.item.due - Date.now()));
-        return r.solved ? `Next review in ${wait}` : `Back in ${wait}`;
+        return reviewOutcomeLine(out, r.solved, Date.now());
       },
     }),
     [],
@@ -55,7 +53,7 @@ export function ReviewTrainer() {
             </Link>
           }
         >
-          {nextIn ? `Next review in ${nextIn}.` : 'Nothing is waiting. Puzzles you miss in Puzzles, Rush or theme training show up here.'}
+          {nextIn ? `Next review in ${nextIn}.` : 'Nothing is waiting. Puzzles you miss in Puzzles, Rush or theme training, and mistakes from your analysed games, show up here.'}
         </EmptyState>
       }
     />

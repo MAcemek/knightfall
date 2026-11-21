@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import type { PlayerInfo } from '@knightfall/core';
+import type { BattleSettings, PlayerInfo, SeriesInfo } from '@knightfall/core';
+import { introTagline } from './battleState.ts';
 import { burst, PALETTES, sfx } from '../../shared/fx/index.ts';
 import { Icons } from '../../shared/ui.tsx';
 
@@ -8,13 +9,15 @@ import { Icons } from '../../shared/ui.tsx';
  * Full-screen "You vs Opponent" intro: cards slide in from both sides, then a 3-2-1-GO
  * countdown synced to the server's startsAt. Calls onDone shortly after GO.
  */
-export function MatchIntro({ me, opponent, startsAt, serverNow, onDone }: {
+export function MatchIntro({ me, opponent, startsAt, serverNow, onDone, settings, series }: {
   me: PlayerInfo;
   opponent: PlayerInfo;
   /** Server epoch ms (0 until the server sent 'start'). */
   startsAt: number;
   serverNow: () => number;
   onDone: () => void;
+  settings?: BattleSettings;
+  series?: SeriesInfo;
 }) {
   const [count, setCount] = useState<number | null>(null);
   const last = useRef<number | null>(null);
@@ -114,7 +117,7 @@ export function MatchIntro({ me, opponent, startsAt, serverNow, onDone }: {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
       >
-        {startsAt ? 'Same puzzles. Three minutes. Three strikes.' : 'Get ready…'}
+        {startsAt ? introTagline(settings, series) : 'Get ready…'}
       </motion.div>
     </motion.div>
   );

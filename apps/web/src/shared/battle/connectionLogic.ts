@@ -26,3 +26,8 @@ export function statusAfterFailure(wakeWindowMs: number, outageStart: number, no
 export function helloChanged(prev: PlayerInfo | null, next: PlayerInfo): boolean {
   return !prev || prev.name !== next.name || prev.rating !== next.rating;
 }
+
+/** True when the server announced `cap` in `welcome` (an older server announces nothing, so this is false). */
+export function serverSupports(caps: readonly string[], cap: string): boolean {
+  return caps.includes(cap);
+}

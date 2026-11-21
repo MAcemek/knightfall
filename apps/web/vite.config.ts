@@ -40,7 +40,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api(\/|$)/, /^\/engine(\/|$)/, /^\/ws(\/|$)/],
         runtimeCaching: [
           {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && (url.pathname.startsWith('/puzzles/') || url.pathname === '/openings.json'),
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && (url.pathname.startsWith('/puzzles/') || url.pathname === '/openings.json' || url.pathname === '/opening-lines.json'),
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'kf-data', cacheableResponse: { statuses: [200] } },
           },

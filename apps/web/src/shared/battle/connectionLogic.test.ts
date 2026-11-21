@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BACKOFF_MAX_MS, BACKOFF_MIN_MS, helloChanged, nextBackoff, statusAfterFailure } from './connectionLogic.ts';
+import { BACKOFF_MAX_MS, BACKOFF_MIN_MS, helloChanged, nextBackoff, serverSupports, statusAfterFailure } from './connectionLogic.ts';
 
 describe('nextBackoff', () => {
   it('doubles from 1 s and caps at 30 s', () => {
@@ -28,5 +28,13 @@ describe('helloChanged', () => {
     expect(helloChanged(a, { ...a })).toBe(false);
     expect(helloChanged(a, { ...a, name: 'Bea' })).toBe(true);
     expect(helloChanged(a, { ...a, rating: 1216 })).toBe(true);
+  });
+});
+
+describe('serverSupports', () => {
+  it('is true only for announced capabilities', () => {
+    expect(serverSupports(['settings', 'club'], 'club')).toBe(true);
+    expect(serverSupports(['settings'], 'club')).toBe(false);
+    expect(serverSupports([], 'settings')).toBe(false);
   });
 });

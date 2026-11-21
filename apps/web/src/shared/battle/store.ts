@@ -1,13 +1,16 @@
 import { useSyncExternalStore } from 'react';
-import { FRIEND_MOVED_MESSAGE, isValidCode, normalizeCode, type BattleScore } from '@knightfall/core';
+import { DEFAULT_BATTLE_SETTINGS, FRIEND_MOVED_MESSAGE, isValidCode, normalizeCode, type BattleScore, type BattleSettings } from '@knightfall/core';
 import { db, defaults, getKV, KEYS, setKV, type BattleRecord } from '../db.ts';
 import { getPlayerName } from '../profile.ts';
 import { toast } from '../toast.tsx';
 import {
-  battleReducer, initialBattleState, ratingAfterBattle,
+  battleReducer, initialBattleState, ratingAfterBattle, seriesAfter,
   type BattleAction, type BattleState, type EndInfo,
 } from '../../features/battle/battleState.ts';
+import { challengeExtras, type Series } from '../../features/battle/friendSettings.ts';
+import { recordOpponentResult, removeOpponent, sanitizeRecent, upsertOpponent, type RecentOpponent } from '../../features/battle/recentOpponents.ts';
 import * as conn from './connection.ts';
+import { serverSupports } from './connectionLogic.ts';
 import {
   idleOutgoing, incomingReducer, outgoingReducer,
   type ChallengeResult, type IncomingAction, type Invite, type OutgoingAction, type OutgoingState,
@@ -70,11 +73,28 @@ function finish(raw: { result: EndInfo['result']; reason: EndInfo['reason']; you
     ratingBefore,
     ratingAfter,
     ...(friendly ? { friendly: true } : {}),
+    ...(match.opponentCode ? { opponentCode: match.opponentCode } : {}),
+    ...(match.settings ? { settings: match.settings } : {}),
+    ...(match.series ? { series: seriesAfter(match.series, raw.result, raw.reason) } : {}),
   };
+  if (friendly && match.opponentCode) updateRecent((l) => recordOpponentResult(l, match.opponentCode!, raw.result));
   const writes: Promise<unknown>[] = [db.battles.add(record)];
   if (!friendly) writes.push(setKV(KEYS.battleRating, ratingAfter));
   void Promise.all(writes).catch((e) => console.error('Failed to save battle', e));
 }
+
+// ---- recent opponents ----------------------------------------------------------------------------------------
+
+let recentQueue: Promise<unknown> = Promise.resolve();
+
+/** Read-modify-write of the stored friend list, one at a time so quick updates never overwrite each other. */
+function updateRecent(fn: (list: RecentOpponent[]) => RecentOpponent[]): void {
+  recentQueue = recentQueue
+    .then(async () => setKV(KEYS.recentOpponents, fn(sanitizeRecent(await getKV<unknown>(KEYS.recentOpponents, [])))))
+    .catch((e) => console.error('Failed to save recent opponents', e));
+}
+
+export const forgetOpponent = (code: string): void => updateRecent((l) => removeOpponent(l, code));
 
 export function findOpponent(): void {
   const phase = state.phase;
@@ -226,8 +246,11 @@ function failOutgoing(status: ChallengeResult): void {
   outgoingDispatch({ type: 'fail', status });
 }
 
-/** Send a challenge to a friend's code. Problems that can be known locally are reported without a round trip. */
-export function sendChallenge(raw: string): void {
+/**
+ * Send a challenge to a friend's code. Problems that can be known locally are reported without a round trip.
+ * Only options that differ from the defaults go on the wire, so plain challenges look as they always did.
+ */
+export function sendChallenge(raw: string, settings: BattleSettings = DEFAULT_BATTLE_SETTINGS, series: Series = 1): void {
   if (state.phase !== 'lobby' && state.phase !== 'ended') return;
   if (outgoing.kind === 'sending' || outgoing.kind === 'waiting') return;
   const code = normalizeCode(raw);
@@ -242,8 +265,11 @@ export function sendChallenge(raw: string): void {
   if (snap.status === 'waking') return failOutgoing('server-waking');
   if (snap.status !== 'online') return failOutgoing('server-connecting');
   if (code === snap.code) return failOutgoing('self');
+  // An older server silently ignores custom settings and series: do not send what it would drop.
+  const extras = challengeExtras(settings, series);
+  if ((extras.settings || extras.series) && !serverSupports(snap.serverCaps, 'settings')) return failOutgoing('server-outdated');
   outgoingDispatch({ type: 'send', code, at: Date.now() });
-  if (!conn.send({ type: 'challenge', code })) failOutgoing('server-offline');
+  if (!conn.send({ type: 'challenge', code, ...extras })) failOutgoing('server-offline');
 }
 
 export function cancelChallenge(): void {
@@ -282,6 +308,10 @@ function onEvent(ev: conn.ConnEvent): void {
       finish({ result: msg.result, reason: msg.reason, you: msg.you, opponent: msg.opponent });
       return;
     case 'matched':
+      if (msg.friendly && msg.opponentCode) {
+        const { opponentCode: code, opponent } = msg;
+        updateRecent((l) => upsertOpponent(l, { code, name: opponent.name, rating: opponent.rating, at: Date.now() }));
+      }
       outgoingDispatch({ type: 'matched' });
       incomingDispatch({ type: 'clear' });
       dispatch({ type: 'server', msg, me: conn.getPlayer() });
@@ -296,7 +326,10 @@ function onEvent(ev: conn.ConnEvent): void {
       return;
     }
     case 'challenge-received':
-      incomingDispatch({ type: 'received', invite: { id: msg.id, from: msg.from, expiresAt: msg.expiresAt } });
+      incomingDispatch({
+        type: 'received',
+        invite: { id: msg.id, from: msg.from, expiresAt: msg.expiresAt, ...(msg.settings ? { settings: msg.settings } : {}), ...(msg.series ? { series: msg.series } : {}) },
+      });
       return;
     case 'challenge-withdrawn':
       incomingDispatch({ type: 'withdrawn', id: msg.id });

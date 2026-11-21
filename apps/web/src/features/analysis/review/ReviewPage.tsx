@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { coachExplainText, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
-import { addMistakesToPractice, practicePuzzles, useAnalysisSession } from '../../../shared/analysis/index.ts';
+import { addMistakesToPractice, practicePuzzles, useAnalysisPrefs, useAnalysisSession } from '../../../shared/analysis/index.ts';
 import { Board, type BoardArrow } from '../../../shared/Board/index.ts';
 import { ENGINES, getEnginePool } from '../../../shared/engine/index.ts';
 import { sfx } from '../../../shared/fx/index.ts';
@@ -10,6 +10,7 @@ import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../../shar
 import { toast } from '../../../shared/toast.tsx';
 import { Button, EmptyState, GameLayout, Icons, Panel } from '../../../shared/ui.tsx';
 import { useHotkeysWithHelp } from '../../puzzles/useHotkeys.ts';
+import { resolveSide } from '../../../shared/analysis/side.ts';
 import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
 import { ActionRow, PhoneCoach, ReviewNav, ReviewView, type ClassFilterView, type ReviewActions, type TipMode } from './ReviewView.tsx';
 import { SummaryView } from './SummaryView.tsx';
@@ -495,11 +496,17 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   }, [report, geom]);
 
   /* Practise */
-  const side = mySide ?? 'w';
-  const mistakeCount = useMemo(() => (report ? practicePuzzles(g, report, side).length : 0), [g, report, side]);
+  // The side comes from the import username or the remembered one; when neither matches the player picks it.
+  const prefs = useAnalysisPrefs();
+  const knownSide = resolveSide(g, prefs ?? { lichessUser: '', chesscomUser: '' });
+  const [pickedSide, setPickedSide] = useState<Side | null>(null);
+  const practiseSide = knownSide ?? pickedSide;
+  const mistakeCount = useMemo(() => (report && practiseSide ? practicePuzzles(g, report, practiseSide).length : 0), [g, report, practiseSide]);
   const [busy, setBusy] = useState(false);
-  const practise = async () => {
-    if (!report || busy) return;
+  const practise = async (chosen?: Side) => {
+    const side = practiseSide ?? chosen;
+    if (!report || !side || busy) return;
+    if (chosen && !knownSide) setPickedSide(chosen);
     setBusy(true);
     try {
       const r = await addMistakesToPractice(g, report, side);
@@ -619,12 +626,13 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           geom={geom}
           dots={dots}
           mistakeCount={mistakeCount}
+          sideKnown={practiseSide !== null}
           practiseBusy={busy}
           staleEngine={s.staleEngine}
           onStart={startReview}
           onSeek={seekFromSummary}
           onOpenClass={openClass}
-          onPractise={() => void practise()}
+          onPractise={(chosen) => void practise(chosen)}
           onReanalyse={() => s.restart('lite')}
         />
       );

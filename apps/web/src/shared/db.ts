@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import { DEFAULT_GLICKO, type GameReport, type GameResult, type Glicko, type Puzzle } from '@knightfall/core';
+import { DEFAULT_GLICKO, type BattleSettings, type GameReport, type GameResult, type Glicko, type Puzzle, type SeriesInfo } from '@knightfall/core';
 
 /** Local-first persistence (IndexedDB). No accounts in v1. */
 
@@ -68,6 +68,14 @@ export interface BattleRecord {
   ratingAfter: number;
   /** Friend challenge: casual, rating unchanged. Absent on older rows. Not indexed. */
   friendly?: boolean;
+  /** Friend code of the opponent (friendly games only). */
+  opponentCode?: string;
+  /** Time and difficulty of a friend battle. */
+  settings?: BattleSettings;
+  /** Series state (best of 3) after this game. */
+  series?: SeriesInfo;
+  /** Club race: final place and number of players. Excluded from 1-on-1 stats. */
+  club?: { place: number; players: number };
 }
 
 export interface CustomPuzzle extends Puzzle {
@@ -148,6 +156,20 @@ export interface StoredAnalysis {
   engineBuild?: string;
 }
 
+/** Spaced-repetition progress of one opening line (v4). */
+export interface OpeningLineProgress {
+  /** Line id from opening-lines.json. */
+  id: string;
+  family: string;
+  color: 'w' | 'b';
+  /** Leitner box 0..5. */
+  box: number;
+  /** Timestamp (ms) from which the line is due. */
+  due: number;
+  lastAt: number | null;
+  misses: number;
+}
+
 export const db = new Dexie('knightfall') as Dexie & {
   kv: EntityTable<KV, 'key'>;
   attempts: EntityTable<Attempt, 'id'>;
@@ -159,6 +181,7 @@ export const db = new Dexie('knightfall') as Dexie & {
   achievements: EntityTable<AchievementRow, 'id'>;
   games: EntityTable<StoredGame, 'key'>;
   analyses: EntityTable<StoredAnalysis, 'gameKey'>;
+  openingLines: EntityTable<OpeningLineProgress, 'id'>;
 };
 
 db.version(1).stores({
@@ -180,6 +203,11 @@ db.version(2).stores({
 db.version(3).stores({
   games: 'key, source, playedAt, importedAt',
   analyses: 'gameKey, analysedAt',
+});
+
+// v4: opening trainer progress. Only the NEW table; v1 to v3 stay exactly as they are.
+db.version(4).stores({
+  openingLines: 'id, family, due',
 });
 
 export async function getKV<T>(key: string, fallback: T): Promise<T> {
@@ -210,6 +238,10 @@ export const KEYS = {
   /** Friend-challenge code and secret token issued by the battle server (string), so the code survives reloads. */
   battleCode: 'battleCode',
   battleToken: 'battleToken',
+  /** Friends played in friend battles (features/battle/recentOpponents.ts), newest first. */
+  recentOpponents: 'recentOpponents',
+  /** Solved endgame drills (features/endgames): id to { solved, best }. */
+  endgameProgress: 'endgameProgress',
 } as const;
 
 export interface StreakState {

@@ -1,4 +1,4 @@
-import { BATTLE_CODE_LENGTH, formatCode, isValidCode, normalizeCode, type ChallengeStatus, type PlayerInfo } from '@knightfall/core';
+import { BATTLE_CODE_LENGTH, formatCode, isValidCode, normalizeCode, type BattleSettings, type ChallengeStatus, type PlayerInfo } from '@knightfall/core';
 
 /**
  * Friend-challenge rules (pure): the outgoing challenge I sent, the invitations I received, countdowns on the
@@ -72,6 +72,9 @@ export interface Invite {
   from: PlayerInfo;
   /** Server epoch ms. */
   expiresAt: number;
+  /** Options the challenger chose (absent on a plain challenge). */
+  settings?: BattleSettings;
+  series?: 1 | 3;
 }
 
 export type IncomingAction =
@@ -179,6 +182,8 @@ export function resultText(status: ChallengeResult, name: string | null): string
       return "That code isn't valid. Check it and try again.";
     case 'rate-limited':
       return 'Too many challenges in a row. Wait a minute and try again.';
+    case 'outdated':
+      return 'They need to reload Knightfall to play with custom settings.';
     case 'unavailable':
       return `${who} just became unavailable. Try again in a moment.`;
     case 'server-offline':

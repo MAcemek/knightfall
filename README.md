@@ -76,6 +76,13 @@ apps/server       Node HTTP + ws server: battle matchmaking, rooms, authoritativ
 scripts           build-puzzles, build-openings, fetch-engine, fit-rating, build-vercel
 ```
 
+## Install / offline
+
+Knightfall is installable as an app (Settings, then Install Knightfall, or your browser's install option; on
+iPhone use Share, then Add to Home Screen). Once the site has loaded online it works offline for puzzles and
+for reviews you saved (the Stockfish engine is cached after your first review). Importing games, cloud
+evaluations and Battle need an internet connection.
+
 ## Network use
 
 Knightfall talks only to public endpoints and never sends credentials:

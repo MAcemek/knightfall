@@ -227,10 +227,10 @@ describe('http routing', () => {
 
 describe('client message types', () => {
   it('accepts every protocol message, including claim', () => {
-    for (const type of ['queue', 'cancel', 'progress', 'rematch', 'leave', 'claim', 'ping', 'hello', 'challenge', 'challenge-cancel', 'challenge-respond']) {
+    for (const type of ['queue', 'cancel', 'progress', 'rematch', 'leave', 'claim', 'ping', 'hello', 'challenge', 'challenge-cancel', 'challenge-respond', 'club-create', 'club-join', 'club-leave', 'club-start', 'club-new-race']) {
       expect(CLIENT_TYPES.has(type)).toBe(true);
     }
-    expect(CLIENT_TYPES.size).toBe(11);
+    expect(CLIENT_TYPES.size).toBe(16);
     expect(isClientMessage({ type: 'claim' })).toBe(true);
     expect(isClientMessage({ type: 'matched' })).toBe(false);
     expect(isClientMessage(null)).toBe(false);

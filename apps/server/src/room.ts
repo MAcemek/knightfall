@@ -1,8 +1,15 @@
-import { BATTLE_COUNTDOWN_MS, BATTLE_DURATION_MS, BATTLE_REMATCH_WINDOW_MS, type BattleScore } from '@knightfall/core';
+import { BATTLE_COUNTDOWN_MS, BATTLE_DURATION_MS, BATTLE_REMATCH_WINDOW_MS, type BattleScore, type BattleSettings, type SeriesInfo } from '@knightfall/core';
 import type { Participant } from './participant.ts';
 import { acceptProgress, canClaim, emptyScore, endReason, resultFor, type EndReason } from './rules.ts';
 
 export const REMATCH_WINDOW_MS = BATTLE_REMATCH_WINDOW_MS;
+
+/** Extra fields of `matched` for one player (friendly rooms). */
+export interface MatchedExtras {
+  opponentCode?: string;
+  settings?: BattleSettings;
+  series?: SeriesInfo;
+}
 
 export interface RoomOptions {
   id: string;
@@ -10,6 +17,8 @@ export interface RoomOptions {
   players: [Participant, Participant];
   /** Casual friend battle: the client skips the rating update. Kept on rematch. */
   friendly?: boolean;
+  /** Per-player extras for `matched`, in the order of `players`. */
+  extras?: [MatchedExtras, MatchedExtras];
   /** Called once when the battle is over (after 'end' was sent). */
   onEnd?: (room: Room) => void;
   /** Override for tests. */
@@ -38,6 +47,7 @@ export class Room {
   readonly departed = new Set<string>();
 
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly extras?: [MatchedExtras, MatchedExtras];
   private readonly onEnd?: (room: Room) => void;
   private readonly countdownMs: number;
   private readonly durationMs: number;
@@ -47,6 +57,7 @@ export class Room {
     this.seed = o.seed;
     this.players = o.players;
     this.friendly = o.friendly === true;
+    this.extras = o.extras;
     this.onEnd = o.onEnd;
     this.countdownMs = o.countdownMs ?? BATTLE_COUNTDOWN_MS;
     this.durationMs = o.durationMs ?? BATTLE_DURATION_MS;
@@ -64,8 +75,8 @@ export class Room {
   start(): void {
     const [a, b] = this.players;
     const flag = this.friendly ? { friendly: true as const } : {};
-    a.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...b.info }, ...flag });
-    b.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...a.info }, ...flag });
+    a.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...b.info }, ...flag, ...this.extras?.[0] });
+    b.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...a.info }, ...flag, ...this.extras?.[1] });
     const now = Date.now();
     this.startsAt = now + this.countdownMs;
     this.endsAt = this.startsAt + this.durationMs;

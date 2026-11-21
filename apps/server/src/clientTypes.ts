@@ -16,6 +16,11 @@ const TYPES: Record<ClientMessage['type'], true> = {
   challenge: true,
   'challenge-cancel': true,
   'challenge-respond': true,
+  'club-create': true,
+  'club-join': true,
+  'club-leave': true,
+  'club-start': true,
+  'club-new-race': true,
 };
 
 export const CLIENT_TYPES: ReadonlySet<string> = new Set(Object.keys(TYPES));

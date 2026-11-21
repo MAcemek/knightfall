@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js';
 import type { Puzzle } from '../types.ts';
 import { uciToMove, validateLine } from '../validate.ts';
-import { classifyMove, GREAT_SECOND_LOSS } from './classify.ts';
+import { classifyMove, GREAT_SECOND_LOSS, LOSS_EXCELLENT } from './classify.ts';
 import { moveInsight } from './insight.ts';
 import { epMoveAccuracy, expectedPointsLoss } from './expectedPoints.ts';
 import { pieceMaterial } from './pieceSafety.ts';
@@ -251,6 +251,12 @@ export function mistakePuzzles(report: GameReport, opts: PracticeOptions): Puzzl
     const fen = setup ? setup.fenBefore : m.fenBefore;
     const moves = setup ? [setup.uci, ...line] : line;
     if (validateLine(fen, moves) !== null) continue;
+    // Engine line 2 is an equally good first move when it loses under LOSS_EXCELLENT (same rule as judgeRetry in coach.ts).
+    const ev = report.evals[m.ply];
+    const second = ev?.lines[1];
+    const alt = ev && second && second.pv[0] && second.pv[0] !== pv[0] && expectedPointsLoss(ev.lines[0].score, second.score, m.color) < LOSS_EXCELLENT ? second.pv[0] : null;
+    const firstIdx = setup ? 1 : 0;
+    const alts = alt && validateLine(fen, [...(setup ? [setup.uci] : []), alt]) === null ? { [firstIdx]: [alt] } : null;
     out.push({
       id: `${GAME_PUZZLE_PREFIX}${opts.gameKey}-${m.ply}`,
       fen,
@@ -260,6 +266,7 @@ export function mistakePuzzles(report: GameReport, opts: PracticeOptions): Puzzl
       themes: ['from-game', m.class],
       source: 'custom',
       title: `Your game ${opts.label} · move ${m.moveNumber}`,
+      ...(alts ? { alts } : {}),
     });
   }
   return out;

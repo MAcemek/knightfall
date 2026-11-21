@@ -1,4 +1,4 @@
-import { BATTLE_MAX_STRIKES, type BattleScore } from '@knightfall/core';
+import { BATTLE_MAX_STRIKES, DEFAULT_BATTLE_SETTINGS, type BattleLevel, type BattleScore, type BattleSettings } from '@knightfall/core';
 
 /** Pure battle rules: progress validation, end conditions and results. Shared by Room and its tests. */
 
@@ -69,3 +69,21 @@ export function resultFor(me: BattleScore, opp: BattleScore): BattleResult {
   if (me.solved < opp.solved) return 'loss';
   return 'draw';
 }
+
+const DURATIONS: readonly BattleSettings['durationMs'][] = [60_000, 180_000, 300_000];
+const LEVELS: readonly BattleLevel[] = ['easier', 'normal', 'harder'];
+
+/** Validate client-supplied friend battle settings. Unknown or missing values fall back to the defaults. */
+export function sanitizeSettings(raw: unknown): BattleSettings {
+  const { durationMs, level } = (raw && typeof raw === 'object' ? raw : {}) as { durationMs?: unknown; level?: unknown };
+  return {
+    durationMs: DURATIONS.find((d) => d === durationMs) ?? DEFAULT_BATTLE_SETTINGS.durationMs,
+    level: LEVELS.find((l) => l === level) ?? DEFAULT_BATTLE_SETTINGS.level,
+  };
+}
+
+export const isDefaultSettings = (s: BattleSettings): boolean =>
+  s.durationMs === DEFAULT_BATTLE_SETTINGS.durationMs && s.level === DEFAULT_BATTLE_SETTINGS.level;
+
+/** A best-of length from the wire: only 3 means a series. */
+export const sanitizeSeries = (raw: unknown): 1 | 3 => (raw === 3 ? 3 : 1);

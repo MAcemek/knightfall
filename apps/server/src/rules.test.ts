@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { acceptProgress, canClaim, endReason, resultFor } from './rules.ts';
+import { DEFAULT_BATTLE_SETTINGS } from '@knightfall/core';
+import { acceptProgress, canClaim, endReason, isDefaultSettings, resultFor, sanitizeSeries, sanitizeSettings } from './rules.ts';
 
 const s = (solved: number, strikes: number) => ({ solved, strikes });
 
@@ -73,5 +74,35 @@ describe('bot play-on and claim', () => {
     expect(canClaim(ahead, out, false)).toBe(false);
     expect(canClaim({ solved: 3, strikes: 0 }, out, true)).toBe(false);
     expect(canClaim(ahead, { solved: 3, strikes: 2 }, true)).toBe(false);
+  });
+});
+
+describe('sanitizeSettings', () => {
+  it('keeps valid values', () => {
+    expect(sanitizeSettings({ durationMs: 60_000, level: 'harder' })).toEqual({ durationMs: 60_000, level: 'harder' });
+    expect(sanitizeSettings({ durationMs: 300_000, level: 'easier' })).toEqual({ durationMs: 300_000, level: 'easier' });
+  });
+
+  it('falls back to the defaults for junk, partly or fully', () => {
+    expect(sanitizeSettings(undefined)).toEqual(DEFAULT_BATTLE_SETTINGS);
+    expect(sanitizeSettings('x')).toEqual(DEFAULT_BATTLE_SETTINGS);
+    expect(sanitizeSettings({ durationMs: 12345, level: 'insane' })).toEqual(DEFAULT_BATTLE_SETTINGS);
+    expect(sanitizeSettings({ durationMs: 60_000, level: 'toString' })).toEqual({ durationMs: 60_000, level: 'normal' });
+  });
+
+  it('knows the defaults', () => {
+    expect(isDefaultSettings(DEFAULT_BATTLE_SETTINGS)).toBe(true);
+    expect(isDefaultSettings({ durationMs: 60_000, level: 'normal' })).toBe(false);
+    expect(isDefaultSettings({ durationMs: 180_000, level: 'harder' })).toBe(false);
+  });
+});
+
+describe('sanitizeSeries', () => {
+  it('only 3 is a series', () => {
+    expect(sanitizeSeries(3)).toBe(3);
+    expect(sanitizeSeries(1)).toBe(1);
+    expect(sanitizeSeries(5)).toBe(1);
+    expect(sanitizeSeries('3')).toBe(1);
+    expect(sanitizeSeries(undefined)).toBe(1);
   });
 });

@@ -3,11 +3,43 @@
  * The server is authoritative for matchmaking, the clock, and the result.
  */
 
-export const BATTLE_DURATION_MS = 3 * 60 * 1000;
+export const BATTLE_DURATION_MS = 180_000;
 export const BATTLE_COUNTDOWN_MS = 3000;
 export const BATTLE_MAX_STRIKES = 3;
 /** Difficulty ramp (rampRating start/step) of the shared Battle puzzle sequence. Client and server bot must agree. */
 export const BATTLE_RAMP = { start: 500, step: 45 } as const;
+export type BattleLevel = 'easier' | 'normal' | 'harder';
+/** Ramp per difficulty level. 'normal' is BATTLE_RAMP. */
+export const BATTLE_LEVEL_RAMP: Record<BattleLevel, { start: number; step: number }> = {
+  easier: { start: 350, step: 45 },
+  normal: BATTLE_RAMP,
+  harder: { start: 750, step: 45 },
+};
+/** Ramp for a level; undefined or unknown values (old clients, junk) get the normal ramp. */
+export function rampFor(level?: string): { start: number; step: number } {
+  return level !== undefined && Object.hasOwn(BATTLE_LEVEL_RAMP, level) ? BATTLE_LEVEL_RAMP[level as BattleLevel] : BATTLE_RAMP;
+}
+/** Friend battle options chosen by the challenger. */
+export interface BattleSettings {
+  durationMs: 60_000 | 180_000 | 300_000;
+  level: BattleLevel;
+}
+export const DEFAULT_BATTLE_SETTINGS: BattleSettings = { durationMs: BATTLE_DURATION_MS, level: 'normal' };
+/** Best-of series state from one player's side. Points: 1 per win, 0.5 per draw. */
+export interface SeriesInfo {
+  length: 1 | 3;
+  /** 1-based number of the game being played. */
+  game: number;
+  me: number;
+  opp: number;
+}
+/** Capabilities a client announces in `hello`. */
+export const CLIENT_CAPS = ['settings', 'club'] as const;
+/** Features this server supports, announced in `welcome` (an older server sends none). */
+export const SERVER_CAPS = ['settings', 'club'] as const;
+export const CLUB_MAX_PLAYERS = 30;
+/** A club room with no activity this long is closed. */
+export const CLUB_IDLE_MS = 30 * 60 * 1000;
 /** Both players must send 'rematch' within this window after the end. */
 export const BATTLE_REMATCH_WINDOW_MS = 20_000;
 /** A friend challenge stays open this long before it expires. */
@@ -22,6 +54,19 @@ export interface PlayerInfo {
   name: string;
   rating: number;
 }
+
+export interface ClubPlayer {
+  id: string;
+  name: string;
+  rating: number;
+  solved: number;
+  strikes: number;
+  out: boolean;
+  connected: boolean;
+  place?: number;
+}
+
+export type ClubPhase = 'lobby' | 'countdown' | 'playing' | 'ended';
 
 export interface BattleScore {
   solved: number;
@@ -40,10 +85,17 @@ export type ClientMessage =
   | { type: 'claim' }
   | { type: 'ping' }
   /** Sent on every (re)connect and when name/rating changes. Old clients never send it. */
-  | { type: 'hello'; player: PlayerInfo; code?: string; token?: string }
-  | { type: 'challenge'; code: string }
+  | { type: 'hello'; player: PlayerInfo; code?: string; token?: string; caps?: string[] }
+  | { type: 'challenge'; code: string; settings?: BattleSettings; series?: 1 | 3 }
   | { type: 'challenge-cancel' }
-  | { type: 'challenge-respond'; id: string; accept: boolean };
+  | { type: 'challenge-respond'; id: string; accept: boolean }
+  | { type: 'club-create'; settings?: BattleSettings }
+  | { type: 'club-join'; code: string }
+  | { type: 'club-leave' }
+  /** Host only. */
+  | { type: 'club-start' }
+  /** Host only: back to the lobby with scores reset. */
+  | { type: 'club-new-race' };
 
 export type ChallengeStatus =
   | 'sent'
@@ -55,11 +107,23 @@ export type ChallengeStatus =
   | 'self'
   | 'invalid'
   | 'rate-limited'
-  | 'unavailable';
+  | 'unavailable'
+  /** The target's app does not support battle settings yet. */
+  | 'outdated';
 
 export type ServerMessage =
   | { type: 'queued'; position: number }
-  | { type: 'matched'; roomId: string; seed: number; opponent: PlayerInfo; friendly?: true }
+  | {
+      type: 'matched';
+      roomId: string;
+      seed: number;
+      opponent: PlayerInfo;
+      friendly?: true;
+      /** Friend code of the opponent (friendly rooms only). */
+      opponentCode?: string;
+      settings?: BattleSettings;
+      series?: SeriesInfo;
+    }
   /** startsAt/endsAt are server epoch ms; clients use serverNow to compute a clock offset. */
   | { type: 'start'; startsAt: number; endsAt: number; serverNow: number }
   | { type: 'opponent-progress'; solved: number; strikes: number; index: number }
@@ -75,10 +139,25 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'pong'; serverNow: number }
   /** Reply to 'hello' (only clients that sent hello get the messages below). */
-  | { type: 'welcome'; code: string; token: string }
+  | { type: 'welcome'; code: string; token: string; caps?: string[] }
   | { type: 'challenge-status'; status: ChallengeStatus; name?: string; expiresAt?: number; serverNow?: number }
-  | { type: 'challenge-received'; id: string; from: PlayerInfo; expiresAt: number; serverNow: number }
-  | { type: 'challenge-withdrawn'; id: string };
+  | { type: 'challenge-received'; id: string; from: PlayerInfo; expiresAt: number; serverNow: number; settings?: BattleSettings; series?: 1 | 3 }
+  | { type: 'challenge-withdrawn'; id: string }
+  | {
+      type: 'club-state';
+      code: string;
+      /** The receiving player's own id in `players`. */
+      you: string;
+      hostId: string;
+      phase: ClubPhase;
+      players: ClubPlayer[];
+      settings: BattleSettings;
+      seed?: number;
+      startsAt?: number;
+      endsAt?: number;
+      serverNow: number;
+    }
+  | { type: 'club-error'; reason: string };
 
 export function encode(msg: ClientMessage | ServerMessage): string {
   return JSON.stringify(msg);

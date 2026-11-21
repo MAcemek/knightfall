@@ -221,6 +221,20 @@ describe('mistakePuzzles', () => {
     // Solver moves: an odd number after the setup move.
     expect((p.moves.length - 1) % 2).toBe(1);
   });
+  it('lists engine line 2 as an alternative first move when it is about as good', () => {
+    const [p] = mistakePuzzles(report, { gameKey: 'li-abcdefgh', side: 'b', rating: 1480, label: 'vs Alice' });
+    // d8e7 (-10 cp) loses under LOSS_EXCELLENT against g7g6 (-30 cp); index 1 = Black's first move after the setup move.
+    expect(p.alts).toEqual({ 1: ['d8e7'] });
+    expect(validateLine(p.fen, [p.moves[0], 'd8e7'])).toBeNull();
+  });
+  it('leaves alts out when line 2 is clearly worse or missing', () => {
+    const worse = evals.map((e, i) => (i === 5 ? { ...e, lines: [e.lines[0], { score: { cp: 300 } as EvalScore, pv: ['d8e7'] }] } : e));
+    const r = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: worse, openings });
+    expect(mistakePuzzles(r, { gameKey: 'k', side: 'b', rating: 1480, label: 'x' })[0].alts).toBeUndefined();
+    const single = evals.map((e, i) => (i === 5 ? { ...e, lines: [e.lines[0]] } : e));
+    const r2 = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: single, openings });
+    expect(mistakePuzzles(r2, { gameKey: 'k', side: 'b', rating: 1480, label: 'x' })[0].alts).toBeUndefined();
+  });
   it('only uses the requested side and skips inaccuracies', () => {
     expect(mistakePuzzles(report, { gameKey: 'k', side: 'w', rating: 1500, label: 'vs Bob' })).toEqual([]);
   });

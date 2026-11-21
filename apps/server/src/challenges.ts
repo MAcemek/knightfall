@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { BATTLE_CHALLENGE_TTL_MS, BATTLE_CODE_ALPHABET, BATTLE_CODE_LENGTH, isValidCode } from '@knightfall/core';
+import { BATTLE_CHALLENGE_TTL_MS, BATTLE_CODE_ALPHABET, BATTLE_CODE_LENGTH, isValidCode, type BattleSettings } from '@knightfall/core';
 
 /** An unbound code stays reserved for its owner this long after they disconnect. */
 export const CODE_RESERVE_MS = 24 * 60 * 60 * 1000;
@@ -130,6 +130,9 @@ export interface Challenge {
   from: string;
   to: string;
   expiresAt: number;
+  /** Set when the sender chose friend battle options (new clients only). */
+  settings?: BattleSettings;
+  series?: 1 | 3;
 }
 
 export interface BoardOptions {
@@ -179,7 +182,7 @@ export class ChallengeBoard {
    * Create a challenge. Returns it plus the ones displaced by it: the sender's previous outgoing
    * (`replaced`) and the target's oldest incoming when over the cap (`evicted`).
    */
-  create(from: string, to: string): { challenge: Challenge; replaced: Challenge | null; evicted: Challenge[] } {
+  create(from: string, to: string, options: { settings?: BattleSettings; series?: 1 | 3 } = {}): { challenge: Challenge; replaced: Challenge | null; evicted: Challenge[] } {
     const now = this.now();
     const replaced = this.outgoing(from);
     if (replaced) this.byId.delete(replaced.id);
@@ -189,7 +192,7 @@ export class ChallengeBoard {
       this.byId.delete(oldest.id);
       evicted.push(oldest);
     }
-    const challenge: Challenge = { id: this.genId(), from, to, expiresAt: now + this.ttlMs };
+    const challenge: Challenge = { id: this.genId(), from, to, expiresAt: now + this.ttlMs, ...options };
     this.byId.set(challenge.id, challenge);
     return { challenge, replaced, evicted };
   }

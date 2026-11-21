@@ -17,6 +17,8 @@ export interface Puzzle {
   title?: string;
   /** Optional link back to the originating game/puzzle. */
   gameUrl?: string;
+  /** Move index in `moves` to other UCI moves that are also good there (game puzzles). */
+  alts?: Record<number, string[]>;
 }
 
 /** Compact on-disk row used in public/puzzles/*.json: [id, fen, "uci uci ...", rating, "theme theme"] */

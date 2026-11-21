@@ -12,6 +12,10 @@ const TYPES: Record<ClientMessage['type'], true> = {
   leave: true,
   claim: true,
   ping: true,
+  hello: true,
+  challenge: true,
+  'challenge-cancel': true,
+  'challenge-respond': true,
 };
 
 export const CLIENT_TYPES: ReadonlySet<string> = new Set(Object.keys(TYPES));

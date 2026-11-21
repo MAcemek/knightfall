@@ -8,6 +8,8 @@ export interface RoomOptions {
   id: string;
   seed: number;
   players: [Participant, Participant];
+  /** Casual friend battle: the client skips the rating update. Kept on rematch. */
+  friendly?: boolean;
   /** Called once when the battle is over (after 'end' was sent). */
   onEnd?: (room: Room) => void;
   /** Override for tests. */
@@ -23,6 +25,7 @@ export class Room {
   readonly id: string;
   readonly seed: number;
   readonly players: [Participant, Participant];
+  readonly friendly: boolean;
   readonly scores: [BattleScore, BattleScore] = [emptyScore(), emptyScore()];
   startsAt = 0;
   endsAt = 0;
@@ -43,6 +46,7 @@ export class Room {
     this.id = o.id;
     this.seed = o.seed;
     this.players = o.players;
+    this.friendly = o.friendly === true;
     this.onEnd = o.onEnd;
     this.countdownMs = o.countdownMs ?? BATTLE_COUNTDOWN_MS;
     this.durationMs = o.durationMs ?? BATTLE_DURATION_MS;
@@ -59,8 +63,9 @@ export class Room {
 
   start(): void {
     const [a, b] = this.players;
-    a.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...b.info } });
-    b.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...a.info } });
+    const flag = this.friendly ? { friendly: true as const } : {};
+    a.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...b.info }, ...flag });
+    b.send({ type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...a.info }, ...flag });
     const now = Date.now();
     this.startsAt = now + this.countdownMs;
     this.endsAt = this.startsAt + this.durationMs;

@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { uciToMove, winPercent, type AnalysedMove, type GameResult, type PositionEval } from '@knightfall/core';
+import { uciToMove, winPercent, type AnalysedMove, type GameResult, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
 
 /** Pure helpers of the review page (no React, no IndexedDB). */
 
@@ -130,7 +130,28 @@ export function formatAccuracy(value: number | null): string {
   return value === null ? '–' : value.toFixed(1);
 }
 
-/** Ply to show first: the URL's ?ply= when valid, else 0 (start position). `plyCount` = number of moves. */
+/** `move.ply` of every move of `side` with class `cls`, in game order. */
+export function movesOfClass(moves: readonly AnalysedMove[], side: Side, cls: MoveClass): number[] {
+  return moves.filter((m) => m.color === side && m.class === cls).map((m) => m.ply);
+}
+
+/**
+ * The next (dir 1) or previous (dir -1) entry of `plies` relative to `current`, wrapping around.
+ * `current` need not be in the list (the user may have stepped elsewhere). Null for an empty list.
+ */
+export function stepInClass(plies: readonly number[], current: number, dir: 1 | -1): number | null {
+  if (plies.length === 0) return null;
+  if (dir === 1) return plies.find((p) => p > current) ?? plies[0];
+  for (let i = plies.length - 1; i >= 0; i--) if (plies[i] < current) return plies[i];
+  return plies[plies.length - 1];
+}
+
+/** 1-based position of `current` in `plies`; 0 when it is not one of them. */
+export function positionInClass(plies: readonly number[], current: number): number {
+  return plies.indexOf(current) + 1;
+}
+
+/** Ply to show first:the URL's ?ply= when valid, else 0 (start position). `plyCount` = number of moves. */
 export function initialPly(param: string | null, plyCount: number): number {
   const n = Number(param);
   return param !== null && Number.isInteger(n) && n >= 0 && n <= plyCount ? n : 0;

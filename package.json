@@ -13,6 +13,7 @@
     "build": "npm run build -w @knightfall/web && npm run build -w @knightfall/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
+    "e2e": "npm run e2e -w @knightfall/web",
     "puzzles": "node scripts/build-puzzles.mjs",
     "engine": "node scripts/fetch-engine.mjs",
     "engine:deep": "node scripts/fetch-engine.mjs --deep",

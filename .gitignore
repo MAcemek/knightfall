@@ -5,6 +5,7 @@ data/
 .DS_Store
 test-results/
 playwright-report/
+dist-e2e/
 .vite/
 data-build.log
 

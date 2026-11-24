@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// The battle server's port. `npm run dev` uses 8787; the Playwright battle tests start their own server elsewhere.
+const serverPort = process.env.KF_SERVER_PORT ?? '8787';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -61,9 +64,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/ws': { target: 'ws://localhost:8787', ws: true },
+      '/ws': { target: `ws://localhost:${serverPort}`, ws: true },
       // Knightfall server JSON API (chess.com game lookup for Game Review).
-      '/api': 'http://localhost:8787',
+      '/api': `http://localhost:${serverPort}`,
     },
   },
 });

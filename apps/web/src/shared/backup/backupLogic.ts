@@ -3,14 +3,18 @@ import type {
   AchievementRow,
   Attempt,
   BattleRecord,
+  CoachDay,
   CustomPuzzle,
   DailyRecord,
   KV,
   OpeningLineProgress,
+  RatingLogRow,
   ReviewItem,
   RushRun,
+  SelfReview,
   StoredAnalysis,
   StoredGame,
+  WoodSet,
 } from '../db.ts';
 
 /**
@@ -39,19 +43,25 @@ export interface TableRows {
   games: StoredGame;
   analyses: StoredAnalysis;
   openingLines: OpeningLineProgress;
+  woodSets: WoodSet;
+  selfReviews: SelfReview;
+  ratingLog: RatingLogRow;
+  coachDays: CoachDay;
 }
 
 export type TableName = keyof TableRows;
 
 export const BACKUP_TABLES: readonly TableName[] = [
   'kv', 'attempts', 'daily', 'rushRuns', 'battles', 'customPuzzles', 'reviews', 'achievements', 'games', 'analyses', 'openingLines',
+  'woodSets', 'selfReviews', 'ratingLog', 'coachDays',
 ];
 
 /**
  * kv keys that belong to this device only: never written to a backup and never taken from one.
- * battleToken is a secret that proves ownership of the friend code; a restored ratedPending could be settled as a miss.
+ * battleToken is a secret that proves ownership of the friend code; a restored ratedPending could be settled as a miss;
+ * botGame is a game in progress with running clocks.
  */
-export const DEVICE_KEYS: readonly string[] = ['battleCode', 'battleToken', 'ratedPending'];
+export const DEVICE_KEYS: readonly string[] = ['battleCode', 'battleToken', 'ratedPending', 'botGame'];
 
 export interface BackupFile {
   format: string;
@@ -115,27 +125,32 @@ const opt = (x: unknown, f: (v: unknown) => boolean): boolean => x === undefined
 const oneOf = (x: unknown, list: readonly string[]): boolean => typeof x === 'string' && list.includes(x);
 const isStats = (x: unknown): boolean => isObj(x) && isNum(x.solved) && isNum(x.strikes);
 const isSide = (x: unknown): boolean => isObj(x) && (x.white === null || isNum(x.white)) && (x.black === null || isNum(x.black));
+const isDateKey = (x: unknown): x is string => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
 const isBox = (x: unknown): boolean => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x <= 5;
 
-const ATTEMPT_MODES = ['rated', 'daily', 'rush', 'battle', 'custom', 'theme', 'review'];
+const ATTEMPT_MODES = ['rated', 'daily', 'rush', 'battle', 'custom', 'theme', 'review', 'woodpecker'];
+const PUZZLE_SOURCES = ['lichess', 'custom'];
 const RUSH_MODES = ['3min', '5min', 'survival'];
 const RESULTS = ['win', 'loss', 'draw'];
-const GAME_SOURCES = ['lichess', 'chesscom', 'pgn'];
+const GAME_SOURCES = ['lichess', 'chesscom', 'pgn', 'bot'];
 const GAME_RESULTS = ['1-0', '0-1', '1/2-1/2', '*'];
 const ENGINES = ['lite', 'deep'];
 const PHASES = ['opening', 'middlegame', 'endgame'];
 const LEVELS = ['easier', 'normal', 'harder'];
+const SELF_REASONS = ['check', 'capture', 'threat', 'calculation', 'time', 'plan', 'opening', 'endgame'];
+const COACH_SPEEDS = ['rapid', 'blitz', 'bullet', 'daily'];
 
 function isAttempt(r: unknown): boolean {
   return (
     isObj(r) && isPosInt(r.id) && isStr(r.puzzleId) && oneOf(r.mode, ATTEMPT_MODES) && isBool(r.solved) && isNum(r.puzzleRating) &&
     isNum(r.hintsUsed) && isNum(r.timeMs) && isNum(r.at) &&
-    opt(r.ratingBefore, isNum) && opt(r.ratingAfter, isNum) && opt(r.delta, isNum) && opt(r.themes, isStrArr)
+    opt(r.ratingBefore, isNum) && opt(r.ratingAfter, isNum) && opt(r.delta, isNum) && opt(r.themes, isStrArr) &&
+    opt(r.setId, isStr) && opt(r.cycle, isPosInt)
   );
 }
 
 function isDaily(r: unknown): boolean {
-  return isObj(r) && isStr(r.date) && /^\d{4}-\d{2}-\d{2}$/.test(r.date) && isStr(r.puzzleId) && isBool(r.solved) && isBool(r.clean) && isNum(r.at);
+  return isObj(r) && isDateKey(r.date) && isStr(r.puzzleId) && isBool(r.solved) && isBool(r.clean) && isNum(r.at);
 }
 
 function isRushRun(r: unknown): boolean {
@@ -157,12 +172,18 @@ function isBattle(r: unknown): boolean {
   );
 }
 
-function isCustomPuzzle(r: unknown): boolean {
+function isPuzzle(r: unknown): r is Rec {
   return (
     isObj(r) && isStr(r.id) && isStr(r.fen) && isStrArr(r.moves) && isBool(r.opponentFirst) && isNum(r.rating) && isStrArr(r.themes) &&
-    r.source === 'custom' && isNum(r.createdAt) && isNum(r.updatedAt) &&
-    opt(r.title, isStr) && opt(r.author, isStr) && opt(r.gameUrl, isStr) && opt(r.plays, isNum) && opt(r.solves, isNum) &&
+    oneOf(r.source, PUZZLE_SOURCES) && opt(r.title, isStr) && opt(r.gameUrl, isStr) &&
     opt(r.alts, (a) => isObj(a) && Object.values(a).every(isStrArr))
+  );
+}
+
+function isCustomPuzzle(r: unknown): boolean {
+  return (
+    isPuzzle(r) && r.source === 'custom' && isNum(r.createdAt) && isNum(r.updatedAt) &&
+    opt(r.author, isStr) && opt(r.plays, isNum) && opt(r.solves, isNum)
   );
 }
 
@@ -236,6 +257,35 @@ function isOpeningLine(r: unknown): boolean {
   );
 }
 
+const isPly = (x: unknown): boolean => typeof x === 'number' && Number.isInteger(x) && x >= 0;
+
+/** A set whose list or cycles are damaged cannot be continued: the whole row goes. */
+function isWoodSet(r: unknown): boolean {
+  if (!isObj(r) || !isStr(r.id) || !isNum(r.createdAt) || !isStr(r.name) || !Array.isArray(r.items) || !Array.isArray(r.cycles)) return false;
+  return (
+    r.items.length > 0 && r.items.every((p) => isPuzzle(p) && (p.moves as string[]).length > 0) && r.cycles.length > 0 &&
+    r.cycles.every((c, i) => isObj(c) && c.n === i + 1 && isNum(c.startedAt) && (c.finishedAt === null || isNum(c.finishedAt)) && isPosInt(c.targetDays))
+  );
+}
+
+function isSelfReview(r: unknown): boolean {
+  return (
+    isObj(r) && isStr(r.gameKey) && isNum(r.at) && (r.side === 'w' || r.side === 'b') && (r.turningPly === null || isPly(r.turningPly)) &&
+    (r.reason === null || oneOf(r.reason, SELF_REASONS)) && isStr(r.lesson) && isBool(r.skipped)
+  );
+}
+
+function isRatingLog(r: unknown): boolean {
+  return isObj(r) && isStr(r.id) && isDateKey(r.date) && r.site === 'chesscom' && oneOf(r.speed, COACH_SPEEDS) && isNum(r.rating) && opt(r.user, isStr);
+}
+
+function isCoachDay(r: unknown): boolean {
+  return (
+    isObj(r) && isDateKey(r.date) && isStrArr(r.ticks) &&
+    Array.isArray(r.blitz) && r.blitz.every((b) => isObj(b) && isNum(b.at) && (b.result === 'win' || b.result === 'loss'))
+  );
+}
+
 const SPECS: { [T in Exclude<TableName, 'kv'>]: { valid: (r: unknown) => boolean; key: (r: TableRows[T]) => string | number } } = {
   attempts: { valid: isAttempt, key: (r) => r.id as number },
   daily: { valid: isDaily, key: (r) => r.date },
@@ -247,6 +297,10 @@ const SPECS: { [T in Exclude<TableName, 'kv'>]: { valid: (r: unknown) => boolean
   games: { valid: isGame, key: (r) => r.key },
   analyses: { valid: isAnalysis, key: (r) => r.gameKey },
   openingLines: { valid: isOpeningLine, key: (r) => r.id },
+  woodSets: { valid: isWoodSet, key: (r) => r.id },
+  selfReviews: { valid: isSelfReview, key: (r) => r.gameKey },
+  ratingLog: { valid: isRatingLog, key: (r) => r.id },
+  coachDays: { valid: isCoachDay, key: (r) => r.date },
 };
 
 /** A known kv value is checked; other keys pass through (their readers sanitise: settings, analysisPrefs, recentOpponents, endgameProgress, visionBest, openingFamilies). */
@@ -264,6 +318,16 @@ function kvValueOk(key: string, v: unknown): boolean {
       return isNum(v) && v >= 0;
     case 'achievementsSeeded':
       return isBool(v);
+    // Training plan values: only the shape is checked here, their readers sanitise the rest.
+    case 'woodNext':
+    case 'coachLibrary':
+      return isStrArr(v);
+    case 'dailyNotes':
+      return Array.isArray(v);
+    case 'blunderCheck':
+    case 'coachPlan':
+    case 'coachActivity':
+      return isObj(v);
     default:
       return true;
   }

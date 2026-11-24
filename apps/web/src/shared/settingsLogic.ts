@@ -3,6 +3,15 @@
 export type BoardThemeId = 'tide' | 'ember' | 'dusk' | 'glacier';
 export type AnimSpeed = 'normal' | 'fast' | 'off';
 
+/** Which games ask for your own review before the engine runs. 'slow' = rapid, Daily, classical and bot games. */
+export type SelfReviewMode = 'off' | 'slow' | 'all';
+
+export const SELF_REVIEW_MODES: readonly { id: SelfReviewMode; label: string }[] = [
+  { id: 'off', label: 'Off' },
+  { id: 'slow', label: 'Slow games' },
+  { id: 'all', label: 'All games' },
+];
+
 export interface Settings {
   /** Sound effects on/off. */
   sound: boolean;
@@ -19,6 +28,8 @@ export interface Settings {
   premoves: boolean;
   /** Add mistakes from analysed games to Train automatically. */
   autoGamePuzzles: boolean;
+  /** Review a game yourself before the engine does. */
+  selfReview: SelfReviewMode;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoAdvance: false,
   premoves: true,
   autoGamePuzzles: true,
+  selfReview: 'off',
 };
 
 export interface BoardTheme {
@@ -75,6 +87,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     autoAdvance: typeof r.autoAdvance === 'boolean' ? r.autoAdvance : d.autoAdvance,
     premoves: typeof r.premoves === 'boolean' ? r.premoves : d.premoves,
     autoGamePuzzles: typeof r.autoGamePuzzles === 'boolean' ? r.autoGamePuzzles : d.autoGamePuzzles,
+    selfReview: SELF_REVIEW_MODES.some((m) => m.id === r.selfReview) ? (r.selfReview as SelfReviewMode) : d.selfReview,
   };
 }
 

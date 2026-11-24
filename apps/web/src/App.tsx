@@ -22,6 +22,8 @@ const Battle = lazy(() => import('./features/battle/Page.tsx'));
 const Custom = lazy(() => import('./features/custom/Page.tsx'));
 const Analysis = lazy(() => import('./features/analysis/Page.tsx'));
 const AnalysisInsights = lazy(() => import('./features/analysis/insights/Page.tsx'));
+const Play = lazy(() => import('./features/play/Page.tsx'));
+const Coach = lazy(() => import('./features/coach/Page.tsx'));
 const Stats = lazy(() => import('./features/stats/Page.tsx'));
 const Settings = lazy(() => import('./features/settings/Page.tsx'));
 
@@ -36,6 +38,9 @@ const NAV = [
   { to: '/custom', label: 'Custom', icon: Icons.pencil },
   { to: '/analysis', label: 'Review', icon: Icons.search },
 ];
+
+/** Coach: second in the desktop sidebar, an icon in the phone top bar (the bottom bar stays at 8 columns). */
+const COACH: { to: string; label: string; icon: typeof Icons.bulb; end?: boolean } = { to: '/coach', label: 'Coach', icon: Icons.bulb };
 
 /** Secondary pages: below the modes in the sidebar, icons in the mobile top bar. */
 const MORE = [
@@ -80,7 +85,7 @@ export function App() {
           </span>
         </NavLink>
         <nav className="flex flex-col gap-1">
-          {NAV.map((n) => (
+          {[NAV[0], COACH, ...NAV.slice(1)].map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={sideLink}>
               <span className="transition-transform duration-150 group-hover:scale-110">{n.icon('h-5 w-5')}</span>
               {n.label}
@@ -128,7 +133,7 @@ export function App() {
           </span>
         </NavLink>
         <div className="flex items-center">
-          {MORE.map((n) => (
+          {[COACH, ...MORE].map((n) => (
             <NavLink key={n.to} to={n.to} aria-label={n.label} className={({ isActive }) => `flex h-11 w-11 items-center justify-center rounded-xl ${isActive ? 'text-ember-400' : 'text-ink-300'}`}>
               {n.icon()}
             </NavLink>
@@ -152,6 +157,8 @@ export function App() {
               <Route path="/custom/*" element={<Custom />} />
               <Route path="/analysis/insights" element={<AnalysisInsights />} />
               <Route path="/analysis/*" element={<Analysis />} />
+              <Route path="/play/*" element={<Play />} />
+              <Route path="/coach/*" element={<Coach />} />
               <Route path="/stats" element={<Stats />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<div className="p-10 text-center text-ink-400">Page not found.</div>} />

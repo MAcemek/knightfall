@@ -12,4 +12,12 @@ describe('resolveSide', () => {
     expect(resolveSide(g, { lichessUser: '', chesscomUser: 'me' })).toBeNull();
     expect(resolveSide({ ...g, source: 'pgn' }, { lichessUser: 'me', chesscomUser: 'me' })).toBeNull();
   });
+
+  it('finds the side of a bot game through importedFor, never through a remembered username', () => {
+    const g = { source: 'bot' as const, white: { name: 'Me' }, black: { name: 'Bot' } };
+    expect(resolveSide({ ...g, importedFor: 'me' }, NO_USERS)).toBe('w');
+    expect(resolveSide({ ...g, importedFor: 'BOT' }, NO_USERS)).toBe('b');
+    expect(resolveSide(g, { lichessUser: 'me', chesscomUser: 'me' })).toBeNull();
+    expect(resolveSide({ ...g, importedFor: 'someone else' }, { lichessUser: 'me', chesscomUser: 'me' })).toBeNull();
+  });
 });

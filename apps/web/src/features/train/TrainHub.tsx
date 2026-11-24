@@ -86,10 +86,13 @@ export function TrainHub() {
         <div className="md:col-span-2">
           <HubCard icon={Icons.chart} title="Weak spots" text="Puzzles from the themes you miss most, picked for you." onOpen={() => navigate('/train/weak')} />
         </div>
+        <HubCard icon={Icons.retry} title="Woodpecker" text="One fixed set of puzzles, solved again and again, faster every time." onOpen={() => navigate('/train/woodpecker')} />
+        <HubCard icon={Icons.lock} title="Blunder check" text="Is the planned move safe? Look for checks, captures and threats first." onOpen={() => navigate('/train/blunder-check')} />
         <HubCard icon={Icons.search} title="From my games" text="Your own mistakes from analysed games, as puzzles." onOpen={() => navigate('/train/games')} />
         <HubCard icon={Icons.bulb} title="Openings" text="Learn the named lines move by move, then get tested on them." onOpen={() => navigate('/train/openings')} />
         <HubCard icon={Icons.trophy} title="Endgames" text="Play key endings against perfect defence." onOpen={() => navigate('/train/endgames')} />
         <HubCard icon={Icons.eye} title="Board vision" text="Find and name squares, plan knight routes. Quick timed drills." onOpen={() => navigate('/train/vision')} />
+        <HubCard icon={Icons.clock} title="Bot games" text="Slow training games with a blunder check before every move." onOpen={() => navigate('/play')} />
       </div>
 
       <div className="animate-rise" style={{ animationDelay: '60ms' }}>

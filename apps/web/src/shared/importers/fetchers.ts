@@ -1,4 +1,4 @@
-import { parseGameInput, parsePgnGames } from '@knightfall/core';
+import { parseGameInput, parsePgnGames, type ParsedGame } from '@knightfall/core';
 import type { StoredGame } from '../db.ts';
 import { gameFromChesscom, gameFromLichess, gameFromPgn, ImportError, USERNAME } from './mappers.ts';
 
@@ -91,6 +91,11 @@ export interface UserGamesOptions {
   onGame?: (game: StoredGame) => void;
   fetchFn?: FetchFn;
   now?: number;
+  /**
+   * chess.com only: asked for every raw archive entry before its PGN is parsed (parsing is slow). An entry that gets
+   * false is skipped and does not count toward `max`. The callback may keep what it needs from the entry.
+   */
+  accept?: (raw: unknown) => boolean;
 }
 
 /** The newest games of a Lichess user, newest first (standard chess only). */
@@ -118,7 +123,7 @@ export async function fetchLichessUserGames(username: string, opts: UserGamesOpt
 export async function fetchChesscomUserGames(username: string, opts: UserGamesOptions = {}): Promise<StoredGame[]> {
   const user = username.trim().toLowerCase();
   if (!USERNAME.test(user)) throw new ImportError('invalid', 'Enter a chess.com username (letters, digits, - and _).');
-  const { max = DEFAULT_MAX_GAMES, signal, onGame, fetchFn = defaultFetch, now = Date.now() } = opts;
+  const { max = DEFAULT_MAX_GAMES, signal, onGame, fetchFn = defaultFetch, now = Date.now(), accept } = opts;
   const root = `https://api.chess.com/pub/player/${encodeURIComponent(user)}/games`;
   const list = await request(fetchFn, `${root}/archives`, 'chess.com', 'application/json', signal);
   if (list.status === 404) throw new ImportError('not_found', `chess.com has no player called "${username.trim()}".`);
@@ -139,6 +144,7 @@ export async function fetchChesscomUserGames(username: string, opts: UserGamesOp
     if (!res.ok) continue;
     const archive = (await res.json()) as { games?: unknown };
     const rows = (Array.isArray(archive.games) ? archive.games : [])
+      .filter((raw) => !accept || accept(raw))
       .map((g) => gameFromChesscom(g, now, user))
       .filter((g): g is StoredGame => !!g)
       .sort((a, b) => b.playedAt - a.playedAt);
@@ -179,6 +185,23 @@ export async function fetchChesscomGame(type: 'live' | 'daily', id: string, fetc
   return game;
 }
 
+const IN_PROGRESS_MESSAGE = 'That chess.com game is not finished. Reviewing a game in progress is not allowed under fair play rules.';
+
+/** The result written after the last move ("1-0", "0-1", "1/2-1/2" or "*"), or null when the movetext ends without one. */
+function movetextResult(pgn: string): string | null {
+  const m = /(1-0|0-1|1\/2-1\/2|\*)\s*$/.exec(pgn.replace(/\{[^}]*\}\s*$/, '').trimEnd());
+  return m ? m[1] : null;
+}
+
+/** A chess.com game without a result: it may still be running, so it is not reviewed (fair play). */
+function isChesscomInProgress(g: ParsedGame): boolean {
+  if (!/chess\.com/i.test(`${g.headers.Site ?? ''} ${g.headers.Link ?? ''}`)) return false;
+  if (g.result !== '*') return false;
+  // A finished game can miss the Result tag and still end its movetext with the result.
+  const end = movetextResult(g.pgn);
+  return end === null || end === '*';
+}
+
 /**
  * Resolve whatever the user pasted (link, id or PGN) into games. Throws ImportError with a ready-to-show message.
  * `warnings` lists PGN games that were skipped.
@@ -195,7 +218,11 @@ export async function resolveGameInput(text: string, fetchFn: FetchFn = defaultF
     case 'pgn': {
       const { games, errors } = parsePgnGames(input.pgn);
       if (!games.length) throw new ImportError('invalid', errors[0] ?? 'That PGN could not be read.');
-      return { games: games.map((g) => gameFromPgn(g, now)), warnings: errors };
+      const finished = games.filter((g) => !isChesscomInProgress(g));
+      if (!finished.length) throw new ImportError('invalid', IN_PROGRESS_MESSAGE);
+      const skipped = games.length - finished.length;
+      const warnings = skipped ? [...errors, skipped === 1 ? 'One chess.com game was skipped because it is not finished.' : `${skipped} chess.com games were skipped because they are not finished.`] : errors;
+      return { games: finished.map((g) => gameFromPgn(g, now)), warnings };
     }
   }
 }

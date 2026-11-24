@@ -18,7 +18,11 @@ game review for your own Lichess and chess.com games.
 | **Rush** | `/rush` | 3 min / 5 min / Survival. Difficulty ramps up, combos build, three strikes and you're out. Personal bests per mode, game-over stats and an untimed review of every puzzle in the run |
 | **Battle** | `/battle` | Live 1v1 over WebSocket: same puzzle sequence for both players, 3 minutes, 3 strikes, Elo rating. A sparring bot steps in after ~8 s if nobody else is queued. Rematch, new opponent, resign. Or challenge a friend by code (casual, unrated; invitations arrive on any page) with your choice of time (1/3/5 min), difficulty and best of 1 or 3, and re-challenge **recent opponents** in one tap. A **club room** lets a host open a room code where everyone races the same puzzles at once with a live ranking (single race, spectators can join mid-race) |
 | **Custom** | `/custom` | Board editor → record the solution → optional engine check → add title, themes and difficulty → save locally. Play, edit, share as a self-contained link (`/custom/s#…`), export/import JSON |
-| **Game Review** | `/analysis` | Paste a Lichess or chess.com link or a PGN, or import recent games by username. Stockfish runs in your browser (plus Lichess cloud evals for known positions): accuracy per side, classified moves, eval graph, key moments, free exploration, and "practise your mistakes", which turns your errors into puzzles |
+| **Game Review** | `/analysis` | Paste a Lichess or chess.com link or a PGN, or import recent games by username. Stockfish runs in your browser (plus Lichess cloud evals for known positions): accuracy per side, classified moves, eval graph, key moments, free exploration, and "practise your mistakes", which turns your errors into puzzles. A setting (off, slow games or all games) can make you write down where you think the game went wrong before the engine's answer is shown. Starting a Coach plan turns it on for slow games |
+| **Woodpecker** | `/train/woodpecker` | Make a fixed set of puzzles and solve all of them again and again, each cycle in fewer days. Pace per day, accuracy and median time per cycle, and a practice round for the misses |
+| **Blunder check** | `/train/blunder-check` | Is the planned move safe? Look for checks, captures and threats before you play it. Counts toward the Coach's daily list |
+| **Bot games** | `/play` | Slow training games against a limited-strength Stockfish in your browser. Each move is held until you have ticked the blunder check. Games are stored so you can review them |
+| **Coach** | `/coach` | A 12-week plan: a short list of tasks for each day (Woodpecker, Rush, blunder check, study, Daily games, weekend rapid games and reviews), a bullet limit of 10 a week, a blitz stop rule after two losses in a row, a rating chart against your targets, a helper for Daily games with no board or engine, and a library of videos, books and tools. Everything stays in this browser |
 | **Stats** | `/stats` | Rating chart, theme strengths, activity heatmap and achievements |
 | **Settings** | `/settings` | Board theme, coordinates, sound and volume, animation speed, auto-next, and **Backup**: save all progress to a file and restore it here or on another device |
 
@@ -74,7 +78,8 @@ packages/core     shared TS: puzzle types, move judging, Glicko-2/Elo, seeded se
 apps/web          Vite + React + Tailwind client
   src/shared      Board, PuzzlePlayer, fx (synth sounds, particles), db (Dexie), engine (Stockfish worker
                   pool, cloud evals), importers (Lichess, chess.com), settings, progress
-  src/features    one folder per mode: puzzles, train, daily, rush, battle, custom, analysis, stats, settings, home
+  src/features    one folder per mode: puzzles, train, daily, rush, battle, custom, analysis, play, woodpecker,
+                  blundercheck, coach, stats, settings, home
   e2e             Playwright battle tests (npm run e2e)
 apps/server       Node HTTP + ws server: battle matchmaking, rooms, authoritative clock; chess.com game lookup
 scripts           build-puzzles, build-openings, fetch-engine, fit-rating, build-vercel
@@ -96,6 +101,8 @@ Knightfall talks only to public endpoints and never sends credentials:
 - A chess.com game link is resolved by Knightfall's own server, which looks the game up on chess.com
   (cached, rate-limited, numeric game IDs only).
 - Endgame drills query the Lichess tablebase at `tablebase.lichess.ovh` (GET, position FEN only, no credentials; not cached offline).
+- With a Coach plan that has a chess.com username, the Coach reads that player's public ratings and games from
+  `api.chess.com` when it is opened (at most once every 15 minutes) or when Sync is pressed. Only the username is sent.
 - Battles connect to Knightfall's own WebSocket server.
 - While the app is open it keeps a connection to Knightfall's battle server (for friend challenges and Puzzle Battle).
   The connection shares your display name and battle rating with that server, plus a random friend code and token. In a friend battle your friend code is shared with your opponent so they can re-challenge you.

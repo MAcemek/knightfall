@@ -1,4 +1,5 @@
 import type { Attempt, BattleRecord, RushMode, RushRun } from '../../shared/db.ts';
+import { localDateKey } from '../../shared/localDate.ts';
 import { LOW_PRIORITY_THEMES } from '../../shared/themes.ts';
 
 /** Pure aggregation for the Stats page (no React, no IndexedDB). */
@@ -58,11 +59,6 @@ export function strengthsAndWeaknesses(stats: readonly ThemeStat[], n = 3): { st
   const strengths = stats.slice(0, n).filter((s) => s.accuracy >= 0.5);
   const rest = stats.slice(strengths.length);
   return { strengths, weaknesses: rest.slice(-n).reverse() };
-}
-
-/** YYYY-MM-DD in the device's local time zone. */
-export function localDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export type HeatLevel = 0 | 1 | 2 | 3 | 4;

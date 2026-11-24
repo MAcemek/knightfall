@@ -9,6 +9,8 @@ import { WeakTrainer } from './WeakTrainer.tsx';
 
 const OpeningsPage = lazy(() => import('../openings/Page.tsx'));
 const EndgamesPage = lazy(() => import('../endgames/Page.tsx'));
+const WoodpeckerPage = lazy(() => import('../woodpecker/Page.tsx'));
+const BlunderCheckPage = lazy(() => import('../blundercheck/Page.tsx'));
 const VisionPage = lazy(() => import('../vision/Page.tsx'));
 
 /**
@@ -19,6 +21,8 @@ const VisionPage = lazy(() => import('../vision/Page.tsx'));
  *   /train/review          spaced-repetition review of missed puzzles
  *   /train/games           puzzles from your own analysed games (due / all / bulk add)
  *   /train/games/play      their session (?m=due|all)
+ *   /train/woodpecker/*    one fixed puzzle set, repeated faster every cycle
+ *   /train/blunder-check/* is this move safe? (checks, captures, threats)
  *   /train/openings/*      opening trainer
  *   /train/endgames/*      endgame drills (tablebase)
  *   /train/vision/*        board vision drills (find / name the square, knight routes)
@@ -32,6 +36,8 @@ export default function TrainPage() {
       <Route path="review" element={<ReviewTrainer />} />
       <Route path="games" element={<GamesPage />} />
       <Route path="games/play" element={<GamesTrainerRoute />} />
+      <Route path="woodpecker/*" element={<Suspense fallback={null}><WoodpeckerPage /></Suspense>} />
+      <Route path="blunder-check/*" element={<Suspense fallback={null}><BlunderCheckPage /></Suspense>} />
       <Route path="openings/*" element={<Suspense fallback={null}><OpeningsPage /></Suspense>} />
       <Route path="endgames/*" element={<Suspense fallback={null}><EndgamesPage /></Suspense>} />
       <Route path="vision/*" element={<Suspense fallback={null}><VisionPage /></Suspense>} />

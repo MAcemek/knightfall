@@ -16,7 +16,7 @@ function useMotionMs(base: number): number {
 
 /* ---------------------------------- header ---------------------------------- */
 
-const SITE_NAME = { lichess: 'Lichess', chesscom: 'chess.com', pgn: '' } as const;
+const SITE_NAME = { lichess: 'Lichess', chesscom: 'chess.com', pgn: '', bot: '' } as const;
 
 export const ReviewHeader = memo(function ReviewHeader({ game, report }: { game: StoredGame; report: GameReport | null }) {
   const opening = report?.opening?.name ?? game.opening?.name;

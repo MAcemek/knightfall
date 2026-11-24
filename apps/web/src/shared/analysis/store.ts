@@ -4,6 +4,7 @@ import { db, getKV, KEYS, setKV, type GameSource, type StoredAnalysis, type Stor
 import type { EngineId } from '../engine/index.ts';
 import { fetchChesscomUserGames, fetchLichessUserGames, resolveGameInput } from '../importers/index.ts';
 import { isPuzzleOfGame } from './gamePuzzleLogic.ts';
+import { removeNextPicks } from '../woodNext.ts';
 
 /** IndexedDB side of Game Review: imported games, finished analyses, preferences, and the import entry points. */
 
@@ -65,15 +66,18 @@ export async function saveAnalysis(row: StoredAnalysis): Promise<void> {
   await db.analyses.put(row);
 }
 
-/** Remove a game, its analysis, and the practice puzzles (with their review rows) made from it. */
+/** Remove a game, its analysis, your own review of it, and the practice puzzles (with their review rows) made from it. */
 export async function deleteGame(key: string): Promise<void> {
-  await db.transaction('rw', db.games, db.analyses, db.customPuzzles, db.reviews, async () => {
+  await db.transaction('rw', [db.games, db.analyses, db.selfReviews, db.customPuzzles, db.reviews, db.kv], async () => {
     await db.games.delete(key);
     await db.analyses.delete(key);
+    await db.selfReviews.delete(key);
     const ids = (await db.customPuzzles.where('id').startsWith(`${GAME_PUZZLE_PREFIX}${key}-`).primaryKeys()) as string[];
     const own = ids.filter((id) => isPuzzleOfGame(id, key));
     await db.customPuzzles.bulkDelete(own);
     await db.reviews.bulkDelete(own);
+    // A pick for the next Woodpecker set that points at a deleted puzzle would be a ghost.
+    await removeNextPicks(own);
   });
 }
 

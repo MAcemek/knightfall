@@ -4,7 +4,7 @@ import { sfx } from '../../shared/fx/index.ts';
 import { useInstall } from '../../shared/pwa/install.ts';
 import { setPlayerName, useProfile } from '../../shared/profile.ts';
 import { resetSettings, setSetting, useSettings } from '../../shared/settings.ts';
-import { ANIM_SPEEDS, BOARD_THEMES } from '../../shared/settingsLogic.ts';
+import { ANIM_SPEEDS, BOARD_THEMES, SELF_REVIEW_MODES } from '../../shared/settingsLogic.ts';
 import { toast } from '../../shared/toast.tsx';
 import { Button, Icons, PageHeader, Panel, Segmented, Switch } from '../../shared/ui.tsx';
 import { BackupPanel } from './BackupPanel.tsx';
@@ -140,6 +140,14 @@ export default function SettingsPage() {
             label="Add mistakes from my analysed games to Train"
             hint="After a Game Review finishes, your blunders and misses become puzzles in Train, From my games."
           />
+        </Panel>
+      </div>
+
+      <div className="animate-rise" style={{ animationDelay: '180ms' }}>
+        <Panel className="space-y-4">
+          <h2 className="text-lg font-extrabold">Game Review</h2>
+          <Segmented label="Review a game yourself first" options={SELF_REVIEW_MODES} value={s.selfReview} onChange={(v) => setSetting('selfReview', v)} />
+          <p className="text-sm text-ink-400">Before Stockfish runs, mark where the game turned yourself. Slow games are rapid, Daily, classical and bot games.</p>
         </Panel>
       </div>
 

@@ -8,7 +8,7 @@ export interface KV {
   value: unknown;
 }
 
-export type AttemptMode = 'rated' | 'daily' | 'rush' | 'battle' | 'custom' | 'theme' | 'review';
+export type AttemptMode = 'rated' | 'daily' | 'rush' | 'battle' | 'custom' | 'theme' | 'review' | 'woodpecker';
 
 export interface Attempt {
   id?: number;
@@ -24,6 +24,9 @@ export interface Attempt {
   at: number;
   /** Puzzle themes at the time of the attempt (v2+; older rows are resolved via findPuzzle). Not indexed. */
   themes?: string[];
+  /** Woodpecker attempts (v5): the set and the cycle (1-based) they belong to. Not indexed. */
+  setId?: string;
+  cycle?: number;
 }
 
 export interface DailyRecord {
@@ -111,7 +114,7 @@ export interface AchievementRow {
   at: number;
 }
 
-export type GameSource = 'lichess' | 'chesscom' | 'pgn';
+export type GameSource = 'lichess' | 'chesscom' | 'pgn' | 'bot';
 
 export interface GamePlayer {
   name: string;
@@ -119,7 +122,7 @@ export interface GamePlayer {
   title?: string;
 }
 
-/** An imported game (v3). `key` is stable per game: "li-<id8>", "cc-<live|daily>-<digits>", "pgn-<hash>". */
+/** A stored game (v3). `key` is stable per game: "li-<id8>", "cc-<live|daily>-<digits>", "pgn-<hash>", "bot-<id>". */
 export interface StoredGame {
   key: string;
   source: GameSource;
@@ -170,6 +173,62 @@ export interface OpeningLineProgress {
   misses: number;
 }
 
+export interface WoodCycle {
+  /** 1-based. */
+  n: number;
+  startedAt: number;
+  finishedAt: number | null;
+  targetDays: number;
+}
+
+/** A Woodpecker set (v5): a fixed list of puzzles solved again and again, faster every time. */
+export interface WoodSet {
+  id: string;
+  createdAt: number;
+  name: string;
+  /** Frozen copies in playing order: a rebuilt puzzle set or a deleted game never changes a set. */
+  items: Puzzle[];
+  cycles: WoodCycle[];
+}
+
+export type SelfReviewReason = 'check' | 'capture' | 'threat' | 'calculation' | 'time' | 'plan' | 'opening' | 'endgame';
+
+/** The player's own look at a game before the engine ran (v5). One row per game. */
+export interface SelfReview {
+  gameKey: string;
+  at: number;
+  side: 'w' | 'b';
+  /** Index of the move the player calls the point of no return; null = none. */
+  turningPly: number | null;
+  reason: SelfReviewReason | null;
+  lesson: string;
+  skipped: boolean;
+}
+
+export type CoachSpeed = 'rapid' | 'blitz' | 'bullet' | 'daily';
+
+/** One rating on one day (v5). `id` is "chesscom-<speed>-<date>", so a second sync on the same day replaces it. */
+export interface RatingLogRow {
+  id: string;
+  /** Local date, YYYY-MM-DD. */
+  date: string;
+  site: 'chesscom';
+  speed: CoachSpeed;
+  rating: number;
+  /** chess.com username, lower case. Not indexed. */
+  user?: string;
+}
+
+/** What the player ticked or noted on the Coach page on one local day (v5). */
+export interface CoachDay {
+  /** Local date, YYYY-MM-DD. */
+  date: string;
+  /** Ids of the manual tasks done. */
+  ticks: string[];
+  /** Blitz results noted by hand, oldest first. */
+  blitz: { at: number; result: 'win' | 'loss' }[];
+}
+
 export const db = new Dexie('knightfall') as Dexie & {
   kv: EntityTable<KV, 'key'>;
   attempts: EntityTable<Attempt, 'id'>;
@@ -182,6 +241,10 @@ export const db = new Dexie('knightfall') as Dexie & {
   games: EntityTable<StoredGame, 'key'>;
   analyses: EntityTable<StoredAnalysis, 'gameKey'>;
   openingLines: EntityTable<OpeningLineProgress, 'id'>;
+  woodSets: EntityTable<WoodSet, 'id'>;
+  selfReviews: EntityTable<SelfReview, 'gameKey'>;
+  ratingLog: EntityTable<RatingLogRow, 'id'>;
+  coachDays: EntityTable<CoachDay, 'date'>;
 };
 
 db.version(1).stores({
@@ -208,6 +271,14 @@ db.version(3).stores({
 // v4: opening trainer progress. Only the NEW table; v1 to v3 stay exactly as they are.
 db.version(4).stores({
   openingLines: 'id, family, due',
+});
+
+// v5: Woodpecker sets, engine-off reviews and the Coach. Only NEW tables; v1 to v4 stay exactly as they are.
+db.version(5).stores({
+  woodSets: 'id, createdAt',
+  selfReviews: 'gameKey, at',
+  ratingLog: 'id, date',
+  coachDays: 'date',
 });
 
 export async function getKV<T>(key: string, fallback: T): Promise<T> {
@@ -244,6 +315,20 @@ export const KEYS = {
   endgameProgress: 'endgameProgress',
   /** Board vision drills (features/vision): best score per drill and side, keyed "find-w" and so on. */
   visionBest: 'visionBest',
+  /** Puzzles picked for the next Woodpecker set (features/woodpecker): puzzle ids, oldest first. */
+  woodNext: 'woodNext',
+  /** Blunder check totals per local day (features/blundercheck). */
+  blunderCheck: 'blunderCheck',
+  /** The training plan (features/coach): username, start date, baselines, targets. Absent = no plan. */
+  coachPlan: 'coachPlan',
+  /** Blitz and bullet games of the last 35 days and the time of the last sync (features/coach). */
+  coachActivity: 'coachActivity',
+  /** Notes on Daily games in progress (features/coach). */
+  dailyNotes: 'dailyNotes',
+  /** Ticked library entries (features/coach): ids. */
+  coachLibrary: 'coachLibrary',
+  /** The bot game being played (features/play). Belongs to this device. */
+  botGame: 'botGame',
 } as const;
 
 export interface StreakState {

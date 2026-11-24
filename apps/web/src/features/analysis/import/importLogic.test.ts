@@ -31,6 +31,12 @@ describe('labels', () => {
     expect(playerLabel(game.white)).toBe('Alice (1510)');
     expect(playerLabel(game.black)).toBe('Bob');
   });
+  it('shows a bot game like any other (no rating, no time control)', () => {
+    const bot = { white: { name: 'Me' }, black: { name: 'Bot level 3' }, speed: 'rapid' };
+    expect(playerLabel(bot.black)).toBe('Bot level 3');
+    expect(speedLabel(bot)).toBe('Rapid');
+    expect(opponentOf(bot, 'w').name).toBe('Bot level 3');
+  });
   it('speedLabel', () => {
     expect(speedLabel({ speed: 'blitz', timeControl: '180+0' })).toBe('Blitz · 180+0');
     expect(speedLabel({ speed: 'rapid' })).toBe('Rapid');

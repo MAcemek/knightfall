@@ -224,6 +224,19 @@ describe('chess.com fetchers', () => {
     expect(calls).toEqual([`${root}/archives`, `${root}/2026/10`, `${root}/2026/09`]);
     expect(calls.every((u) => u.startsWith('https://api.chess.com/pub/player/dave/games'))).toBe(true);
   });
+  it('accept skips raw entries before they are parsed and they do not count toward max', async () => {
+    const fetchFn: FetchFn = async (url) => {
+      if (url === `${root}/archives`) return json({ archives: [`${root}/2026/10`] });
+      return json({ games: [chesscomArchiveGame('1', 100, { time_class: 'blitz' }), chesscomArchiveGame('2', 200), chesscomArchiveGame('3', 300, { time_class: 'blitz' }), chesscomArchiveGame('4', 400), chesscomArchiveGame('5', 500)] });
+    };
+    const seen: unknown[] = [];
+    const accept = (raw: unknown) => (seen.push(raw), (raw as { time_class?: string }).time_class === 'rapid');
+    const games = await fetchChesscomUserGames('dave', { fetchFn, max: 2, now: NOW, accept });
+    expect(games.map((g) => g.key)).toEqual(['cc-live-5', 'cc-live-4']);
+    expect(seen).toHaveLength(5);
+    // Without accept nothing changes.
+    expect(await fetchChesscomUserGames('dave', { fetchFn, max: 10, now: NOW })).toHaveLength(5);
+  });
   it('reports unknown players, bad names and rate limits', async () => {
     await expect(fetchChesscomUserGames('ghost', { fetchFn: async () => json({}, 404) })).rejects.toMatchObject({ code: 'not_found' });
     await expect(fetchChesscomUserGames('x', { fetchFn: async () => json({}) })).rejects.toMatchObject({ code: 'invalid' });
@@ -264,6 +277,33 @@ describe('resolveGameInput', () => {
     expect(multi.games).toHaveLength(2);
     expect(multi.games.every((g) => g.source === 'pgn')).toBe(true);
     expect(multi.warnings).toHaveLength(1);
+  });
+  describe('fair play', () => {
+    const cc = (result: string | null, tail = '*') =>
+      ['[Event "Live Chess"]', '[Site "Chess.com"]', '[Date "2026.10.14"]', '[White "Carol"]', '[Black "Dave"]', ...(result === null ? [] : [`[Result "${result}"]`]), '', `1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# ${tail}`].join('\n');
+    it('refuses a chess.com game in progress', async () => {
+      await expect(resolveGameInput(cc('*'), fetchFn, NOW)).rejects.toMatchObject({
+        code: 'invalid',
+        message: 'That chess.com game is not finished. Reviewing a game in progress is not allowed under fair play rules.',
+      });
+      await expect(resolveGameInput(cc(null), fetchFn, NOW)).rejects.toMatchObject({ code: 'invalid' });
+    });
+    it('keeps a finished chess.com game, even without a Result tag', async () => {
+      expect((await resolveGameInput(cc('1-0', '1-0'), fetchFn, NOW)).games).toHaveLength(1);
+      expect((await resolveGameInput(cc(null, '1-0'), fetchFn, NOW)).games).toHaveLength(1);
+      expect((await resolveGameInput(cc(null, '1/2-1/2'), fetchFn, NOW)).games).toHaveLength(1);
+    });
+    it('skips the unfinished games of a mixed paste with a warning, and leaves other sites alone', async () => {
+      const other = ['[Event "Club"]', '[Site "Somewhere"]', '[White "A"]', '[Black "B"]', '[Result "*"]', '', '1. e4 e5 *'].join('\n');
+      const mixed = await resolveGameInput([cc('1-0', '1-0'), cc('*')].join('\n\n'), fetchFn, NOW);
+      expect(mixed.games).toHaveLength(1);
+      expect(mixed.warnings.some((w) => /not finished/.test(w))).toBe(true);
+      const elsewhere = await resolveGameInput(other, fetchFn, NOW);
+      expect(elsewhere.games).toHaveLength(1);
+      expect(elsewhere.warnings).toEqual([]);
+      const linked = ['[Event "x"]', '[Site "Somewhere"]', '[Link "https://www.chess.com/game/live/9"]', '[White "A"]', '[Black "B"]', '[Result "*"]', '', '1. e4 e5 *'].join('\n');
+      await expect(resolveGameInput(linked, fetchFn, NOW)).rejects.toMatchObject({ code: 'invalid' });
+    });
   });
   it('throws ImportError for unusable input', async () => {
     await expect(resolveGameInput('', fetchFn, NOW)).rejects.toMatchObject({ code: 'invalid', message: 'Paste a game link or a PGN.' });

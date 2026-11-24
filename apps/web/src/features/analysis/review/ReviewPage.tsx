@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { coachExplainText, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
+import { coachExplainText, parsePgnGame, type MoveClass, type ParsedGame, type PositionEval, type Side } from '@knightfall/core';
 import { addMistakesToPractice, practicePuzzles, useAnalysisPrefs, useAnalysisSession } from '../../../shared/analysis/index.ts';
 import { Board, type BoardArrow } from '../../../shared/Board/index.ts';
 import { ENGINES, getEnginePool } from '../../../shared/engine/index.ts';
@@ -8,13 +8,21 @@ import { sfx } from '../../../shared/fx/index.ts';
 import { motionScale } from '../../../shared/settings.ts';
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../../shared/ShortcutHelp.tsx';
 import { toast } from '../../../shared/toast.tsx';
+import { addToNextSet, useNextPicks } from '../../../shared/woodNext.ts';
 import { Button, EmptyState, GameLayout, Icons, Panel } from '../../../shared/ui.tsx';
 import { useHotkeysWithHelp } from '../../puzzles/useHotkeys.ts';
 import { resolveSide } from '../../../shared/analysis/side.ts';
+import type { StoredGame } from '../../../shared/db.ts';
+import { ComparisonCard, type EngineState } from '../selfreview/ComparisonCard.tsx';
+import { SelfReviewGate } from '../selfreview/SelfReviewGate.tsx';
+import { cleanSelfReviewRow, needsSelfReview, selfReviewResult } from '../selfreview/selfReviewLogic.ts';
+import { loadGateInputs, useSelfReviewRow } from '../selfreview/selfReviewStore.ts';
 import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
 import { ActionRow, PhoneCoach, ReviewNav, ReviewView, type ClassFilterView, type ReviewActions, type TipMode } from './ReviewView.tsx';
 import { SummaryView } from './SummaryView.tsx';
-import { lineSteps, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
+import { WoodSlot } from './WoodSlot.tsx';
+import { woodSlotState } from './woodSlotLogic.ts';
+import { lineSteps, moveLabel, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
 import { barFraction, graphGeometry, initialPly, lineToSan, movesOfClass, playUci, positionInClass, stepInClass } from './reviewLogic.ts';
 import { judgeRetryMove, retryCanMove, retryFinished, retryHint, retryJudge, retryMessage, retryResume, retryStart, type RetryState } from './retryLogic.ts';
 import { MOVE_CLASS_META } from '../../../shared/analysis/index.ts';
@@ -47,8 +55,54 @@ function play(kind: ReturnType<typeof soundKind>) {
   sfx[kind]();
 }
 
-/** Route-level entry: picks the right state, the review itself only mounts once the game is loaded. */
+/** The placeholder shown while the game (or the decision about it) loads. */
+function ReviewLoading() {
+  return (
+    <div className="mx-auto max-w-xl space-y-3 pt-6">
+      <div className="h-40 animate-pulse rounded-2xl bg-ink-850" role="status" aria-label="Loading game" />
+    </div>
+  );
+}
+
+type Gate = { phase: 'loading' } | { phase: 'review' } | { phase: 'ask'; game: StoredGame; parsed: ParsedGame; side: Side };
+
+/**
+ * Route-level entry and gate. Decides once per game whether the player reviews it themselves before the engine
+ * runs. While it loads, and while the question is shown, the component that owns the analysis session is not
+ * mounted, so no session and no engine worker exist. Once it has decided it never changes its mind: a saved
+ * analysis or a changed setting cannot bring the question back or remount the review.
+ */
 export function ReviewPage({ gameKey }: { gameKey: string }) {
+  const [gate, setGate] = useState<Gate>({ phase: 'loading' });
+  useEffect(() => {
+    let live = true;
+    const settle = (next: Gate) => {
+      if (live) setGate((prev) => (prev.phase === 'loading' ? next : prev));
+    };
+    loadGateInputs(gameKey).then(
+      (inp) => {
+        // Mode off, game missing or unreadable: the review itself shows the right state.
+        if (!inp || !inp.game) return settle({ phase: 'review' });
+        const parsed = parsePgnGame(inp.game.pgn);
+        if (!parsed.ok) return settle({ phase: 'review' });
+        const side = resolveSide(inp.game, inp.prefs);
+        const ask = needsSelfReview({ mode: inp.mode, game: inp.game, side, hasAnalysis: inp.hasAnalysis, review: inp.review });
+        settle(ask && side ? { phase: 'ask', game: inp.game, parsed: parsed.game, side } : { phase: 'review' });
+      },
+      () => settle({ phase: 'review' }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [gameKey]);
+
+  if (gate.phase === 'loading') return <ReviewLoading />;
+  if (gate.phase === 'ask') return <SelfReviewGate game={gate.game} parsed={gate.parsed} side={gate.side} onDone={() => setGate({ phase: 'review' })} />;
+  return <ReviewSession gameKey={gameKey} />;
+}
+
+/** The review of one game: picks the right state, the review itself only mounts once the game is loaded. */
+function ReviewSession({ gameKey }: { gameKey: string }) {
   const s = useAnalysisSession(gameKey);
   if (s.status === 'missing') {
     return (
@@ -64,16 +118,13 @@ export function ReviewPage({ gameKey }: { gameKey: string }) {
     );
   }
   if (!s.game || !s.parsed) {
+    if (s.status !== 'error') return <ReviewLoading />;
     return (
       <div className="mx-auto max-w-xl space-y-3 pt-6">
-        {s.status === 'error' ? (
-          <Panel className="space-y-3 text-center">
-            <p className="text-bad-400">{s.error}</p>
-            <Link to="/analysis" className="font-bold text-ember-400">Back to Game Review</Link>
-          </Panel>
-        ) : (
-          <div className="h-40 animate-pulse rounded-2xl bg-ink-850" role="status" aria-label="Loading game" />
-        )}
+        <Panel className="space-y-3 text-center">
+          <p className="text-bad-400">{s.error}</p>
+          <Link to="/analysis" className="font-bold text-ember-400">Back to Game Review</Link>
+        </Panel>
       </div>
     );
   }
@@ -506,7 +557,26 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   const knownSide = resolveSide(g, prefs ?? { lichessUser: '', chesscomUser: '' });
   const [pickedSide, setPickedSide] = useState<Side | null>(null);
   const practiseSide = knownSide ?? pickedSide;
-  const mistakeCount = useMemo(() => (report && practiseSide ? practicePuzzles(g, report, practiseSide).length : 0), [g, report, practiseSide]);
+  const gamePuzzles = useMemo(() => (report && practiseSide ? practicePuzzles(g, report, practiseSide) : []), [g, report, practiseSide]);
+  const mistakeCount = gamePuzzles.length;
+  const puzzleIds = useMemo(() => new Set(gamePuzzles.map((q) => q.id)), [gamePuzzles]);
+  const picks = useNextPicks();
+  const slot = woodSlotState({ gameKey: g.key, move: exploring ? null : shownMove, classified, side: practiseSide, puzzleIds, picks: picks ?? [] });
+  const [adding, setAdding] = useState(false);
+  const addToWoodpecker = async () => {
+    if (slot.kind !== 'add' || !practiseSide || adding) return;
+    const puzzle = gamePuzzles.find((q) => q.id === slot.puzzleId);
+    if (!puzzle) return;
+    setAdding(true);
+    try {
+      const added = await addToNextSet(puzzle, g, practiseSide);
+      toast(added ? { title: 'Added to your next Woodpecker set', icon: 'target', tone: 'good', to: '/train/woodpecker' } : { title: 'Already in your next set', icon: 'check', tone: 'sky' });
+    } catch {
+      toast({ title: 'Could not add the puzzle', body: 'Please try again.', icon: 'x', tone: 'ember' });
+    } finally {
+      setAdding(false);
+    }
+  };
   const [busy, setBusy] = useState(false);
   const practise = async (chosen?: Side) => {
     const side = practiseSide ?? chosen;
@@ -626,11 +696,40 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     setMode('review');
   };
 
+  /* Your own review of the game, made before the engine ran */
+  const selfRaw = useSelfReviewRow(gameKey);
+  const selfRow = useMemo(() => cleanSelfReviewRow(selfRaw, N), [selfRaw, N]);
+  const selfResult = useMemo(() => (selfRow && !selfRow.skipped && report ? selfReviewResult(selfRow, report) : null), [selfRow, report]);
+  const openEnginePoint = (enginePly: number, withRetry: boolean) => {
+    goTo(enginePly + 1, false);
+    setClassFilter(null);
+    setMode('review');
+    // goTo cleared Retry; the last state set wins, so this starts it on the engine's move.
+    if (withRetry) setRetry({ ply: enginePly, state: retryStart(), tried: null });
+  };
+  const enginePly = selfResult?.enginePly ?? null;
+  const engineMove = enginePly !== null ? moves[enginePly] : undefined;
+  const cardCanRetry = !!engineMove && enginePly !== null && classified && RETRY_CLASSES.has(engineMove.class) && !!evals[enginePly]?.lines.length;
+  const engineState: EngineState = report ? 'ready' : status === 'analysing' || status === 'loading' ? 'waiting' : 'none';
+  const selfCard =
+    selfRow && !selfRow.skipped ? (
+      <ComparisonCard
+        row={selfRow}
+        result={selfResult}
+        engine={engineState}
+        mineLabel={selfRow.turningPly !== null && moves[selfRow.turningPly] ? moveLabel(moves[selfRow.turningPly]) : null}
+        canRetry={cardCanRetry}
+        onRetry={(ply) => openEnginePoint(ply, true)}
+        onShow={(ply) => openEnginePoint(ply, false)}
+      />
+    ) : null;
+
   const panel = (() => {
     if (!report) {
       // Analysis still running (or failed): the live graph instead of the summary.
       return (
         <div className="space-y-3">
+          {selfCard}
           <p className="text-sm text-ink-300">{status === 'analysing' ? 'Analysing the game\u2026 the graph fills in as positions are evaluated.' : 'No analysis yet.'}</p>
           <EvalGraph geom={geom} count={N + 1} current={curIndex} dots={dots} onSeek={seek} />
         </div>
@@ -638,22 +737,25 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     }
     if (!reviewing) {
       return (
-        <SummaryView
-          report={report}
-          game={g}
-          mySide={mySide}
-          geom={geom}
-          dots={dots}
-          mistakeCount={mistakeCount}
-          sideKnown={practiseSide !== null}
-          practiseBusy={busy}
-          staleEngine={s.staleEngine}
-          onStart={startReview}
-          onSeek={seekFromSummary}
-          onOpenClass={openClass}
-          onPractise={(chosen) => void practise(chosen)}
-          onReanalyse={() => s.restart('lite')}
-        />
+        <div className="space-y-4">
+          {selfCard}
+          <SummaryView
+            report={report}
+            game={g}
+            mySide={mySide}
+            geom={geom}
+            dots={dots}
+            mistakeCount={mistakeCount}
+            sideKnown={practiseSide !== null}
+            practiseBusy={busy}
+            staleEngine={s.staleEngine}
+            onStart={startReview}
+            onSeek={seekFromSummary}
+            onOpenClass={openClass}
+            onPractise={(chosen) => void practise(chosen)}
+            onReanalyse={() => s.restart('lite')}
+          />
+        </div>
       );
     }
     return (
@@ -685,6 +787,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         retry={retryInfo}
         filter={filterView}
         actions={actions}
+        woodSlot={<WoodSlot state={slot} busy={adding} onAdd={() => void addToWoodpecker()} />}
         onExplain={toggleExplain}
         onBest={toggleBest}
         onRetry={toggleRetry}

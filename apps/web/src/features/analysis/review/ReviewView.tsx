@@ -8,7 +8,7 @@ import { figurineSan, formatScore } from './reviewExtras.ts';
 import type { GraphGeometry } from './reviewLogic.ts';
 import type { RetryTone } from './retryLogic.ts';
 
-function NavButton({ label, onClick, disabled, active, children }: { label: string; onClick: () => void; disabled?: boolean; active?: boolean; children: ReactNode }) {
+export function NavButton({ label, onClick, disabled, active, children }: { label: string; onClick: () => void; disabled?: boolean; active?: boolean; children: ReactNode }) {
   return (
     <button
       type="button"
@@ -214,6 +214,8 @@ export const ReviewView = memo(function ReviewView(props: {
   retry: { title: string; text: string; tone: RetryTone } | null;
   filter: ClassFilterView | null;
   actions: ReviewActions;
+  /** Fixed-height slot between the move list and the graph (add to the next Woodpecker set). */
+  woodSlot?: ReactNode;
   onExplain: () => void;
   onBest: () => void;
   onRetry: () => void;
@@ -337,6 +339,8 @@ export const ReviewView = memo(function ReviewView(props: {
           <MoveList moves={moves} classified current={ply} onSelect={props.onSelect} />
         </>
       )}
+
+      {props.woodSlot}
 
       <EvalGraph geom={props.geom} count={N + 1} current={ply} dots={props.dots} onSeek={props.onSeek} />
 

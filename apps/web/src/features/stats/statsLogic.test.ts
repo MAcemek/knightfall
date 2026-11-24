@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  activeDayStreak, activityGrid, battleSummary, chartGeometry, formatDuration, heatLevel, localDateKey, ratingSeries, rushBests,
+  activeDayStreak, activityGrid, battleSummary, chartGeometry, formatDuration, heatLevel, ratingSeries, rushBests,
   strengthsAndWeaknesses, themeAccuracy, totals,
 } from './statsLogic.ts';
 
@@ -66,9 +66,6 @@ describe('strengthsAndWeaknesses', () => {
 describe('activity', () => {
   it('heatLevel buckets counts', () => {
     expect([0, 1, 4, 5, 14, 15, 29, 30, 500].map(heatLevel)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4]);
-  });
-  it('localDateKey pads', () => {
-    expect(localDateKey(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
   });
   it('builds Monday-first weeks ending with the current week', () => {
     const today = new Date(2026, 10, 11, 9); // Wednesday 11 Nov 2026

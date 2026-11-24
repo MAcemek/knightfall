@@ -7,6 +7,8 @@ import { useProfile } from '../../shared/profile.ts';
 import { useReviewSummary } from '../../shared/progress/index.ts';
 import { prefetchAround } from '../../shared/puzzleSource.ts';
 import { Icons, Panel } from '../../shared/ui.tsx';
+import { stripText } from '../coach/todayText.ts';
+import { useToday } from '../coach/todayStore.ts';
 
 const MODES = [
   { to: '/puzzles', title: 'Puzzles', blurb: 'Rated tactics matched to your level. Build a streak.', icon: Icons.puzzle, tint: 'from-ember-500/25' },
@@ -17,6 +19,8 @@ const MODES = [
   { to: '/custom', title: 'Custom Puzzles', blurb: 'Set up a position, record the solution, share a link.', icon: Icons.pencil, tint: 'from-violet-400/25' },
   { to: '/stats', title: 'Stats & Achievements', blurb: 'Rating curve, strengths, weaknesses and unlocks.', icon: Icons.chart, tint: 'from-sky-400/15' },
 ];
+
+const COACH_MODE = { to: '/coach', title: 'Coach', blurb: 'A 12-week plan with a short list for every day.', icon: Icons.bulb, tint: 'from-ember-400/20' };
 
 export default function HomePage() {
   const profile = useProfile();
@@ -35,6 +39,8 @@ export default function HomePage() {
     };
   }, []);
   const reviews = useReviewSummary();
+  const coach = useToday();
+  const modes = coach && !coach.plan ? [...MODES, COACH_MODE] : MODES;
   const rating = profile?.puzzleRating.rating;
   useEffect(() => {
     if (rating !== undefined) prefetchAround(rating);
@@ -100,9 +106,20 @@ export default function HomePage() {
         </Link>
       )}
 
+      {coach?.plan && (
+        <Link
+          to="/coach"
+          className="mb-6 flex min-h-11 animate-rise items-center justify-between rounded-2xl border border-ember-500/30 bg-ember-500/10 px-5 py-3 font-semibold text-ember-300 transition hover:bg-ember-500/15"
+        >
+          {Icons.bulb('h-5 w-5')}
+          <span className="flex-1 px-3">{stripText(coach)}</span>
+          {Icons.next('h-5 w-5')}
+        </Link>
+      )}
+
       {/* Phones: compact rows (icon beside the text) so every mode fits in about two screens. */}
       <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-        {MODES.map((m, i) => (
+        {modes.map((m, i) => (
           <Link
             key={m.to}
             to={m.to}

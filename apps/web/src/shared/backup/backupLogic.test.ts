@@ -3,7 +3,7 @@ import { REPORT_VERSION } from '@knightfall/core';
 import { db } from '../db.ts';
 import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, DEVICE_KEYS, backupFileName, buildBackup, parseBackup, type TableName } from './backupLogic.ts';
 
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const move = (ply: number) => ({
   ply, color: ply % 2 === 0 ? 'w' : 'b', moveNumber: Math.floor(ply / 2) + 1, san: 'e4', uci: 'e2e4',
@@ -34,12 +34,20 @@ function rows(): Record<TableName, unknown[]> {
       { key: 'achievementsSeeded', value: true },
       { key: 'battleCode', value: 'ABCD' },
       { key: 'battleToken', value: 'secret' },
+      { key: 'botGame', value: { id: 'b1' } },
+      { key: 'coachPlan', value: { startDate: '2026-11-24' } },
+      { key: 'coachActivity', value: { games: [] } },
+      { key: 'blunderCheck', value: { days: {} } },
+      { key: 'dailyNotes', value: [] },
+      { key: 'coachLibrary', value: ['book-1'] },
+      { key: 'woodNext', value: ['game-li-a-12'] },
       { key: 'ratedPending', value: { puzzleId: 'x', puzzleRating: 1500, at: 1 } },
     ],
     attempts: [
       { id: 1, puzzleId: 'p1', mode: 'rated', solved: false, puzzleRating: 1500, ratingBefore: 1500, ratingAfter: 1490, delta: -10, hintsUsed: 0, timeMs: 5000, at: 1700000000000, themes: ['fork'] },
       { id: 2, puzzleId: 'p2', mode: 'rush', solved: true, puzzleRating: 1400, hintsUsed: 1, timeMs: 3000, at: 1700000001000 },
       { id: 5, puzzleId: 'p3', mode: 'daily', solved: true, puzzleRating: 1450, hintsUsed: 0, timeMs: 3000, at: 1700000002000 },
+      { id: 4, puzzleId: 'p1', mode: 'woodpecker', solved: true, puzzleRating: 1500, hintsUsed: 0, timeMs: 3000, at: 1700000001500, setId: 'w1', cycle: 2 },
     ],
     daily: [{ date: '2026-11-20', puzzleId: 'd1', solved: true, clean: true, at: 1700000000000, solvedLate: false }],
     rushRuns: [{ id: 1, mode: '3min', score: 12, strikes: 3, bestCombo: 5, highestRating: 1600, puzzles: [{ id: 'p1', rating: 1500, solved: true }], at: 1700000000000 }],
@@ -62,9 +70,22 @@ function rows(): Record<TableName, unknown[]> {
         result: '1-0', playedAt: 1700000000000, importedAt: 1700000001000, plies: 2, speed: 'blitz', timeControl: '180+0', opening: { eco: 'C20', name: 'King pawn' },
         siteAccuracy: { white: 90, black: 80 }, importedFor: 'me',
       },
+      { key: 'bot-1', source: 'bot', pgn: '1. e4 e5 *', white: { name: 'You' }, black: { name: 'Bot' }, result: '1-0', playedAt: 1, importedAt: 1, plies: 2, speed: 'rapid', importedFor: 'you' },
     ],
     analyses: [{ gameKey: 'li-abcd1234', analysedAt: 1700000002000, engine: 'lite', depth: 12, report, engineBuild: 'sf17' }],
     openingLines: [{ id: 'line-1', family: 'Sicilian Defense', color: 'b', box: 2, due: 1700000000000, lastAt: 1699990000000, misses: 1 }],
+    woodSets: [
+      {
+        id: 'w1', createdAt: 5, name: 'Set 1', items: [{ id: 'p1', fen: '8/8/8/8/8/8/8/K6k w - - 0 1', moves: ['a1a2'], opponentFirst: false, rating: 1500, themes: [], source: 'lichess' }],
+        cycles: [{ n: 1, startedAt: 5, finishedAt: 9, targetDays: 28 }, { n: 2, startedAt: 10, finishedAt: null, targetDays: 14 }],
+      },
+    ],
+    selfReviews: [
+      { gameKey: 'li-abcd1234', at: 6, side: 'w', turningPly: 12, reason: 'capture', lesson: 'Look at captures.', skipped: false },
+      { gameKey: 'li-other', at: 7, side: 'b', turningPly: null, reason: null, lesson: '', skipped: true },
+    ],
+    ratingLog: [{ id: 'chesscom-rapid-2026-11-24', date: '2026-11-24', site: 'chesscom', speed: 'rapid', rating: 1500, user: 'someone' }],
+    coachDays: [{ date: '2026-11-24', ticks: ['study'], blitz: [{ at: 8, result: 'loss' }] }],
   };
 }
 
@@ -100,7 +121,7 @@ describe('parseBackup', () => {
     }
     expect(r.summary.skipped).toBe(0);
     const kvKeys = r.backup.tables.kv.map((x) => x.key).sort();
-    expect(kvKeys).toEqual(['achievementsSeeded', 'battleRating', 'openingFamilies', 'playerName', 'puzzleRating', 'puzzleStreak', 'reviewCursor', 'settings']);
+    expect(kvKeys).toEqual(['achievementsSeeded', 'battleRating', 'blunderCheck', 'coachActivity', 'coachLibrary', 'coachPlan', 'dailyNotes', 'openingFamilies', 'playerName', 'puzzleRating', 'puzzleStreak', 'reviewCursor', 'settings', 'woodNext']);
   });
 
   it('ignores device keys found in a file', () => {
@@ -115,6 +136,38 @@ describe('parseBackup', () => {
     const r = parse(wrap({ kv: [{ key: 'someFutureThing', value: { a: 1 } }, { key: 'battleRating', value: 1200 }] }));
     if (!r.ok) throw new Error(r.error);
     expect(r.backup.tables.kv).toContainEqual({ key: 'someFutureThing', value: { a: 1 } });
+  });
+
+  it('reads a backup made before version 5: the new tables are simply empty', () => {
+    const { woodSets: _w, selfReviews: _s, ratingLog: _r, coachDays: _c, ...old } = rows();
+    const r = parse(wrap(old, { dbVersion: 4 }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.summary.skipped).toBe(0);
+    expect(r.backup.tables.attempts).toEqual(old.attempts);
+    for (const name of ['woodSets', 'selfReviews', 'ratingLog', 'coachDays'] as const) expect(r.backup.tables[name]).toEqual([]);
+  });
+
+  it('skips damaged rows of the version 5 tables', () => {
+    const src = rows();
+    const set = src.woodSets[0] as Record<string, unknown>;
+    const item = (set.items as Record<string, unknown>[])[0];
+    const review = src.selfReviews[0] as Record<string, unknown>;
+    const day = src.coachDays[0] as Record<string, unknown>;
+    const rating = src.ratingLog[0] as Record<string, unknown>;
+    const attempt = src.attempts[3] as Record<string, unknown>;
+    const bad = {
+      woodSets: [{ ...set, id: 'a', items: [] }, { ...set, id: 'b', items: [{ ...item, moves: [] }] }, { ...set, id: 'c', cycles: [] }, { ...set, id: 'd', cycles: [{ n: 2, startedAt: 1, finishedAt: null, targetDays: 3 }] }, { ...set, id: 'e', cycles: [{ n: 1, startedAt: 1, finishedAt: null, targetDays: 0 }] }],
+      selfReviews: [{ ...review, gameKey: 'a', side: 'x' }, { ...review, gameKey: 'b', turningPly: -1 }, { ...review, gameKey: 'c', reason: 'bad luck' }, { ...review, gameKey: 'd', lesson: null }],
+      ratingLog: [{ ...rating, id: 'a', speed: 'classical' }, { ...rating, id: 'b', rating: '1500' }, { ...rating, id: 'c', date: 'today' }, { ...rating, id: 'd', user: 5 }],
+      coachDays: [{ ...day, date: '24.11.2026' }, { ...day, date: '2026-11-25', ticks: [1] }, { ...day, date: '2026-11-26', blitz: [{ at: 1, result: 'draw' }] }],
+      attempts: [{ ...attempt, id: 20, cycle: 0 }, { ...attempt, id: 21, setId: 7 }],
+      kv: [{ key: 'coachPlan', value: 'x' }, { key: 'woodNext', value: [1] }, { key: 'dailyNotes', value: {} }, { key: 'blunderCheck', value: null }],
+    };
+    const r = parse(wrap({ ...bad, woodSets: [set, ...bad.woodSets] }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.backup.tables.woodSets).toEqual([set]);
+    for (const name of ['selfReviews', 'ratingLog', 'coachDays', 'attempts', 'kv'] as const) expect(r.backup.tables[name]).toEqual([]);
+    expect(r.summary.skipped).toBe(5 + 4 + 4 + 3 + 2 + 4);
   });
 
   it('refuses a newer db version and a newer format version', () => {
@@ -245,7 +298,7 @@ describe('parseBackup', () => {
     const r = parse(JSON.stringify(buildBackup(rows(), DB_VERSION, NOW)));
     if (!r.ok) throw new Error(r.error);
     expect(r.summary).toEqual({
-      exportedAt: NOW, playerName: 'SwiftKnight42', puzzleRating: 1544, attempts: 3, battles: 2, games: 1, customPuzzles: 1, skipped: 0,
+      exportedAt: NOW, playerName: 'SwiftKnight42', puzzleRating: 1544, attempts: 4, battles: 2, games: 2, customPuzzles: 1, skipped: 0,
     });
   });
 });

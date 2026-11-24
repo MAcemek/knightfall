@@ -8,8 +8,8 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings([1, 2])).toEqual(DEFAULT_SETTINGS);
   });
   it('keeps valid fields and drops invalid ones', () => {
-    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, extra: 1 });
-    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false });
+    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all', extra: 1 });
+    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all' });
     expect(sanitizeSettings({ boardTheme: 'green', animSpeed: 'slow', sound: 'yes' })).toEqual(DEFAULT_SETTINGS);
   });
   it('clamps volume to 0..1', () => {
@@ -31,6 +31,17 @@ describe('premoves setting', () => {
     expect(sanitizeSettings({ premoves: false }).premoves).toBe(false);
     expect(sanitizeSettings({ premoves: 'no' }).premoves).toBe(true);
     expect(sanitizeSettings({ premoves: 0 }).premoves).toBe(true);
+  });
+});
+
+describe('selfReview setting', () => {
+  it('is off by default, also for settings stored before it existed', () => {
+    expect(DEFAULT_SETTINGS.selfReview).toBe('off');
+    expect(sanitizeSettings({ sound: false }).selfReview).toBe('off');
+  });
+  it('keeps valid values and drops anything else', () => {
+    expect(sanitizeSettings({ selfReview: 'slow' }).selfReview).toBe('slow');
+    expect(sanitizeSettings({ selfReview: true }).selfReview).toBe('off');
   });
 });
 

@@ -39,7 +39,7 @@ const TRAIN_SHORTCUTS: ShortcutGroup[] = [
  * solution stepping and a running tally. `source` decides which puzzles come and how results are stored;
  * it must be referentially stable (useMemo in the parent). Remount (key) to start a different session.
  */
-export function TrainSession({ title, subtitle, icon, badges, source, finished }: {
+export function TrainSession({ title, subtitle, icon, badges, source, finished, exitTo = '/train' }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
@@ -48,6 +48,8 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
   source: TrainSource;
   /** Shown when `source.next()` returned null. */
   finished: ReactNode;
+  /** Where "End session" goes. */
+  exitTo?: string;
 }) {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,7 +148,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished }
         subtitle={subtitle}
         icon={icon}
         right={
-          <Link to="/train" className="inline-flex min-h-11 items-center text-sm font-semibold text-ink-400 transition-colors hover:text-ink-100">
+          <Link to={exitTo} className="inline-flex min-h-11 items-center text-sm font-semibold text-ink-400 transition-colors hover:text-ink-100">
             End session
           </Link>
         }

@@ -31,7 +31,7 @@ export const LIBRARY: readonly LibraryEntry[] = [
   { id: 'v-gothamchess', group: 'videos', title: 'GothamChess', note: 'Game breakdowns and opening ideas.', url: yt('GothamChess') },
   { id: 'v-chessnetwork', group: 'videos', title: 'ChessNetwork', note: 'Slow walkthroughs of whole games.', url: yt('ChessNetwork') },
   { id: 'v-chessvibes', group: 'videos', title: 'Chess Vibes', note: 'Plain explanations of ideas and games.', url: yt('ChessVibesOfficial') },
-  { id: 'v-ericrosen', group: 'videos', title: 'Eric Rosen', note: 'Game stories and opening ideas.', url: yt('EricRosen') },
+  { id: 'v-ericrosen', group: 'videos', title: 'Eric Rosen', note: 'Game stories and opening ideas.', url: yt('eric-rosen') },
 
   { id: 'b-woodpecker', group: 'books', title: 'The Woodpecker Method', note: 'The idea behind your sets: the same puzzles again, faster each cycle.', url: book('The Woodpecker Method') },
   { id: 'b-thinker', group: 'books', title: 'The Improving Chess Thinker', note: 'A way to choose moves, one step at a time.', url: book('The Improving Chess Thinker') },

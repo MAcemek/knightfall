@@ -23,8 +23,18 @@ describe('LIBRARY', () => {
       expect(url.searchParams.get('q')).toBe(e.title);
     }
   });
-  it('links videos to channel pages', () => {
-    for (const e of entriesOf('videos')) expect(e.url).toMatch(/^https:\/\/www\.youtube\.com\/@[A-Za-z0-9_]+$/);
+  // Each handle was opened and its channel name and description checked. @EricRosen, for example, is someone else.
+  it('links every video entry to the right channel', () => {
+    expect(Object.fromEntries(entriesOf('videos').map((e) => [e.title, e.url.replace('https://www.youtube.com/', '')]))).toEqual({
+      'Daniel Naroditsky speedruns': '@DanielNaroditskyGM',
+      'John Bartholomew': '@JohnBartholomewChess',
+      'Hanging Pawns': '@HangingPawns',
+      'Saint Louis Chess Club': '@STLChessClub',
+      GothamChess: '@GothamChess',
+      ChessNetwork: '@ChessNetwork',
+      'Chess Vibes': '@ChessVibesOfficial',
+      'Eric Rosen': '@eric-rosen',
+    });
   });
   it('does not use dashes or exclamation marks in its copy', () => {
     for (const e of LIBRARY) expect(`${e.title} ${e.note}`).not.toMatch(/[\u2014!]/);

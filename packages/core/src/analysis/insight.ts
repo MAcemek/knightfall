@@ -46,6 +46,8 @@ export interface InsightContext {
   /** Position before / after the move, with PVs (scores are White's view, PVs are UCI). */
   evalBefore: PositionEval;
   evalAfter: PositionEval;
+  /** Where the opponent's previous move captured: taking back there is not winning something for free. */
+  lastCapture?: Square;
   /** Name of the opening when the position is a known one (informational). */
   opening?: string | null;
 }
@@ -153,7 +155,7 @@ function badInsight(ctx: InsightContext, move: Move): MoveInsight {
   if (bestMove?.captured && bestMove.captured !== 'p' && bestGain >= MIN_SWING) {
     const victim: BoardPiece = { square: captureSquare(bestMove), type: bestMove.captured, color: other(mover) };
     const tookIt = !!move.captured && captureSquare(move) === victim.square;
-    if (!tookIt && !isPieceSafe(fenBefore, victim)) {
+    if (!tookIt && bestGain >= PIECE_VALUE[victim.type] && !isPieceSafe(fenBefore, victim)) {
       return { motif: 'misses-free-piece', piece: victim.type, square: victim.square, material: bestGain };
     }
   }
@@ -316,12 +318,12 @@ function goodInsight(ctx: InsightContext, move: Move): MoveInsight {
   if (move.san.endsWith('#')) return { motif: 'checkmate' };
   if ((ctx.class === 'best' || ctx.class === 'excellent') && move.captured && move.captured !== 'p') {
     const victim: BoardPiece = { square: captureSquare(move), type: move.captured, color: other(mover) };
-    if (!isPieceSafe(fenBefore, victim)) {
-      // The win must survive the opponent's best reply (and our recapture).
+    if (victim.square !== ctx.lastCapture && !isPieceSafe(fenBefore, victim)) {
+      // "Free" means the whole piece: nothing is given back in the opponent's best reply (and our recapture).
       const pv = opponentPv(ctx);
       const line = replay(fenAfter, pv, Math.min(2, pv.length));
       const net = materialDelta(fenBefore, line.fen, mover);
-      if (net >= MIN_SWING) return { motif: 'wins-free-piece', piece: victim.type, square: victim.square, material: net };
+      if (net >= PIECE_VALUE[victim.type]) return { motif: 'wins-free-piece', piece: victim.type, square: victim.square, material: net };
     }
   }
   return { motif: 'none' };

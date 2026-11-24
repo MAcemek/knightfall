@@ -156,7 +156,8 @@ export function buildReport(input: ReportInput): GameReport {
       cpLoss: centipawnLoss(before.score, after.score, color),
       ...(bestUci && bestSan ? { best: { uci: bestUci, san: bestSan } } : {}),
     });
-    const insight = moveInsight({ fenBefore: fens[i], fenAfter: fens[i + 1], uci: ucis[i], mover: color, class: cls, evalBefore: before, evalAfter: after, opening: opening?.name ?? null });
+    const prev = i > 0 ? new Chess(fens[i - 1]).move(uciToMove(ucis[i - 1])) : null;
+    const insight = moveInsight({ ...(prev?.captured ? { lastCapture: prev.to } : {}), fenBefore: fens[i], fenAfter: fens[i + 1], uci: ucis[i], mover: color, class: cls, evalBefore: before, evalAfter: after, opening: opening?.name ?? null });
     if (insight.motif !== 'none' || insight.best) moves[moves.length - 1].insight = insight;
   }
 

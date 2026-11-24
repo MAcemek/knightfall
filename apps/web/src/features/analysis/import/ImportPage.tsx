@@ -405,7 +405,8 @@ export function ImportPage() {
       </div>
 
       <div className="animate-rise space-y-3 pb-4" style={{ animationDelay: '180ms' }}>
-        <div className="flex flex-wrap items-center gap-3">
+        {/* The public site ships only the Lite engine: no choice to offer there. */}
+        {(deepOk || import.meta.env.DEV) && <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-ink-300">Engine:</span>
           <div role="radiogroup" aria-label="Engine" className="inline-flex rounded-xl bg-ink-900 p-1">
             {(['lite', 'deep'] as const).map((id) => {
@@ -427,7 +428,7 @@ export function ImportPage() {
             })}
           </div>
           {!deepOk && <span className="text-xs text-ink-500">Deep needs npm run engine:deep</span>}
-        </div>
+        </div>}
         <p className="text-xs text-ink-500">Games are fetched from Lichess / chess.com and stored only in your browser.</p>
       </div>
     </div>

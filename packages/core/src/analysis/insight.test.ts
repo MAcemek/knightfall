@@ -176,6 +176,30 @@ describe('good moves', () => {
     const c = ctx(ROOK_FREE, 'f1c4', 'best', ev(ROOK_FREE, line(500, 'f1c4', 'e8d7')), [line(500, 'e8d7', 'e1d1')]);
     expect(motif(c)).toMatchObject({ motif: 'wins-free-piece', piece: 'r', square: 'c4', material: 5 });
   });
+  it('is not wins-free-piece when it only takes back on the square the opponent just captured on', () => {
+    const c = ctx(ROOK_FREE, 'f1c4', 'best', ev(ROOK_FREE, line(500, 'f1c4', 'e8d7')), [line(500, 'e8d7', 'e1d1')]);
+    expect(motif({ ...c, lastCapture: 'c4' }).motif).toBe('none');
+    expect(motif({ ...c, lastCapture: 'd5' }).motif).toBe('wins-free-piece');
+  });
+  it('is not wins-free-piece when part of the piece is given back (rook for bishop)', () => {
+    const fen = '4k3/8/8/1p6/2r5/8/8/4KB2 w - - 0 1';
+    const c = ctx(fen, 'f1c4', 'best', ev(fen, line(200, 'f1c4', 'b5c4')), [line(200, 'b5c4', 'e1d1')]);
+    expect(motif(c).motif).toBe('none');
+  });
+  it('the report knows a recapture: 5.Qxf3 in the Opera game is not a free bishop', () => {
+    const moves = 'e2e4 e7e5 g1f3 d7d6 d2d4 c8g4 d4e5 g4f3 d1f3'.split(' ');
+    const c = new Chess();
+    const sans = moves.map((u) => c.move({ from: u.slice(0, 2), to: u.slice(2, 4) }).san);
+    const b = new Chess();
+    const evals = [ev(b.fen(), line(20, moves[0]))];
+    moves.forEach((u, i) => {
+      b.move({ from: u.slice(0, 2), to: u.slice(2, 4) });
+      evals.push(ev(b.fen(), line(40, ...(moves[i + 1] ? [moves[i + 1]] : ['d6e5', 'f1c4']))));
+    });
+    expect(sans[8]).toBe('Qxf3');
+    const report = buildReport({ startFen: new Chess().fen(), sans, ucis: moves, fens: evals.map((e) => e.fen), evals, openings: null });
+    expect(report.moves[8].insight?.motif).not.toBe('wins-free-piece');
+  });
   it('is not wins-free-piece when the victim is defended', () => {
     const fen = '4k3/8/8/1p6/2n5/8/8/4KB2 w - - 0 1';
     const c = ctx(fen, 'f1c4', 'best', ev(fen, line(0, 'f1c4', 'b5c4')), [line(-300, 'b5c4', 'e1d1')]);

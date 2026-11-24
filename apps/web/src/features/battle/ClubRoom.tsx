@@ -66,7 +66,7 @@ function LobbyView({ room }: { room: Room }) {
         <div className="flex flex-wrap items-center gap-2 text-sm text-ink-300">
           <Pill className="bg-sky-400/15 text-sky-400">Casual</Pill>
           <span className="font-semibold text-ink-100">{describeSettings(room.settings)}</span>
-          <span>· {BATTLE_MAX_STRIKES} strikes and you are out</span>
+          <span><span className="max-sm:hidden">· </span>{BATTLE_MAX_STRIKES} strikes and you are out</span>
         </div>
         {host ? (
           <Button variant="primary" size="lg" className="w-full sm:w-auto" onClick={() => startClubRace()}>
@@ -209,6 +209,7 @@ function ClubHud({ room, players, mine, scoreRef }: {
         <div className="flex min-w-0 items-center gap-3">
           <div
             ref={scoreRef}
+            data-testid="my-score"
             className={`flex h-11 min-w-12 items-center justify-center rounded-xl bg-ember-500/15 px-2 font-mono text-3xl font-black text-ember-400 sm:h-14 sm:min-w-14 sm:text-4xl ${out ? 'opacity-50' : ''}`}
           >
             <TickerNumber value={mine.solved} duration={0.35} />
@@ -218,7 +219,7 @@ function ClubHud({ room, players, mine, scoreRef }: {
             <div className="font-bold">
               {ordinal(rank)} <span className="text-sm font-semibold text-ink-400">of {players.length}</span>
             </div>
-            <div className="mt-0.5 flex gap-1" aria-label={`${mine.strikes} strikes`}>
+            <div className="mt-0.5 flex gap-1" aria-label={`${mine.strikes} strikes`} data-testid="my-strikes">
               {Array.from({ length: BATTLE_MAX_STRIKES }, (_, i) => (
                 <span key={i} className={`flex h-4 w-4 items-center justify-center rounded text-[10px] font-black ${i < mine.strikes ? 'bg-bad-500 text-white' : 'bg-ink-700 text-ink-500'}`}>
                   ✗

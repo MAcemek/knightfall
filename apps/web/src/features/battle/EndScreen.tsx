@@ -89,13 +89,13 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
     <div className="mx-auto w-full max-w-2xl">
       <Panel className="relative overflow-hidden p-0">
         <div className={`pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b ${t.glow} to-transparent`} />
-        <div className="relative flex flex-col items-center px-5 pb-6 pt-8 text-center sm:px-8">
+        <div className="relative flex flex-col items-center px-5 pb-5 pt-5 text-center sm:px-8 sm:pb-6 sm:pt-8">
           <motion.div
             ref={titleRef}
             initial={{ scale: 0.4, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 15 }}
-            className={`text-5xl font-black tracking-tight sm:text-6xl ${t.cls}`}
+            className={`text-4xl font-black tracking-tight min-[400px]:text-5xl sm:text-6xl ${t.cls}`}
           >
             {t.title}
           </motion.div>
@@ -107,7 +107,7 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
           )}
 
           {/* Scoreline */}
-          <div className="mt-6 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <div className="mt-4 grid w-full grid-cols-[1fr_auto_1fr] sm:mt-6 items-center gap-3">
             <ScoreCol name={match.me.name} label="You" score={end.you.solved} strikes={end.you.strikes} tone="text-ember-400" winner={end.result === 'win'} />
             <div className="text-2xl font-black text-ink-500">–</div>
             <ScoreCol name={match.opponent.name} label="Opponent" score={end.opponent.solved} strikes={end.opponent.strikes} tone="text-sky-400" winner={end.result === 'loss'} />
@@ -115,12 +115,12 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
 
           {/* Rating (friend battles are casual: no rating change) */}
           {friendly ? (
-            <div className="mt-6 flex items-center gap-3 rounded-2xl bg-ink-800/70 px-5 py-3 text-left">
+            <div className="mt-4 flex items-center gap-3 rounded-2xl bg-ink-800/70 px-5 py-2 text-left sm:mt-6 sm:py-3">
               <Pill className="bg-sky-400/15 text-sky-400">Casual</Pill>
               <div className="text-sm text-ink-300">Friend battle. Your battle rating is unchanged.</div>
             </div>
           ) : (
-            <div className="mt-6 flex items-center gap-4 rounded-2xl bg-ink-800/70 px-5 py-3">
+            <div className="mt-4 flex items-center gap-4 rounded-2xl bg-ink-800/70 px-5 py-2 sm:mt-6 sm:py-3">
               <div className="text-left">
                 <div className="text-xs font-bold uppercase tracking-wider text-ink-400">Battle rating</div>
                 <div className="relative font-mono text-3xl font-black">
@@ -136,27 +136,27 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
 
           {/* Actions */}
           {running ? (
-            <div className="mt-6 grid w-full gap-2">
+            <div className="mt-4 grid w-full gap-2 sm:mt-6">
               <Button variant="ghost" onClick={onLobby}>
                 Leave series
               </Button>
             </div>
           ) : (
             <>
-              <div className="mt-6 grid w-full gap-2 sm:grid-cols-3">
+              <div className="mt-4 grid w-full grid-cols-2 gap-2 sm:mt-6 sm:grid-cols-3">
                 <Button
                   variant={state.rematch === 'offered' ? 'good' : 'primary'}
                   onClick={onRematch}
                   disabled={state.rematch === 'requested' || state.rematch === 'unavailable'}
-                  className={state.rematch === 'offered' ? 'animate-pulse' : ''}
+                  className={`max-sm:col-span-2 ${state.rematch === 'offered' ? 'animate-pulse' : ''}`}
                 >
                   {state.rematch === 'requested' ? <Spinner /> : Icons.retry('h-4 w-4')}
                   {rematchLabel}
                 </Button>
-                <Button variant="secondary" onClick={onNewOpponent}>
-                  {Icons.swords('h-4 w-4')} New opponent
+                <Button variant="secondary" className="max-sm:px-2 max-sm:text-sm" onClick={onNewOpponent}>
+                  {Icons.swords('h-4 w-4 max-sm:hidden')} New opponent
                 </Button>
-                <Button variant="ghost" onClick={onLobby}>
+                <Button variant="ghost" className="max-sm:px-2 max-sm:text-sm" onClick={onLobby}>
                   Back to lobby
                 </Button>
               </div>
@@ -200,7 +200,7 @@ function ScoreCol({ name, label, score, strikes, tone, winner }: { name: string;
     <div className="min-w-0">
       <div className="text-[10px] font-bold uppercase tracking-widest text-ink-400">{label}</div>
       <div className="truncate text-sm font-semibold">{name}</div>
-      <div className={`font-mono text-5xl font-black ${tone} ${winner ? 'drop-shadow-[0_0_18px_currentColor]' : ''}`}>
+      <div data-testid={label === 'You' ? 'end-you-score' : 'end-opp-score'} className={`font-mono text-5xl font-black ${tone} ${winner ? 'drop-shadow-[0_0_18px_currentColor]' : ''}`}>
         <TickerNumber value={shown} duration={0.8} />
       </div>
       <div className="mt-1 flex justify-center gap-1">

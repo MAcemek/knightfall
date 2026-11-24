@@ -45,7 +45,7 @@ export function BattleHud({ me, opponent, myScore, oppScore, oppTick, endsAt, se
   const diff = myScore.solved - oppScore.solved;
 
   return (
-    <div className="mb-3 rounded-2xl border border-ink-700/60 bg-ink-850 p-3 shadow-xl shadow-black/20 sm:p-4">
+    <div className="mb-3 rounded-2xl border border-ink-700/60 bg-ink-850 p-2 shadow-xl shadow-black/20 sm:p-4">
       <div className="flex items-center justify-between gap-2">
         <Side info={me} label="You" score={myScore} align="left" scoreRef={myScoreRef} />
 
@@ -67,7 +67,7 @@ export function BattleHud({ me, opponent, myScore, oppScore, oppTick, endsAt, se
       </div>
 
       {/* Tug of war */}
-      <div className="relative mt-2 h-2.5 overflow-hidden sm:mt-3 sm:h-3 rounded-full bg-sky-400/70" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label="Who is ahead">
+      <div className="relative mt-1.5 h-2.5 overflow-hidden sm:mt-3 sm:h-3 rounded-full bg-sky-400/70" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label="Who is ahead">
         <div
           className="absolute inset-y-0 left-0 rounded-r-full bg-gradient-to-r from-ember-600 to-ember-400 shadow-[0_0_12px_rgb(255_154_31/0.7)] transition-[width] duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
           style={{ width: `${share * 100}%` }}
@@ -110,12 +110,13 @@ function Side({ info, label, score, align, scoreRef }: {
   return (
     // Narrow screens stack score over name/strikes so the strike row never collides with the clock.
     <div
-      className={`flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 ${
+      className={`flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3 ${
         right ? 'items-end text-right sm:flex-row-reverse' : 'items-start'
       }`}
     >
       <div
         ref={boxRef}
+        data-testid={right ? 'opp-score' : 'my-score'}
         className={`flex h-11 min-w-12 items-center justify-center rounded-xl px-2 font-mono text-3xl font-black sm:h-16 sm:min-w-16 sm:text-5xl ${
           right ? 'bg-sky-400/15 text-sky-400' : 'bg-ember-500/15 text-ember-400'
         } transition-opacity ${out ? 'opacity-50' : ''}`}
@@ -123,9 +124,9 @@ function Side({ info, label, score, align, scoreRef }: {
         <TickerNumber value={score.solved} duration={0.35} />
       </div>
       <div className="w-full min-w-0 sm:w-auto">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-ink-400">{label}</div>
+        <div className="text-[10px] font-bold uppercase tracking-widest text-ink-400 max-sm:sr-only">{label}</div>
         <div className="truncate text-sm font-bold sm:text-base">{info.name}</div>
-        <div ref={strikesRef} className={`mt-0.5 flex gap-1 ${right ? 'justify-end' : ''}`} aria-label={`${score.strikes} strikes`}>
+        <div ref={strikesRef} data-testid={right ? 'opp-strikes' : 'my-strikes'} className={`mt-0.5 flex gap-1 ${right ? 'justify-end' : ''}`} aria-label={`${score.strikes} strikes`}>
           {Array.from({ length: BATTLE_MAX_STRIKES }, (_, i) => (
             <span
               key={i}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { formatCode } from '@knightfall/core';
 import { Icons, PageHeader, Pill } from '../../shared/ui.tsx';
@@ -9,6 +9,7 @@ import { MatchIntro } from './MatchIntro.tsx';
 import { BattleGame } from './BattleGame.tsx';
 import { EndScreen } from './EndScreen.tsx';
 import { ClubRoom } from './ClubRoom.tsx';
+import { battleViewKey } from './battleView.ts';
 
 /** Puzzle Battle: real-time head-to-head puzzle race (falls back to a sparring bot when nobody is around). */
 export default function BattlePage() {
@@ -30,9 +31,19 @@ export default function BattlePage() {
         ? 'Battle over'
         : 'Race a rival through the same puzzles';
 
+  // The lobby turns into the game on the same route, so the router does not reset the scroll: do it per screen.
+  const viewKey = battleViewKey(state, club);
+  // Block body on purpose: window.scrollTo returns a Promise in current Chrome, and an effect must return a cleanup function or nothing.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [viewKey]);
+  // While a match or a club race is on screen the title only stays for screen readers below lg (the phone needs the room).
+  const gameOn = viewKey.startsWith('game:') || viewKey === 'club-race';
+
   return (
     <>
       <PageHeader
+        className={gameOn ? 'max-lg:sr-only' : ''}
         title="Puzzle Battle"
         subtitle={subtitle}
         icon={Icons.swords('h-6 w-6')}

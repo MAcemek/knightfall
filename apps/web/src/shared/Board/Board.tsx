@@ -558,7 +558,7 @@ export function Board({
     <div className={`relative aspect-square w-full select-none ${shaking ? 'animate-shake' : ''} ${className}`}>
       <div
         ref={boardRef}
-        className="relative h-full w-full touch-none overflow-hidden rounded-md shadow-[0_18px_50px_-12px_rgb(0_0_0/0.65)]"
+        className="relative h-full w-full touch-none overflow-hidden rounded-md supports-[overflow:clip]:overflow-clip shadow-[0_18px_50px_-12px_rgb(0_0_0/0.65)]"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

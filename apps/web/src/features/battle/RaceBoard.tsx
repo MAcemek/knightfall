@@ -116,8 +116,8 @@ export function RaceBoard({ seed, ramp, playing, timeUp, strikes, history, onRes
       top={top}
       board={board}
       dock={
-        <div className="mt-3 space-y-2 lg:hidden">
-          <div className="flex items-center justify-between gap-3">
+        <div className="mt-3 space-y-2 max-lg:mt-2 lg:hidden">
+          <div className="flex items-center justify-between gap-3" data-testid="prompt-line">
             <PuzzlePrompt runner={runner} idleText="Get ready…" className="text-base!" />
             {puzzle && playing && <Pill className="font-mono">#{loadIndex + 1} · {puzzle.rating}</Pill>}
           </div>

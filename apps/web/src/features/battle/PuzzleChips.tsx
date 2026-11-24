@@ -18,7 +18,7 @@ export function PuzzleChips({ history, links = false }: { history: readonly Play
         return (
           <li key={`${i}-${p.id}`}>
             {links ? (
-              <a className={`${cls} transition hover:brightness-125`} href={`https://lichess.org/training/${p.id}`} target="_blank" rel="noreferrer" title={`${title} · open on Lichess`}>
+              <a className={`${cls} transition hover:brightness-125 max-lg:min-h-11 max-lg:justify-center max-lg:px-3`} href={`https://lichess.org/training/${p.id}`} target="_blank" rel="noreferrer" title={`${title} · open on Lichess`}>
                 {body}
               </a>
             ) : (

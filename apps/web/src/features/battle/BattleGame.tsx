@@ -65,7 +65,7 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
             />
             {clinched && <ClinchBanner opponent={match.opponent.name} lead={state.me.solved - state.opp.solved} onClaim={onClaim} />}
             {chasing && (
-              <div className="mb-3 animate-pop rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-semibold text-sky-400">
+              <div data-testid="chasing-banner" className="mb-3 animate-pop rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-semibold text-sky-400 max-lg:mb-2 max-lg:line-clamp-2 max-lg:px-3 max-lg:py-1.5 max-lg:text-xs max-lg:leading-4">
                 {match.opponent.name} is out of lives — solve {state.opp.solved - state.me.solved + 1} more to clinch the win!
               </div>
             )}
@@ -112,15 +112,16 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
 
 function ClinchBanner({ opponent, lead, onClaim }: { opponent: string; lead: number; onClaim: () => void }) {
   return (
-    <div className="mb-3 flex animate-pop flex-wrap items-center gap-3 rounded-xl border border-good-500/40 bg-gradient-to-r from-good-500/20 to-ember-500/10 px-4 py-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-good-500/25 text-good-400">{Icons.trophy('h-6 w-6')}</div>
+    <div data-testid="clinch-banner" className="mb-3 flex animate-pop items-center gap-3 rounded-xl border border-good-500/40 bg-gradient-to-r from-good-500/20 to-ember-500/10 px-4 py-3 max-lg:mb-2 max-lg:gap-2 max-lg:px-3 max-lg:py-0">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-good-500/25 text-good-400 max-lg:hidden">{Icons.trophy('h-6 w-6')}</div>
       <div className="min-w-0 flex-1">
-        <div className="font-extrabold text-good-400">Victory secured!</div>
-        <div className="text-xs text-ink-300">
-          {opponent} is out of lives and you lead by {lead}. Claim it now or keep solving to pad your score.
+        <div className="font-extrabold text-good-400 max-lg:text-sm max-lg:leading-4">Victory secured!</div>
+        <div className="text-xs text-ink-300 max-lg:truncate max-lg:leading-4">
+          <span className="lg:hidden">{opponent} is out of lives.</span>
+          <span className="max-lg:hidden">{opponent} is out of lives and you lead by {lead}. Claim it now or keep solving to pad your score.</span>
         </div>
       </div>
-      <Button variant="good" size="sm" onClick={onClaim}>
+      <Button variant="good" size="sm" className="min-h-11 shrink-0" onClick={onClaim}>
         {Icons.trophy('h-4 w-4')} Claim win
       </Button>
     </div>

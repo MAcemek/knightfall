@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { sfx } from './fx/sound.ts';
 
 /** Small shared UI kit. Features should compose these so the app feels consistent. */
@@ -120,8 +121,12 @@ export function Modal({ open, onClose, children, className = '', size = 'md', la
     return () => window.removeEventListener('keydown', onKey, true);
   }, [open]);
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-ink-950/75 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm sm:p-4" onClick={onClose}>
+  // Portal to body: an ancestor with a transform (animate-rise) would otherwise become the containing block of `fixed`.
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-ink-950/75 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm sm:p-4" onClick={(e) => {
+      e.stopPropagation(); // portals bubble through the React tree: keep clicks from reaching the parents
+      onClose?.();
+    }}>
       <div
         role="dialog"
         aria-modal="true"
@@ -131,7 +136,8 @@ export function Modal({ open, onClose, children, className = '', size = 'md', la
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

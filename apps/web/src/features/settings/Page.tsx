@@ -7,6 +7,7 @@ import { resetSettings, setSetting, useSettings } from '../../shared/settings.ts
 import { ANIM_SPEEDS, BOARD_THEMES } from '../../shared/settingsLogic.ts';
 import { toast } from '../../shared/toast.tsx';
 import { Button, Icons, PageHeader, Panel, Segmented, Switch } from '../../shared/ui.tsx';
+import { BackupPanel } from './BackupPanel.tsx';
 
 export default function SettingsPage() {
   const s = useSettings();
@@ -32,7 +33,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <PageHeader title="Settings" subtitle="Sound, board and animations" icon={Icons.sliders('h-6 w-6')} />
+      <PageHeader title="Settings" subtitle="Sound, board, animations and backup" icon={Icons.sliders('h-6 w-6')} />
 
       <div className="animate-rise">
         <Panel className="space-y-4">
@@ -142,8 +143,12 @@ export default function SettingsPage() {
         </Panel>
       </div>
 
+      <div className="animate-rise" style={{ animationDelay: '200ms' }}>
+        <BackupPanel />
+      </div>
+
       {installState !== 'none' && (
-        <div className="animate-rise" style={{ animationDelay: '200ms' }}>
+        <div className="animate-rise" style={{ animationDelay: '240ms' }}>
           <Panel className="space-y-4">
             <h2 className="text-lg font-extrabold">Install Knightfall</h2>
             {installState === 'prompt' && (

@@ -1,5 +1,6 @@
 import { isGamePuzzleId } from '../../shared/analysis/gamePuzzleLogic.ts';
 import { db, type CustomPuzzle } from '../../shared/db.ts';
+import { downloadJson } from '../../shared/download.ts';
 import { getPlayerName } from '../../shared/profile.ts';
 import { EXPORT_FORMAT, contentKey, newCustomId, parseImport, type PuzzleDraft } from './logic.ts';
 
@@ -86,15 +87,7 @@ export async function exportAll(): Promise<number> {
       solves: p.solves ?? 0,
     })),
   };
-  const blob = new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `knightfall-puzzles-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadJson(`knightfall-puzzles-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(body, null, 2));
   return puzzles.length;
 }
 

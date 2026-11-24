@@ -49,8 +49,9 @@ export function ChallengeInbox() {
   const more = incoming.length - 1;
   const options = describeSettings(invite.settings, invite.series);
 
+  // One above Modal (z-90, portalled to body): an invitation expires in a minute, so a dialog must not hide it.
   const wrap =
-    'pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-[90] flex justify-center pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:px-0';
+    'pointer-events-none fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-[91] flex justify-center pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:px-0';
 
   if (display === 'banner') {
     return (

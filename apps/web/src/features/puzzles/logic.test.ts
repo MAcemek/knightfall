@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_GLICKO } from '@knightfall/core';
-import { nextStreak, ratedOutcome, sortThemes, themeLabel } from './logic.ts';
+import { nextStreak, pendingAction, ratedOutcome, sortThemes, themeLabel } from './logic.ts';
+
+describe('pendingAction', () => {
+  const left = { puzzleId: 'a', puzzleRating: 1200, at: 1 };
+  it('an untouched puzzle waits, also one left by an older version', () => {
+    expect(pendingAction(left)).toBe('resume');
+    expect(pendingAction({ ...left, touched: false })).toBe('resume');
+  });
+  it('a started puzzle is a miss', () => expect(pendingAction({ ...left, touched: true })).toBe('miss'));
+  it('nothing was left', () => expect(pendingAction(null)).toBe('none'));
+});
 
 describe('ratedOutcome', () => {
   it('gains on a clean solve', () => {

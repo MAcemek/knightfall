@@ -51,6 +51,14 @@ export function RatedTrainer() {
   const { status, retrying } = runner;
   const finished = isFinished(status);
 
+  // Started: from here on, leaving the puzzle counts as a miss.
+  const started = runner.hintsUsed > 0 || runner.progress.done > 0;
+  useEffect(() => {
+    if (started && runner.puzzle) session.touch(runner.puzzle.id);
+    // Only when `started` flips: when the next puzzle loads, it is still true for one render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [started]);
+
   // New puzzle → unflip.
   useEffect(() => setFlipped(false), [session.puzzle]);
 

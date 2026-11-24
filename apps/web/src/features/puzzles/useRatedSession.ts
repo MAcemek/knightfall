@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bucketFor, BUCKET_SIZE, type Glicko, type Puzzle } from '@knightfall/core';
 import { db, defaults, getKV, KEYS, setKV, type Attempt, type StreakState } from '../../shared/db.ts';
-import { loadBucket, prefetchAround, puzzleNear } from '../../shared/puzzleSource.ts';
+import { findPuzzle, loadBucket, prefetchAround, puzzleNear } from '../../shared/puzzleSource.ts';
 import type { RunnerResult } from '../../shared/PuzzlePlayer/index.ts';
-import { nextStreak, ratedOutcome, type StreakStep } from './logic.ts';
+import { nextStreak, pendingAction, ratedOutcome, type PendingRated, type StreakStep } from './logic.ts';
 
 /** How the current puzzle counts. */
 export type SessionMode = 'rated' | 'replay';
@@ -22,14 +22,6 @@ export interface StreakEvent extends StreakStep {
 }
 
 const RECENT_LIMIT = 200;
-
-/** A rated puzzle that was shown but has no outcome yet. */
-interface PendingRated {
-  puzzleId: string;
-  puzzleRating: number;
-  themes?: string[];
-  at: number;
-}
 
 /**
  * Apply one rated result (rating, streak, Attempt row) atomically. If a pending marker exists for
@@ -64,14 +56,31 @@ async function applyRated(r: { puzzleId: string; puzzleRating: number; solved: b
 }
 
 /**
- * Settle an abandoned rated puzzle (left mid-solve via navigation, reload or closing the tab) as a miss.
- * Returns the rating change applied, or null if nothing was pending.
+ * Settle a rated puzzle that was started and then left (navigation, reload, closed tab) as a miss. An untouched one
+ * stays pending and is shown again. Returns the rating change applied, or null if there was nothing to settle.
  */
 export async function settleAbandoned(): Promise<number | null> {
   const pending = await getKV<PendingRated | null>(KEYS.ratedPending, null);
-  if (!pending) return null;
+  if (!pending || pendingAction(pending) !== 'miss') return null;
   const { rated } = await applyRated({ ...pending, solved: false, hintsUsed: 0, timeMs: Date.now() - pending.at });
   return rated.delta;
+}
+
+/** The untouched puzzle that was left last time, if it is still in the puzzle set (its marker is dropped if not). */
+async function waitingPuzzle(): Promise<Puzzle | null> {
+  const pending = await getKV<PendingRated | null>(KEYS.ratedPending, null);
+  if (!pending || pendingAction(pending) !== 'resume') return null;
+  const p = await findPuzzle(pending.puzzleId, pending.puzzleRating);
+  if (!p) await setKV<PendingRated | null>(KEYS.ratedPending, null);
+  return p;
+}
+
+/** The player found a move or took a hint: from now on leaving this puzzle is a miss. */
+async function markTouched(puzzleId: string): Promise<void> {
+  await db.transaction('rw', db.kv, async () => {
+    const pending = await getKV<PendingRated | null>(KEYS.ratedPending, null);
+    if (pending?.puzzleId === puzzleId && !pending.touched) await setKV<PendingRated>(KEYS.ratedPending, { ...pending, touched: true });
+  });
 }
 
 /**
@@ -105,7 +114,7 @@ export function useRatedSession() {
     modeRef.current = m;
     setMode(m);
     setResult(null);
-    // Rated puzzles count from the moment they are shown: leaving before an outcome is a miss.
+    // Left untouched, a rated puzzle waits for the next visit; left after a move or a hint, it is a miss.
     unfinished.current = m === 'rated';
     if (m === 'rated') {
       const mark: PendingRated = { puzzleId: p.id, puzzleRating: p.rating, themes: p.themes, at: Date.now() };
@@ -128,10 +137,16 @@ export function useRatedSession() {
     try {
       // Let the previous result land first so the next pick uses the updated rating.
       await writeChain.current;
-      const pending = nextRef.current;
-      nextRef.current = null;
-      let p = pending ? await pending.catch(() => null) : null;
-      if (!p || recent.current.has(p.id)) p = await fetchNext();
+      // Left for a replay after starting it: a miss.
+      const missed = await settleAbandoned();
+      if (missed !== null) setAbandonedDelta(missed);
+      let p = await waitingPuzzle();
+      if (!p) {
+        const prefetched = nextRef.current;
+        nextRef.current = null;
+        p = prefetched ? await prefetched.catch(() => null) : null;
+        if (!p || recent.current.has(p.id)) p = await fetchNext();
+      }
       if (seq !== loadSeq.current) return;
       show(p, 'rated');
     } catch (e) {
@@ -151,7 +166,7 @@ export function useRatedSession() {
       } catch {
         /* first run or private mode: start fresh */
       }
-      // A puzzle left unfinished last time (reload / closed tab) counts as a miss.
+      // A puzzle started and left last time (reload / closed tab) counts as a miss.
       const settle = writeChain.current.then(settleAbandoned);
       writeChain.current = settle.catch(() => {});
       const delta = await settle.catch(() => null);
@@ -164,11 +179,17 @@ export function useRatedSession() {
     })();
     return () => {
       alive = false;
-      // Navigating away inside the app mid-puzzle: settle it right away. (Only for a puzzle shown during
+      // Navigating away inside the app mid-puzzle: settle it right away if it was started. (Only for a puzzle shown during
       // this mount, so React StrictMode's dev remount doesn't silently settle a leftover from a reload.)
       if (unfinished.current) writeChain.current = writeChain.current.then(settleAbandoned).catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Call when the player finds a move or takes a hint. */
+  const touch = useCallback((puzzleId: string) => {
+    if (modeRef.current !== 'rated' || !unfinished.current) return;
+    writeChain.current = writeChain.current.then(() => markTouched(puzzleId)).catch(() => {});
   }, []);
 
   const onComplete = useCallback(
@@ -236,5 +257,5 @@ export function useRatedSession() {
     [show],
   );
 
-  return { puzzle, mode, result, streakEvent, error, loading, abandonedDelta, next, replay, onComplete };
+  return { puzzle, mode, result, streakEvent, error, loading, abandonedDelta, next, replay, touch, onComplete };
 }

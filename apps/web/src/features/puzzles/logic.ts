@@ -26,6 +26,25 @@ export function ratedOutcome(player: Glicko, puzzleRating: number, solved: boole
   return { next, delta, applied: true, clean: solved };
 }
 
+/** A rated puzzle that was shown but has no outcome yet. */
+export interface PendingRated {
+  puzzleId: string;
+  puzzleRating: number;
+  themes?: string[];
+  at: number;
+  /** A move was found or a hint was taken. Absent on an untouched puzzle (and on markers from older versions). */
+  touched?: boolean;
+}
+
+/**
+ * What happens to a rated puzzle that was left: an untouched one waits (the same puzzle comes back, so leaving is
+ * no way to skip a hard one), one that was started counts as a miss (so a hint cannot be taken back by leaving).
+ */
+export function pendingAction(pending: PendingRated | null): 'none' | 'resume' | 'miss' {
+  if (!pending) return 'none';
+  return pending.touched ? 'miss' : 'resume';
+}
+
 export interface StreakStep {
   streak: StreakState;
   /** +1 happened. */

@@ -225,7 +225,7 @@ export const KEYS = {
   puzzleStreak: 'puzzleStreak', // { current: number, best: number }
   battleRating: 'battleRating', // number (Elo)
   playerName: 'playerName', // string
-  /** Rated puzzle currently on screen and not yet finished: { puzzleId, puzzleRating, at } | null. Settled as a miss if abandoned. */
+  /** Rated puzzle currently on screen and not yet finished: { puzzleId, puzzleRating, at, touched } | null. Shown again if left untouched, a miss if left after a move or a hint. */
   ratedPending: 'ratedPending',
   /** Settings object (shared/settingsLogic.ts). */
   settings: 'settings',

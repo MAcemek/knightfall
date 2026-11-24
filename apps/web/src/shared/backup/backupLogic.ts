@@ -49,7 +49,7 @@ export const BACKUP_TABLES: readonly TableName[] = [
 
 /**
  * kv keys that belong to this device only: never written to a backup and never taken from one.
- * battleToken is a secret that proves ownership of the friend code; a restored ratedPending would be settled as a miss.
+ * battleToken is a secret that proves ownership of the friend code; a restored ratedPending could be settled as a miss.
  */
 export const DEVICE_KEYS: readonly string[] = ['battleCode', 'battleToken', 'ratedPending'];
 

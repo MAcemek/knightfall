@@ -53,9 +53,9 @@ export function themeAccuracy(rows: readonly { themes: readonly string[]; solved
     .sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts || a.theme.localeCompare(b.theme));
 }
 
-/** Top `n` and bottom `n` themes (no overlap; weaknesses are worst first). */
+/** Top `n` and bottom `n` themes (no overlap; weaknesses are worst first). A strength is solved at least half the time. */
 export function strengthsAndWeaknesses(stats: readonly ThemeStat[], n = 3): { strengths: ThemeStat[]; weaknesses: ThemeStat[] } {
-  const strengths = stats.slice(0, n);
+  const strengths = stats.slice(0, n).filter((s) => s.accuracy >= 0.5);
   const rest = stats.slice(strengths.length);
   return { strengths, weaknesses: rest.slice(-n).reverse() };
 }

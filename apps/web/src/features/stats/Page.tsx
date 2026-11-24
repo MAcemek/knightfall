@@ -78,7 +78,7 @@ export default function StatsPage() {
                 <div key={k} className="flex items-center justify-between rounded-xl bg-ink-800/70 px-4 py-3">
                   <div>
                     <div className="font-semibold">{label}</div>
-                    <div className="text-xs text-ink-400">{rush[k].runs} runs · best combo ×{rush[k].bestCombo}</div>
+                    <div className="text-xs text-ink-400">{rush[k].runs} {rush[k].runs === 1 ? 'run' : 'runs'} · best combo ×{rush[k].bestCombo}</div>
                   </div>
                   <div className="font-mono text-2xl font-bold">{rush[k].best}</div>
                 </div>

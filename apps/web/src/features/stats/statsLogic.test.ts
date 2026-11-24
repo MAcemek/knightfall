@@ -52,6 +52,11 @@ describe('strengthsAndWeaknesses', () => {
     expect(r.strengths.map((t) => t.theme)).toEqual(['a', 'b', 'c']);
     expect(r.weaknesses.map((t) => t.theme)).toEqual(['e', 'd']);
   });
+  it('a theme solved less than half the time is never a strength', () => {
+    const r = strengthsAndWeaknesses([stat('a', 0.8), stat('b', 0.3), stat('c', 0.1)], 3);
+    expect(r.strengths.map((t) => t.theme)).toEqual(['a']);
+    expect(r.weaknesses.map((t) => t.theme)).toEqual(['c', 'b']);
+  });
   it('handles short lists', () => {
     expect(strengthsAndWeaknesses([], 3)).toEqual({ strengths: [], weaknesses: [] });
     expect(strengthsAndWeaknesses([stat('a', 1)], 3).weaknesses).toEqual([]);

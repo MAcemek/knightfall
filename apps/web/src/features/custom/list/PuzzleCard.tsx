@@ -124,7 +124,7 @@ function IconAction({ label, onClick, danger, children }: { label: string; onCli
         sfx.click();
         onClick();
       }}
-      className={`flex h-9 w-9 items-center justify-center rounded-xl bg-ink-800 text-ink-300 transition duration-100 active:scale-90 ${
+      className={`flex h-9 w-9 max-lg:h-11 max-[479px]:w-11 items-center justify-center rounded-xl bg-ink-800 text-ink-300 transition duration-100 active:scale-90 ${
         danger ? 'hover:bg-bad-500/20 hover:text-bad-400' : 'hover:bg-ink-700 hover:text-ink-100'
       }`}
     >

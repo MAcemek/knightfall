@@ -42,6 +42,7 @@ export function ThemeBreakdown({ rows }: { rows: { themes: string[]; solved: boo
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2.5">
           <h3 className="text-sm font-bold uppercase tracking-wider text-good-400">Strengths</h3>
+          {strengths.length === 0 && <p className="text-sm text-ink-500">Keep playing to reveal strengths.</p>}
           {strengths.map((s, i) => <ThemeRow key={s.theme} stat={s} tone="good" index={i} />)}
         </div>
         <div className="space-y-2.5">

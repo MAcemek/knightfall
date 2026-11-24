@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js';
 import { describe, expect, it } from 'vitest';
 import type { TbCategory, TbMove } from '../../shared/tablebase.ts';
-import { goalReached, judgeUserMove, OFFLINE_MESSAGE, pickDefence, recordSolve, sanitizeProgress, solvedCount } from './endgameLogic.ts';
+import { failureMessage, goalReached, judgeUserMove, OFFLINE_MESSAGE, pickDefence, recordSolve, sanitizeProgress, solvedCount } from './endgameLogic.ts';
 
 const mv = (uci: string, category: TbCategory, dtm: number | null = null, dtz: number | null = null): TbMove => ({ uci, san: uci, category, dtm, dtz });
 
@@ -27,6 +27,24 @@ describe('pickDefence', () => {
 
   it('the first of several drawing moves is played', () => {
     expect(pickDefence([mv('x', 'draw'), mv('y', 'draw')])?.uci).toBe('x');
+  });
+
+  it('a drawing side with the board does not give its last pawn away', () => {
+    // Blockade: d6+ is also "a draw", but Kxd6 ends the drill at once.
+    const c = new Chess('8/2k5/8/3P4/3K4/8/8/8 w - - 2 2');
+    const draws = ['d5d6', 'd4c5', 'd4e5', 'd4c4'].map((u) => mv(u, 'draw'));
+    expect(pickDefence(draws, c)?.uci).not.toBe('d5d6');
+  });
+
+  it('a drawing side avoids stalemate and pawn pushes while it has another try', () => {
+    const c = new Chess('7k/8/6KP/8/8/8/8/5B2 w - - 0 1');
+    expect(pickDefence([mv('h6h7', 'draw'), mv('f1e2', 'draw')], c)?.uci).toBe('f1e2');
+  });
+
+  it('a drawing side tries something new instead of repeating', () => {
+    const c = new Chess('8/8/8/4k3/8/1b6/8/R3K3 w - - 0 1');
+    for (const u of ['a1b1', 'b3a2', 'b1a1', 'a2b3']) c.move({ from: u.slice(0, 2), to: u.slice(2, 4) });
+    expect(pickDefence([mv('a1b1', 'draw'), mv('a1a3', 'draw')], c)?.uci).toBe('a1a3');
   });
 
   it('a winning side takes the quickest win', () => {
@@ -133,5 +151,8 @@ describe('progress', () => {
 describe('copy', () => {
   it('has the offline message', () => {
     expect(OFFLINE_MESSAGE).toBe('Endgame drills need an internet connection');
+    expect(failureMessage('offline')).toBe(OFFLINE_MESSAGE);
+    expect(failureMessage('rate-limited')).toContain('busy');
+    expect(failureMessage('bad-response')).not.toContain('internet');
   });
 });

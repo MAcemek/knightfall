@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { tablebase, TablebaseError, type TbMove, type TbPosition } from '../../shared/tablebase.ts';
+import { tablebase, TablebaseError, type TablebaseFailure, type TbMove, type TbPosition } from '../../shared/tablebase.ts';
 import { goalReached, judgeUserMove, pickDefence } from './endgameLogic.ts';
 import type { EndgamePosition } from './positions.ts';
 import { saveSolve } from './progressStore.ts';
@@ -24,6 +24,8 @@ export interface DrillState {
   /** Tablebase answer for the position you are to move in (null while the opponent thinks). */
   tb: TbPosition | null;
   slip: Slip | null;
+  /** Why the tablebase did not answer (status 'offline'). */
+  failure: TablebaseFailure;
   /** Arrow shown by "Show best". */
   arrow: [string, string] | null;
   /** Bumps on every restart so the board deals the pieces fresh. */
@@ -39,6 +41,7 @@ const initial = (position: EndgamePosition, run: number): DrillState => ({
   moves: 0,
   tb: null,
   slip: null,
+  failure: 'offline',
   arrow: null,
   run,
 });
@@ -67,14 +70,15 @@ export function useEndgameDrill(position: EndgamePosition) {
             setState((s) => ({ ...s, status: 'playing', fen: c.fen(), moves, tb, arrow: null }));
             return;
           }
-          const reply = pickDefence(tb.moves);
+          const reply = pickDefence(tb.moves, c);
           if (!reply) throw new TablebaseError('bad-response');
           const { from, to, promotion } = split(reply.uci);
           c.move({ from, to, promotion });
           setState((s) => ({ ...s, status: 'thinking', fen: c.fen(), lastMove: [from, to], moves, tb: null }));
         }
-      } catch {
-        if (mine === token.current) setState((s) => ({ ...s, status: 'offline', tb: null }));
+      } catch (e) {
+        const failure = e instanceof TablebaseError ? e.reason : 'offline';
+        if (mine === token.current) setState((s) => ({ ...s, status: 'offline', failure, tb: null }));
       }
     },
     [position],

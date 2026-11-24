@@ -1,8 +1,15 @@
-import type { Chess } from 'chess.js';
-import type { TbCategory, TbMove } from '../../shared/tablebase.ts';
+import { Chess } from 'chess.js';
+import type { TablebaseFailure, TbCategory, TbMove } from '../../shared/tablebase.ts';
 import type { EndgameGoal } from './positions.ts';
 
 export const OFFLINE_MESSAGE = 'Endgame drills need an internet connection';
+
+/** Why the tablebase did not answer, in words. */
+export function failureMessage(reason: TablebaseFailure): string {
+  if (reason === 'rate-limited') return 'Lichess is busy. Wait a minute, then try again.';
+  if (reason === 'bad-response') return 'Lichess could not answer. Try again in a moment.';
+  return OFFLINE_MESSAGE;
+}
 
 /** Worst to best, as seen by the side that is choosing. */
 const RANK: TbCategory[] = ['unknown', 'loss', 'maybe-loss', 'blessed-loss', 'draw', 'maybe-win', 'cursed-win', 'win'];
@@ -14,10 +21,10 @@ const distance = (m: TbMove) => Math.abs(m.dtm ?? m.dtz ?? 0);
 
 /**
  * The reply of the tablebase side. It takes the best result it can get:
- * a winning side converts as fast as possible, a drawing side keeps the draw, and a losing side holds out
- * as long as possible. Returns null when there is no legal move.
+ * a winning side converts as fast as possible, a drawing side keeps the draw (and, given the board, makes it as
+ * hard as it can), and a losing side holds out as long as possible. Returns null when there is no legal move.
  */
-export function pickDefence(moves: readonly TbMove[]): TbMove | null {
+export function pickDefence(moves: readonly TbMove[], chess?: Chess): TbMove | null {
   let best = -1;
   for (const m of moves) best = Math.max(best, rank(m.category));
   const top = moves.filter((m) => rank(m.category) === best);
@@ -25,7 +32,43 @@ export function pickDefence(moves: readonly TbMove[]): TbMove | null {
   if (!first) return null;
   if (best >= rank('maybe-win')) return top.reduce((a, b) => (distance(b) < distance(a) ? b : a));
   if (best <= rank('maybe-loss')) return top.reduce((a, b) => (distance(b) > distance(a) ? b : a));
-  return first;
+  if (!chess) return first;
+  const seen = visits(chess);
+  const scored = top.map((m) => ({ m, s: pressure(chess, m, seen) }));
+  return scored.reduce((a, b) => (b.s > a.s ? b : a)).m;
+}
+
+/** The part of a FEN that repetition depends on. */
+const positionKey = (fen: string) => fen.split(' ').slice(0, 4).join(' ');
+
+/** How often each position has been on the board in this drill. */
+function visits(chess: Chess): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const m of chess.history({ verbose: true })) out.set(positionKey(m.after), (out.get(positionKey(m.after)) ?? 0) + 1);
+  return out;
+}
+
+/**
+ * How much a drawing move tests the other side. The tablebase calls every drawing move equal, so without this the
+ * attacker would happily give its last pawn away. Worst: ending the game; then giving up material, letting a pawn
+ * promote, repeating, and pushing a pawn while there is something else to try.
+ */
+function pressure(chess: Chess, move: TbMove, seen: ReadonlyMap<string, number>): number {
+  const c = new Chess(chess.fen());
+  const played = c.move({ from: move.uci.slice(0, 2), to: move.uci.slice(2, 4), promotion: move.uci.slice(4) || undefined });
+  if (c.isStalemate() || c.isInsufficientMaterial()) return -1000;
+  const replies = c.moves({ verbose: true });
+  let score = -replies.length;
+  if (replies.some((r) => r.promotion)) score -= 100;
+  for (const r of replies) {
+    if (!r.captured) continue;
+    const after = new Chess(r.after);
+    if (after.isInsufficientMaterial()) score -= 500;
+    else if (!after.moves({ verbose: true }).some((m) => m.to === r.to)) score -= 100;
+  }
+  score -= 60 * (seen.get(positionKey(played.after)) ?? 0);
+  if (played.piece === 'p') score -= 40;
+  return score;
 }
 
 export type MoveJudgement = { ok: true } | { ok: false; message: string };

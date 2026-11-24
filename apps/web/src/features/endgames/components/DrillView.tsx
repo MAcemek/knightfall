@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Board, type BoardArrow, type BoardMark } from '../../../shared/Board/index.ts';
 import { Button, GameLayout, Icons, PageHeader, Panel, Pill } from '../../../shared/ui.tsx';
-import { OFFLINE_MESSAGE } from '../endgameLogic.ts';
+import { failureMessage } from '../endgameLogic.ts';
 import { ENDGAMES, type EndgamePosition } from '../positions.ts';
 import { useEndgameProgress } from '../progressStore.ts';
 import { useEndgameDrill } from '../useEndgameDrill.ts';
@@ -73,7 +73,7 @@ export function DrillView({ position }: { position: EndgamePosition }) {
 
             {status === 'offline' && (
               <div role="alert" className="space-y-3 rounded-xl border border-bad-500/40 bg-bad-500/10 p-3">
-                <p className="text-sm font-bold text-bad-400">{OFFLINE_MESSAGE}</p>
+                <p className="text-sm font-bold text-bad-400">{failureMessage(state.failure)}</p>
                 <Button variant="primary" className="w-full" onClick={retry}>
                   {Icons.retry('h-4 w-4')} Try again
                 </Button>

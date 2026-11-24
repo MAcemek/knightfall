@@ -75,6 +75,7 @@ apps/web          Vite + React + Tailwind client
   src/shared      Board, PuzzlePlayer, fx (synth sounds, particles), db (Dexie), engine (Stockfish worker
                   pool, cloud evals), importers (Lichess, chess.com), settings, progress
   src/features    one folder per mode: puzzles, train, daily, rush, battle, custom, analysis, stats, settings, home
+  e2e             Playwright battle tests (npm run e2e)
 apps/server       Node HTTP + ws server: battle matchmaking, rooms, authoritative clock; chess.com game lookup
 scripts           build-puzzles, build-openings, fetch-engine, fit-rating, build-vercel
 ```

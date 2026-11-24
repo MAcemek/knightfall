@@ -49,7 +49,12 @@ export function ThemeBreakdown({ rows }: { rows: { themes: string[]; solved: boo
           {weaknesses.length === 0 ? (
             <p className="text-sm text-ink-500">Keep playing to reveal weak spots.</p>
           ) : (
-            weaknesses.map((s, i) => <ThemeRow key={s.theme} stat={s} tone="bad" index={i} />)
+            <>
+              {weaknesses.map((s, i) => <ThemeRow key={s.theme} stat={s} tone="bad" index={i} />)}
+              <Link to="/train/weak" className="inline-flex min-h-11 items-center font-bold text-ember-400 hover:underline">
+                Train my weak spots
+              </Link>
+            </>
           )}
         </div>
       </div>

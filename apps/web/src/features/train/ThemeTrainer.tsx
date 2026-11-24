@@ -1,11 +1,12 @@
 import { useMemo, useRef } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Glicko } from '@knightfall/core';
-import { db, defaults, getKV, KEYS } from '../../shared/db.ts';
+import { defaults, getKV, KEYS } from '../../shared/db.ts';
 import { themedPuzzleNear } from '../../shared/puzzleSource.ts';
 import { themeLabel } from '../../shared/themes.ts';
 import { EmptyState, Icons, Pill } from '../../shared/ui.tsx';
 import { DIFFICULTIES, parseDifficulty, parseThemeParam, trainTargetRating } from './trainLogic.ts';
+import { recordTheme } from './recordTheme.ts';
 import { TrainSession, type TrainSource } from './TrainSession.tsx';
 
 /** /train/theme/:keys — unrated puzzles that match any of the chosen themes, near the player's level. */
@@ -24,20 +25,7 @@ export function ThemeTrainer() {
         if (p) seen.current.add(p.id);
         return p;
       },
-      record: async (r) => {
-        // Unrated: only an Attempt row. The foundation's watcher queues a miss for review.
-        await db.attempts.add({
-          puzzleId: r.puzzle.id,
-          mode: 'theme',
-          solved: r.solved,
-          puzzleRating: r.puzzle.rating,
-          hintsUsed: r.hintsUsed,
-          timeMs: r.timeMs,
-          at: Date.now(),
-          themes: r.puzzle.themes,
-        });
-        return r.solved ? null : 'Missed — added to your review queue';
-      },
+      record: recordTheme,
     }),
     [themes, difficulty],
   );

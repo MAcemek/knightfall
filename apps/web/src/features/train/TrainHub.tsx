@@ -83,6 +83,9 @@ export function TrainHub() {
       </Panel>
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <HubCard icon={Icons.chart} title="Weak spots" text="Puzzles from the themes you miss most, picked for you." onOpen={() => navigate('/train/weak')} />
+        </div>
         <HubCard icon={Icons.search} title="From my games" text="Your own mistakes from analysed games, as puzzles." onOpen={() => navigate('/train/games')} />
         <HubCard icon={Icons.bulb} title="Openings" text="Learn the named lines move by move, then get tested on them." onOpen={() => navigate('/train/openings')} />
         <HubCard icon={Icons.trophy} title="Endgames" text="Play key endings against perfect defence." onOpen={() => navigate('/train/endgames')} />

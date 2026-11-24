@@ -5,6 +5,7 @@ import { GamesTrainer } from './GamesTrainer.tsx';
 import { ReviewTrainer } from './ReviewTrainer.tsx';
 import { ThemeTrainer } from './ThemeTrainer.tsx';
 import { TrainHub } from './TrainHub.tsx';
+import { WeakTrainer } from './WeakTrainer.tsx';
 
 const OpeningsPage = lazy(() => import('../openings/Page.tsx'));
 const EndgamesPage = lazy(() => import('../endgames/Page.tsx'));
@@ -14,6 +15,7 @@ const VisionPage = lazy(() => import('../vision/Page.tsx'));
  * Train (all unrated).
  *   /train                 hub: review queue + theme picker
  *   /train/theme/:keys     theme session ("fork+pin", ?d=easier|normal|harder)
+ *   /train/weak            your weakest themes, picked for you
  *   /train/review          spaced-repetition review of missed puzzles
  *   /train/games           puzzles from your own analysed games (due / all / bulk add)
  *   /train/games/play      their session (?m=due|all)
@@ -26,6 +28,7 @@ export default function TrainPage() {
     <Routes>
       <Route index element={<TrainHub />} />
       <Route path="theme/:keys" element={<ThemeTrainerRoute />} />
+      <Route path="weak" element={<WeakTrainer />} />
       <Route path="review" element={<ReviewTrainer />} />
       <Route path="games" element={<GamesPage />} />
       <Route path="games/play" element={<GamesTrainerRoute />} />

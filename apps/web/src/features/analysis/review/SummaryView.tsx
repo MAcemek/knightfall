@@ -1,13 +1,14 @@
-import { memo, useState, type ReactNode } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { accuracyGrade, coachSummary, type GameReport, type MoveClass, type Side, type SideNumbers } from '@knightfall/core';
+import { accuracyGrade, coachSummary, gameSummary, type GameReport, type GameSummary, type MoveClass, type Side, type SideNumbers } from '@knightfall/core';
 import { MOVE_CLASS_META, MoveGlyph, REPORT_TABLE_CLASSES } from '../../../shared/analysis/index.ts';
 import type { StoredGame } from '../../../shared/db.ts';
 import { motionOff } from '../../../shared/settings.ts';
 import { Button } from '../../../shared/ui.tsx';
 import { CoachBubble } from './CoachBubble.tsx';
 import { EvalGraph, type GraphDot } from './parts.tsx';
+import { moveLabel } from './reviewExtras.ts';
 import type { GraphGeometry } from './reviewLogic.ts';
 
 /** Where the collapsible part of the count table starts. */
@@ -78,6 +79,72 @@ function GradeIcon({ value }: { value: number | null }) {
   return <MoveGlyph cls={cls} size={24} className="mx-auto" title={`${MOVE_CLASS_META[cls].label} (${value === null ? '' : Math.round(value)})`} />;
 }
 
+function SummaryHeading({ children }: { children: ReactNode }) {
+  return <h3 className="text-sm font-extrabold text-ink-100">{children}</h3>;
+}
+
+/** What went well, the turning points (each opens the review at that move) and one thing to practise. */
+function SummaryCard({ summary, onSeek }: { summary: GameSummary; onSeek: (index: number) => void }) {
+  const { wentWell, turningPoints, practise } = summary;
+  return (
+    <section aria-label="Game summary" className="space-y-4 rounded-xl border border-ink-700/60 bg-ink-800/60 p-3">
+      {wentWell.length > 0 && (
+        <div className="space-y-1">
+          <SummaryHeading>What went well</SummaryHeading>
+          <ul className="space-y-1 text-sm text-ink-200">
+            {wentWell.map((t) => (
+              <li key={t} className="min-w-0 break-words">
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="space-y-1">
+        <SummaryHeading>Turning points</SummaryHeading>
+        {turningPoints.length === 0 ? (
+          <p className="text-sm text-ink-300">There was no real turning point in this game.</p>
+        ) : (
+          <ul className="space-y-1">
+            {turningPoints.map((t) => {
+              const m = MOVE_CLASS_META[t.cls];
+              const label = moveLabel(t);
+              return (
+                <li key={t.ply}>
+                  <button
+                    type="button"
+                    onClick={() => onSeek(t.ply + 1)}
+                    aria-label={`Open move ${label}, ${m.label.toLowerCase()}. ${t.reason}`}
+                    className="grid min-h-11 w-full grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2 rounded-lg px-2 py-1.5 text-left hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-ember-400"
+                  >
+                    <MoveGlyph cls={t.cls} size={20} className="mt-0.5" title={m.label} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold text-ink-100">{label}</span>
+                      <span className="block break-words text-sm text-ink-300">{t.reason}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      {practise && (
+        <div className="space-y-1">
+          <SummaryHeading>Practise this</SummaryHeading>
+          <p className="break-words text-sm text-ink-300">{practise.reason}</p>
+          <Link
+            to={practise.href}
+            className="inline-flex min-h-11 items-center rounded-lg bg-ink-700 px-3 text-sm font-bold text-ink-100 hover:bg-ink-600 focus-visible:outline-2 focus-visible:outline-ember-400"
+          >
+            Train: {practise.label}
+          </Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export const SummaryView = memo(function SummaryView(props: {
   report: GameReport;
   game: StoredGame;
@@ -100,6 +167,7 @@ export const SummaryView = memo(function SummaryView(props: {
   const [open, setOpen] = useState(true);
   const [asking, setAsking] = useState(false);
   const instant = motionOff();
+  const summary = useMemo(() => gameSummary(report, mySide), [report, mySide]);
 
   const rows = REPORT_TABLE_CLASSES.map((c) => ({ c, w: report.counts.white[c], b: report.counts.black[c] }));
   const sideBySide = (n: SideNumbers) => [n.white, n.black] as const;
@@ -125,6 +193,8 @@ export const SummaryView = memo(function SummaryView(props: {
   return (
     <div className="space-y-4">
       <CoachBubble>{coachSummary(report, { perspective: mySide, result: game.result })}</CoachBubble>
+
+      <SummaryCard summary={summary} onSeek={props.onSeek} />
 
       <EvalGraph geom={geom} count={report.evals.length} current={null} dots={dots} onSeek={props.onSeek} />
 
@@ -221,7 +291,7 @@ export const SummaryView = memo(function SummaryView(props: {
 
       {staleEngine && (
         <p className="flex flex-wrap items-center justify-center gap-x-2 text-xs text-ink-400">
-          Analysed with an older engine {'·'}
+          Analysed with an earlier review version {'·'}
           <button type="button" onClick={props.onReanalyse} className="font-bold text-ember-400 underline hover:text-ember-300">
             Re-analyse
           </button>

@@ -3,14 +3,17 @@ import { resolveSide, type KnownUsers } from '../../shared/analysis/side.ts';
 import { addDays } from '@knightfall/core';
 import { dayKeyOf, isDateKey, weekdayOf } from '../../shared/localDate.ts';
 import { currentCycle, pace } from '../woodpecker/woodLogic.ts';
+import { FOCUS_TARGET } from './adaptLogic.ts';
 
 /** What to do today: the task list of the day and how much of it is done. No React, no storage. */
 
 export type TaskId = 'wood' | 'rush' | 'check' | 'study' | 'daily' | 'rapid' | 'review' | 'missed' | 'blitz';
-export type AutoId = 'wood' | 'rush' | 'check' | 'rapid' | 'review';
+/** Every task on the list: the fixed ones plus the focus task that adapts to the player. */
+export type ListId = TaskId | 'focus';
+export type AutoId = 'wood' | 'rush' | 'check' | 'rapid' | 'review' | 'focus';
 
 export interface Task {
-  id: TaskId;
+  id: ListId;
   title: string;
   detail: string;
   minutes: number;
@@ -22,8 +25,9 @@ export interface Task {
   optional?: boolean;
 }
 
-export const AUTO_IDS: readonly AutoId[] = ['wood', 'rush', 'check', 'rapid', 'review'];
-export const MANUAL_IDS: readonly TaskId[] = ['study', 'daily', 'missed', 'blitz'];
+export const AUTO_IDS: readonly AutoId[] = ['wood', 'rush', 'check', 'rapid', 'review', 'focus'];
+/** 'review' is manual only when the self-review setting is off (the app cannot see reviews then). */
+export const MANUAL_IDS: readonly TaskId[] = ['study', 'daily', 'missed', 'blitz', 'review'];
 
 /** Minutes of Woodpecker work that count as a done day even when the quota is not reached. */
 export const WOOD_MINUTES = 25;
@@ -109,7 +113,15 @@ export interface AutoInputs {
   rapidToday: number;
   /** Own reviews written today that were not skipped. */
   reviewsToday: number;
+  /** Blunder check positions that make the day (default CHECK_TARGET). */
+  checkTarget?: number;
+  /** Theme trainer attempts today of the focus theme, and how many tick the focus task (default FOCUS_TARGET). */
+  focusToday?: number;
+  focusTarget?: number;
+  /** Woodpecker minutes that count as a done day (default WOOD_MINUTES). */
+  woodMinutes?: number;
 }
+
 
 /** Rapid games of the day for which the player's side is known (bot games count). */
 export function countRapidToday(games: readonly Pick<StoredGame, 'source' | 'white' | 'black' | 'importedFor' | 'speed' | 'playedAt'>[], users: KnownUsers, dateKey: string): number {
@@ -123,7 +135,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 function woodState(i: AutoInputs): AutoState {
   const minutes = Math.floor(i.woodMsToday / 60_000);
-  const timeDone = i.woodMsToday >= WOOD_MINUTES * 60_000;
+  const timeDone = i.woodMsToday >= (i.woodMinutes ?? WOOD_MINUTES) * 60_000;
   let paceDone = false;
   let text = '';
   const cycle = i.woodSet ? currentCycle(i.woodSet) : undefined;
@@ -140,10 +152,14 @@ function woodState(i: AutoInputs): AutoState {
 /** For every task the app can judge by itself: is it done, and a short line to show next to it. */
 export function autoState(i: AutoInputs): Record<AutoId, AutoState> {
   const needReviews = Math.max(1, Math.min(3, i.rapidToday));
+  const checkTarget = i.checkTarget ?? CHECK_TARGET;
+  const focusTarget = i.focusTarget ?? FOCUS_TARGET;
+  const focusToday = i.focusToday ?? 0;
   return {
     wood: woodState(i),
     rush: { done: i.rushToday > 0, text: i.rushToday > 0 ? plural(i.rushToday, 'run', 'runs') : 'No run yet' },
-    check: { done: i.checkToday >= CHECK_TARGET, text: `${Math.min(i.checkToday, CHECK_TARGET)} of ${CHECK_TARGET}` },
+    check: { done: i.checkToday >= checkTarget, text: `${Math.min(i.checkToday, checkTarget)} of ${checkTarget}` },
+    focus: { done: focusToday >= focusTarget, text: `${Math.min(focusToday, focusTarget)} of ${focusTarget}` },
     rapid: { done: i.rapidToday >= RAPID_TARGET, text: `${Math.min(i.rapidToday, RAPID_TARGET)} of ${RAPID_TARGET}` },
     review: { done: i.reviewsToday >= needReviews, text: `${Math.min(i.reviewsToday, needReviews)} of ${needReviews}` },
   };
@@ -164,4 +180,14 @@ export function summary(tasks: readonly Task[], auto: Partial<Record<string, Aut
     if (t.kind === 'auto' ? auto[t.id]?.done : ticks.includes(t.id)) done++;
   }
   return { done, total };
+}
+
+/** Is one task done: the app's own view for auto tasks, the ticks for manual ones. */
+export function isTaskDone(t: Pick<Task, 'id' | 'kind'>, auto: Partial<Record<string, AutoState>>, ticks: readonly string[]): boolean {
+  return t.kind === 'auto' ? !!auto[t.id]?.done : ticks.includes(t.id);
+}
+
+/** The first task that counts and is not done. Null when all are done (optional tasks are never "next"). */
+export function nextTask(tasks: readonly Task[], auto: Partial<Record<string, AutoState>>, ticks: readonly string[]): Task | null {
+  return tasks.find((t) => !t.optional && !isTaskDone(t, auto, ticks)) ?? null;
 }

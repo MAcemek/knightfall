@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blankForm, formFromPlan, planFromForm, withBaseline, withFetched, withTarget } from './formLogic.ts';
+import { baselineSummary, blankForm, formFromPlan, planFromForm, targetSummary, withBaseline, withFetched, withTarget } from './formLogic.ts';
 import { emptyBaselines, emptyTargets } from './planLogic.ts';
 
 describe('suggested targets', () => {
@@ -55,5 +55,23 @@ describe('planFromForm', () => {
     expect(planFromForm(withTarget(blankForm('', '2026-03-02'), 'rapid', 'six', '99999')).ok).toBe(false);
     expect(planFromForm(blankForm('bad name!', '2026-03-02')).ok).toBe(false);
     expect(planFromForm(blankForm('', '')).ok).toBe(false);
+  });
+});
+
+describe('summaries of the collapsed parts', () => {
+  it('words the ratings', () => {
+    expect(baselineSummary(blankForm('', '2026-03-02'))).toContain('No ratings yet');
+    let f = withBaseline(blankForm('', '2026-03-02'), 'rapid', '1200');
+    f = withBaseline(f, 'blitz', 'abc');
+    f = withBaseline(f, 'bullet', '1100');
+    expect(baselineSummary(f)).toBe('Rapid 1200, Bullet 1100');
+  });
+  it('words the targets, including one-sided and empty ones', () => {
+    expect(targetSummary(blankForm('', '2026-03-02'))).toContain('No targets yet');
+    let f = withBaseline(blankForm('', '2026-03-02'), 'rapid', '1200');
+    f = withBaseline(f, 'bullet', '1100');
+    expect(targetSummary(f)).toBe('Targets after 3 and 6 months: Rapid 1270 and 1325, Bullet 1100 (3 months)');
+    f = withTarget(f, 'rapid', 'three', '');
+    expect(targetSummary(f)).toContain('Rapid 1325 (6 months)');
   });
 });

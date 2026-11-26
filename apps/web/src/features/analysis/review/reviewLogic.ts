@@ -156,3 +156,20 @@ export function initialPly(param: string | null, plyCount: number): number {
   const n = Number(param);
   return param !== null && Number.isInteger(n) && n >= 0 && n <= plyCount ? n : 0;
 }
+
+/* ---------- Stepping through an Explain / Best line ---------- */
+
+export type LineJump = 'first' | 'back' | 'next' | 'last';
+
+/**
+ * New position in a line of `len` moves. -1 is the start position, len - 1 the last move; an index past the end
+ * (the preview holding on the last position) counts as the last move.
+ */
+export function lineJump(idx: number, len: number, to: LineJump): number {
+  if (len <= 0) return -1;
+  const at = Math.min(idx, len - 1);
+  if (to === 'first') return -1;
+  if (to === 'last') return len - 1;
+  if (to === 'back') return Math.max(-1, at - 1);
+  return Math.min(len - 1, at + 1);
+}

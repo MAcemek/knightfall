@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { deleteGame, importGames, importUserGames, setAnalysisPrefs, useAnalysedKeys, useAnalysisPrefs, useRecentAnalyses, useUserGames } from '../../../shared/analysis/index.ts';
 import type { StoredGame } from '../../../shared/db.ts';
-import { deepEngineAvailable } from '../../../shared/engine/engines.ts';
+import { deepEngineAvailable, ENGINES } from '../../../shared/engine/engines.ts';
 import { ImportError } from '../../../shared/importers/mappers.ts';
 import { Button, EmptyState, Icons, Kbd, PageHeader, Panel, Pill, Segmented } from '../../../shared/ui.tsx';
 import { INPUT_HINT, inputKind, moveCount, opponentOf, outcomeFor, playedLabel, playerLabel, speedLabel, type Outcome } from './importLogic.ts';
@@ -418,7 +418,7 @@ export function ImportPage() {
                   role="radio"
                   aria-checked={engine === id}
                   disabled={disabled}
-                  title={disabled ? 'Needs npm run engine:deep' : id === 'deep' ? 'Stockfish 17, depth 20' : 'Stockfish 17 Lite, depth 16'}
+                  title={disabled ? 'Needs npm run engine:deep' : `${ENGINES[id].label}, depth ${ENGINES[id].depth}, key moments ${ENGINES[id].keyDepth}`}
                   onClick={() => chooseEngine(id)}
                   className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors max-lg:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:cursor-not-allowed disabled:opacity-40 ${engine === id ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
                 >

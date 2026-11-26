@@ -36,6 +36,15 @@ function ctx(
 }
 const motif = (c: InsightContext): MoveInsight => moveInsight(c);
 
+describe('stops-mate only when the mate can be stopped', () => {
+  const fen = '6k1/8/8/8/8/5q2/6PP/7K w - - 0 1';
+  it('is not claimed when the mover was already being mated', () => {
+    const c = ctx(fen, 'h2h3', 'inaccuracy', ev(fen, line({ mate: -10 }, 'h1g1'), line({ mate: -2 }, 'h2h3')), [line({ mate: -2 }, 'f3g2')], 'w');
+    expect(motif(c).best).toBeDefined();
+    expect(motif(c).best?.reason).not.toBe('stops-mate');
+  });
+});
+
 // White Ke1 + Ne3 against Ke8 + pawn d5: Nc4 walks onto a pawn's square.
 const KNIGHT_E3 = '4k3/8/8/3p4/8/4N3/8/4K3 w - - 0 1';
 // A knight on e4 attacked by the pawn d5; Kd1 leaves it there.

@@ -9,11 +9,13 @@ import { ProgressPage } from './ProgressPage.tsx';
 import { TodayPage } from './TodayPage.tsx';
 import { useToday } from './todayStore.ts';
 import { useCoachSync } from './useCoachSync.ts';
+import { WeekPage } from './WeekPage.tsx';
 
 /**
  * The 12-week Coach, mounted at /coach/*.
  *   /coach            setup without a plan, Today with one
  *   /coach/progress   rating chart and tiles
+ *   /coach/week       weekly review of one Monday to Sunday
  *   /coach/daily      notes for Daily games (works without a plan)
  *   /coach/library    videos, books and tools (works without a plan)
  *   /coach/settings   change or remove the plan
@@ -27,6 +29,7 @@ function SubNav({ hasPlan }: { hasPlan: boolean }) {
     ? [
         { to: '/coach', label: 'Today', end: true },
         { to: '/coach/progress', label: 'Progress' },
+        { to: '/coach/week', label: 'Week' },
         { to: '/coach/daily', label: 'Daily helper' },
         { to: '/coach/library', label: 'Library' },
         { to: '/coach/settings', label: 'Plan settings' },
@@ -66,6 +69,7 @@ export default function CoachPage() {
       <Routes>
         <Route index element={plan === undefined ? <Loading /> : plan ? <TodayPage plan={plan} data={today} sync={sync} /> : <SetupPage />} />
         <Route path="progress" element={needPlan((p) => <ProgressPage plan={p} />)} />
+        <Route path="week" element={needPlan((p) => <WeekPage plan={p} />)} />
         <Route path="settings" element={needPlan((p) => <SettingsPage plan={p} />)} />
         <Route path="daily" element={<DailyPage />} />
         <Route path="library" element={<LibraryPage />} />

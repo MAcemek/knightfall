@@ -5,6 +5,7 @@ import { Icons } from './shared/ui.tsx';
 import { useProfile } from './shared/profile.ts';
 import { ProgressWatcher, useReviewSummary } from './shared/progress/index.ts';
 import { setSetting, useSettings } from './shared/settings.ts';
+import { UpdateWatcher } from './shared/pwa/UpdateWatcher.tsx';
 import { ToastHost } from './shared/toast.tsx';
 import { ChallengeInbox } from './shared/battle/ChallengeInbox.tsx';
 import { startBattleNetwork } from './shared/battle/store.ts';
@@ -184,6 +185,7 @@ export function App() {
       </nav>
       <ProgressWatcher />
       <ToastHost />
+      <UpdateWatcher />
       <ChallengeInbox />
       <FxLayer />
     </div>

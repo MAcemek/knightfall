@@ -7,7 +7,8 @@ import { useProfile } from '../../shared/profile.ts';
 import { useReviewSummary } from '../../shared/progress/index.ts';
 import { prefetchAround } from '../../shared/puzzleSource.ts';
 import { Icons, Panel } from '../../shared/ui.tsx';
-import { stripText } from '../coach/todayText.ts';
+import type { StripView } from '../coach/todayText.ts';
+import { homeStrip } from '../coach/todayText.ts';
 import { useToday } from '../coach/todayStore.ts';
 
 const MODES = [
@@ -106,16 +107,7 @@ export default function HomePage() {
         </Link>
       )}
 
-      {coach?.plan && (
-        <Link
-          to="/coach"
-          className="mb-6 flex min-h-11 animate-rise items-center justify-between rounded-2xl border border-ember-500/30 bg-ember-500/10 px-5 py-3 font-semibold text-ember-300 transition hover:bg-ember-500/15"
-        >
-          {Icons.bulb('h-5 w-5')}
-          <span className="flex-1 px-3">{stripText(coach)}</span>
-          {Icons.next('h-5 w-5')}
-        </Link>
-      )}
+      {coach?.plan && <CoachStrip strip={homeStrip(coach)} />}
 
       {/* Phones: compact rows (icon beside the text) so every mode fits in about two screens. */}
       <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
@@ -135,6 +127,39 @@ export default function HomePage() {
         ))}
       </div>
     </div>
+  );
+}
+
+const STRIP = 'mb-6 flex min-h-11 animate-rise items-center justify-between gap-3 rounded-2xl border border-ember-500/30 bg-ember-500/10 px-5 py-3 font-semibold text-ember-300';
+
+/** The Coach strip: one line before and after the plan, the next task with an Open button during it. */
+function CoachStrip({ strip }: { strip: StripView }) {
+  if (strip.kind === 'none') return null;
+  if (strip.kind === 'next') {
+    return (
+      <div className={STRIP}>
+        {Icons.bulb('h-5 w-5 shrink-0')}
+        <Link to="/coach" className="min-w-0 flex-1 rounded-lg py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400">
+          <span className="block text-xs font-bold uppercase tracking-wider text-ember-400">Coach, next up</span>
+          <span className="block break-words leading-snug">{strip.title}</span>
+          <span className="block text-sm font-normal text-ink-300">{strip.sub}</span>
+        </Link>
+        <Link
+          to={strip.to}
+          aria-label={`Open ${strip.title}`}
+          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-ember-500 px-4 font-bold text-ink-950 shadow-[0_4px_0_0_var(--color-ember-600)] transition hover:bg-ember-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400"
+        >
+          Open
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <Link to="/coach" className={`${STRIP} transition hover:bg-ember-500/15`}>
+      {Icons.bulb('h-5 w-5 shrink-0')}
+      <span className="min-w-0 flex-1 px-3">{strip.text}</span>
+      {Icons.next('h-5 w-5 shrink-0')}
+    </Link>
   );
 }
 

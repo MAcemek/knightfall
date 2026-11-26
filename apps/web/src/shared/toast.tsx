@@ -19,6 +19,8 @@ export interface ToastInput {
   durationMs?: number;
   /** In-app path to open when the toast is clicked. */
   to?: string;
+  /** Runs when the toast is clicked (before `to` is opened). */
+  onClick?: () => void;
 }
 
 interface ToastItem extends ToastInput {
@@ -84,6 +86,7 @@ export function ToastHost() {
             type="button"
             onClick={() => {
               dismissToast(t.id);
+              t.onClick?.();
               if (t.to) void navigate(t.to);
             }}
             className={`pointer-events-auto relative flex w-full max-w-sm items-center gap-3 overflow-hidden rounded-2xl border bg-ink-850/95 px-3.5 py-3 text-left backdrop-blur ${tone.ring} ${t.leaving ? 'animate-toast-out' : 'animate-toast-in'}`}

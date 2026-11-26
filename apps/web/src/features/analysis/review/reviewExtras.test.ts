@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Chess } from 'chess.js';
-import type { ParsedGame } from '@knightfall/core';
-import { barLabel, figurineSan, formatScore, lineSteps, moveHasIcon, moveLabel, provisionalMoves, soundKind, squarePos, swingOf, userSide } from './reviewExtras.ts';
+import type { ParsedGame, PositionEval } from '@knightfall/core';
+import { barLabel, capitalise, figurineSan, formatScore, lineRows, lineSteps, reviewLine, moveHasIcon, moveLabel, provisionalMoves, soundKind, squarePos, swingOf, userSide } from './reviewExtras.ts';
 
 describe('formatScore / barLabel', () => {
   it('formats centipawns and mates', () => {
@@ -98,5 +98,56 @@ describe('moveHasIcon', () => {
   it('marks only the notable classes', () => {
     for (const c of ['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder'] as const) expect(moveHasIcon(c)).toBe(true);
     for (const c of ['best', 'excellent', 'good', 'book', 'forced'] as const) expect(moveHasIcon(c)).toBe(false);
+  });
+});
+
+describe('lineRows', () => {
+  it('labels moves with their numbers and adds a note each', () => {
+    const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+    const { steps, rows } = lineRows(fen, ['g1f3', 'b8c6', 'f1b5']);
+    expect(steps).toHaveLength(3);
+    expect(rows.map((r) => r.label)).toEqual(['2. \u2658f3', '2... \u265Ec6', '3. \u2657b5']);
+    expect(rows[0].note).toBe('threatens the pawn on e5');
+    expect(rows[1].note).toBe('defends the pawn on e5');
+  });
+  it('starts a Black line with dots, and stops at an illegal move', () => {
+    const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    const { rows } = lineRows(fen, ['e7e5', 'e7e5']);
+    expect(rows.map((r) => r.label)).toEqual(['1... e5']);
+  });
+  it('keeps rows and steps the same length and caps the line', () => {
+    const { steps, rows } = lineRows('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'g8f6'], 4);
+    expect(steps).toHaveLength(4);
+    expect(rows).toHaveLength(4);
+  });
+});
+
+describe('capitalise', () => {
+  it('upper-cases the first letter', () => {
+    expect(capitalise('takes the bishop')).toBe('Takes the bishop');
+    expect(capitalise('')).toBe('');
+  });
+});
+
+describe('reviewLine', () => {
+  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+  const ev = (fen: string, pv: string[]) => ({ fen, depth: 16, source: 'engine', lines: [{ score: { cp: 0 }, pv }], score: { cp: 0 } }) as PositionEval;
+  const move = { ply: 0, fenBefore: start, fenAfter: afterE4 };
+  const evals = [ev(start, ['d2d4', 'd7d5']), ev(afterE4, ['e7e5', 'g1f3', 'b8c6'])];
+
+  it('Best starts from the position before the move, Explain from the one after it', () => {
+    const best = reviewLine('best', move, evals);
+    expect(best?.startFen).toBe(start);
+    expect(best?.rows.map((r) => r.label)).toEqual(['1. d4', '1... d5']);
+    const explain = reviewLine('explain', move, evals);
+    expect(explain?.startFen).toBe(afterE4);
+    expect(explain?.rows.map((r) => r.label)).toEqual(['1... e5', '2. \u2658f3', '2... \u265Ec6']);
+    expect(explain?.steps).toHaveLength(3);
+  });
+  it('is null without a stored line or a playable first move', () => {
+    expect(reviewLine('best', move, [])).toBeNull();
+    expect(reviewLine('explain', move, [evals[0]])).toBeNull();
+    expect(reviewLine('best', move, [ev(start, ['e7e5'])])).toBeNull();
   });
 });

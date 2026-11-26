@@ -4,7 +4,9 @@ export { EnginePool, AbortError, isAbortError, poolSize, POOL_IDLE_MS } from './
 export type { EvalJob, PoolOptions } from './pool.ts';
 export { createCloudEval, parseCloudEval, normalisePv, CLOUD_TIMEOUT_MS } from './cloudEval.ts';
 export type { CloudEvalClient } from './cloudEval.ts';
-export { analysePositions } from './analyseGame.ts';
-export type { AnalysePositionsOptions } from './analyseGame.ts';
+export { analysePositions, refineKeyMoments, refineConsistently } from './analyseGame.ts';
+export type { AnalysePositionsOptions, RefineOptions } from './analyseGame.ts';
+export { criticalPlies, extraPositionCap, keyPositionCap, positionsToRefine, MAX_KEY_POSITIONS, MOBILE_MAX_KEY_POSITIONS, KEY_SWINGS } from './keyMoments.ts';
+export type { CriticalOptions } from './keyMoments.ts';
 export { ENGINES, ENGINE_BUILD, REVIEW_MULTIPV, cloudEval, deepEngineAvailable, disposeEnginePools, getEnginePool, isMobileDevice } from './engines.ts';
 export type { EngineId, EngineInfo } from './engines.ts';

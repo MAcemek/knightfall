@@ -23,13 +23,13 @@ export interface ProgressData {
 const BLUNDER_GAMES = 20;
 const BATCH = 20;
 
-/** Rapid games played on a site, not against the built-in bot, with a known side, newest first. */
-async function rapidGames(): Promise<{ game: StoredGame; side: 'w' | 'b' }[]> {
+/** Rapid games played on a site, not against the built-in bot, with a known side, newest first. With `before`, only games played before that moment. */
+async function rapidGames(before?: number): Promise<{ game: StoredGame; side: 'w' | 'b' }[]> {
   const users = await getAnalysisPrefs();
   const rows = await db.games
     .orderBy('playedAt')
     .reverse()
-    .filter((g) => g.speed === 'rapid' && (g.source === 'lichess' || g.source === 'chesscom'))
+    .filter((g) => g.speed === 'rapid' && (g.source === 'lichess' || g.source === 'chesscom') && (before === undefined || g.playedAt < before))
     .toArray();
   return rows.flatMap((game) => {
     const side = resolveSide(game, users);
@@ -53,8 +53,9 @@ async function blunderRows(games: readonly { game: StoredGame; side: 'w' | 'b' }
   return out;
 }
 
-export async function readProgress(): Promise<ProgressData> {
-  const [log, games, sets, plan] = await Promise.all([db.ratingLog.toArray(), rapidGames(), db.woodSets.orderBy('createdAt').reverse().filter(isUsableSet).limit(1).toArray(), readPlan()]);
+/** `before` limits the blunder and clock numbers to games played before that moment (the Today list uses the start of the day). */
+export async function readProgress(before?: number): Promise<ProgressData> {
+  const [log, games, sets, plan] = await Promise.all([db.ratingLog.toArray(), rapidGames(before), db.woodSets.orderBy('createdAt').reverse().filter(isUsableSet).limit(1).toArray(), readPlan()]);
   const ratings = Object.fromEntries(COACH_SPEEDS.map((s) => [s, ratingSeries(log, s, plan?.username)])) as Record<CoachSpeed, RatingPoint[]>;
   const clockRows: ClockRow[] = games.slice(0, 15).map(({ game, side }) => ({ pgn: game.pgn, side, ...(game.timeControl ? { timeControl: game.timeControl } : {}) }));
   const set = newestSet(sets);
@@ -64,5 +65,5 @@ export async function readProgress(): Promise<ProgressData> {
 
 /** Live progress. Undefined while loading. */
 export function useProgress(): ProgressData | undefined {
-  return useLiveQuery(readProgress, []);
+  return useLiveQuery(() => readProgress(), []);
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Puzzle } from '@knightfall/core';
 import type { Attempt, StoredGame } from '../../shared/db.ts';
-import { autoState, cleanTicks, countRapidToday, dayBounds, summary, todayTasks, toggleId, type AutoInputs } from './todayLogic.ts';
+import { autoState, cleanTicks, countRapidToday, dayBounds, nextTask, summary, todayTasks, toggleId, type AutoInputs } from './todayLogic.ts';
 
 const local = (y: number, mo: number, d: number, h = 12, mi = 0) => new Date(y, mo - 1, d, h, mi, 0).getTime();
 const NOW = local(2026, 11, 18, 15);
@@ -163,5 +163,44 @@ describe('dayBounds', () => {
     expect(start).toBe(local(2026, 11, 18, 0));
     expect(end).toBe(local(2026, 11, 19, 0));
     expect(NOW >= start && NOW < end).toBe(true);
+  });
+});
+
+describe('adapted auto state', () => {
+  it('uses the blunder check target it is given', () => {
+    expect(autoState({ ...base, checkToday: 12, checkTarget: 20 }).check).toEqual({ done: false, text: '12 of 20' });
+    expect(autoState({ ...base, checkToday: 20, checkTarget: 20 }).check.done).toBe(true);
+  });
+  it('ticks the focus task at 10 attempts of the theme', () => {
+    expect(autoState(base).focus).toEqual({ done: false, text: '0 of 10' });
+    expect(autoState({ ...base, focusToday: 9 }).focus).toEqual({ done: false, text: '9 of 10' });
+    expect(autoState({ ...base, focusToday: 14 }).focus).toEqual({ done: true, text: '10 of 10' });
+  });
+  it('lowers the Woodpecker minutes when ahead of pace', () => {
+    const ms = 16 * 60_000;
+    expect(autoState({ ...base, anyWoodSet: true, woodMsToday: ms }).wood.done).toBe(false);
+    expect(autoState({ ...base, anyWoodSet: true, woodMsToday: ms, woodMinutes: 15 }).wood.done).toBe(true);
+  });
+});
+
+describe('nextTask', () => {
+  const tasks = todayTasks('2026-11-16');
+  it('is the first task not done', () => {
+    expect(nextTask(tasks, autoState(base), [])?.id).toBe('wood');
+    expect(nextTask(tasks, autoState({ ...base, rushToday: 1, woodMsToday: 30 * 60_000, anyWoodSet: true }), [])?.id).toBe('check');
+  });
+  it('skips ticked manual tasks and optional ones, and is null when all are done', () => {
+    const done = autoState({ ...base, rushToday: 1, woodMsToday: 30 * 60_000, anyWoodSet: true, checkToday: 10 });
+    expect(nextTask(tasks, done, ['study'])?.id).toBe('daily');
+    expect(nextTask(tasks, done, ['study', 'daily'])).toBeNull();
+    const weekend = todayTasks('2026-11-21');
+    const wDone = autoState({ ...base, rapidToday: 2, reviewsToday: 2 });
+    expect(nextTask(weekend, wDone, ['missed'])).toBeNull();
+  });
+  it('treats an unticked manual review task as not done', () => {
+    const review = { id: 'review' as const, title: 'r', detail: '', minutes: 1, to: '/', kind: 'manual' as const };
+    expect(nextTask([review], autoState({ ...base, rapidToday: 1, reviewsToday: 1 }), [])?.id).toBe('review');
+    expect(nextTask([review], autoState(base), ['review'])).toBeNull();
+    expect(cleanTicks(['review'])).toEqual(['review']);
   });
 });

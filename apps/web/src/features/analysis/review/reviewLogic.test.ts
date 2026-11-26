@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysedMove, EvalScore, PositionEval } from '@knightfall/core';
-import { barFraction, formatAccuracy, graphGeometry, initialPly, lineToSan, moveRows, movesOfClass, nearestPoint, playUci, positionInClass, resultLabel, stepInClass } from './reviewLogic.ts';
+import { barFraction, formatAccuracy, graphGeometry, initialPly, lineJump, lineToSan, moveRows, movesOfClass, nearestPoint, playUci, positionInClass, resultLabel, stepInClass } from './reviewLogic.ts';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const ev = (score: EvalScore): PositionEval => ({ fen: START, depth: 16, source: 'engine', lines: [], score });
@@ -116,5 +116,24 @@ describe('class filter helpers', () => {
   it('reports the 1-based position', () => {
     expect(positionInClass([0, 4, 6], 4)).toBe(2);
     expect(positionInClass([0, 4, 6], 5)).toBe(0);
+  });
+});
+
+describe('lineJump', () => {
+  it('steps within a line and clamps at both ends', () => {
+    expect(lineJump(-1, 5, 'next')).toBe(0);
+    expect(lineJump(3, 5, 'next')).toBe(4);
+    expect(lineJump(4, 5, 'next')).toBe(4);
+    expect(lineJump(0, 5, 'back')).toBe(-1);
+    expect(lineJump(-1, 5, 'back')).toBe(-1);
+    expect(lineJump(2, 5, 'first')).toBe(-1);
+    expect(lineJump(-1, 5, 'last')).toBe(4);
+  });
+  it('treats holding on the last position as the last move', () => {
+    expect(lineJump(5, 5, 'back')).toBe(3);
+    expect(lineJump(5, 5, 'next')).toBe(4);
+  });
+  it('has nowhere to go in an empty line', () => {
+    expect(lineJump(0, 0, 'next')).toBe(-1);
   });
 });

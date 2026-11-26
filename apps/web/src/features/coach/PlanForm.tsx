@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../shared/ui.tsx';
 import { inputClass } from '../woodpecker/parts.tsx';
-import { planFromForm, withBaseline, withFetched, withTarget, type FormState } from './formLogic.ts';
+import { baselineSummary, planFromForm, targetSummary, withBaseline, withFetched, withTarget, type FormState } from './formLogic.ts';
+import { isDateKey } from '../../shared/localDate.ts';
 import { cleanUsername, COACH_SPEEDS, SPEED_LABEL, type CoachPlan } from './planLogic.ts';
 import { fetchChesscomStats } from './sync.ts';
 
@@ -21,6 +22,8 @@ export function PlanForm({ initial, submitLabel, onSubmit, note }: {
   const [fetchNote, setFetchNote] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showRatings, setShowRatings] = useState(false);
+  const [showTargets, setShowTargets] = useState(false);
   const alive = useRef(true);
   const typed = useRef('');
   typed.current = cleanUsername(form.username);
@@ -64,6 +67,10 @@ export function PlanForm({ initial, submitLabel, onSubmit, note }: {
     const r = planFromForm(form);
     if (!r.ok) {
       setError(r.error);
+      // The mistake may be in a box that is folded away.
+      if (!isDateKey(form.startDate) || cleanUsername(form.username) !== form.username.trim()) return;
+      setShowRatings(true);
+      setShowTargets(true);
       return;
     }
     setError(null);
@@ -114,40 +121,45 @@ export function PlanForm({ initial, submitLabel, onSubmit, note }: {
         <input id={`${id}-start`} type="date" className={`${inputClass} max-w-48`} value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
       </div>
 
-      <fieldset>
-        <legend className="mb-1 text-sm font-semibold text-ink-300">Ratings today</legend>
-        <p className="mb-2 text-sm text-ink-400">Leave a box empty to skip that speed.</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {COACH_SPEEDS.map((s) => (
-            <div key={s}>
-              <label htmlFor={`${id}-b-${s}`} className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-400">
-                {SPEED_LABEL[s]}
-              </label>
-              <input
-                id={`${id}-b-${s}`}
-                className={`${inputClass} min-w-0`}
-                inputMode="numeric"
-                maxLength={4}
-                value={form.baselines[s]}
-                onChange={(e) => setForm(withBaseline(form, s, e.target.value))}
-              />
-            </div>
-          ))}
-        </div>
-      </fieldset>
+      <div className="space-y-3">
+        <Disclosure
+          title="Edit ratings"
+          summary={baselineSummary(form)}
+          open={showRatings}
+          onToggle={setShowRatings}
+        >
+          <p className="mb-2 text-sm text-ink-400">Your ratings today. Leave a box empty to skip that speed.</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {COACH_SPEEDS.map((s) => (
+              <div key={s} className="min-w-0">
+                <label htmlFor={`${id}-b-${s}`} className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-400">
+                  {SPEED_LABEL[s]}
+                </label>
+                <input
+                  id={`${id}-b-${s}`}
+                  className={`${inputClass} min-w-0`}
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={form.baselines[s]}
+                  onChange={(e) => setForm(withBaseline(form, s, e.target.value))}
+                />
+              </div>
+            ))}
+          </div>
+        </Disclosure>
 
-      <fieldset>
-        <legend className="mb-1 text-sm font-semibold text-ink-300">Targets</legend>
-        <p className="mb-2 text-sm text-ink-400">Suggested from your ratings. Change any of them and the rest stay as you set them.</p>
-        <div className="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2" role="group" aria-label="Targets by speed">
-          <span />
-          <span className="text-xs font-semibold uppercase tracking-wider text-ink-400">3 months</span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-ink-400">6 months</span>
-          {COACH_SPEEDS.map((s) => (
-            <TargetRow key={s} speed={s} form={form} onChange={setForm} />
-          ))}
-        </div>
-      </fieldset>
+        <Disclosure title="Edit targets" summary={targetSummary(form)} open={showTargets} onToggle={setShowTargets}>
+          <p className="mb-2 text-sm text-ink-400">Suggested from your ratings. Change any of them and the rest stay as you set them.</p>
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-3 gap-y-2" role="group" aria-label="Targets by speed">
+            <span />
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-400">3 months</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-400">6 months</span>
+            {COACH_SPEEDS.map((s) => (
+              <TargetRow key={s} speed={s} form={form} onChange={setForm} />
+            ))}
+          </div>
+        </Disclosure>
+      </div>
 
       <p className="text-sm text-ink-400">{note ?? 'Starting turns on "Review it yourself first" for slow games. Everything stays in this browser.'}</p>
       {error && (
@@ -159,6 +171,19 @@ export function PlanForm({ initial, submitLabel, onSubmit, note }: {
         {saving ? 'Saving' : submitLabel}
       </Button>
     </form>
+  );
+}
+
+/** A folded part of the form: one line that says what is set, and a button that opens the boxes. */
+function Disclosure({ title, summary, open, onToggle, children }: { title: string; summary: string; open: boolean; onToggle: (open: boolean) => void; children: React.ReactNode }) {
+  return (
+    <details open={open} onToggle={(e) => onToggle(e.currentTarget.open)} className="rounded-xl border border-ink-700/60 bg-ink-900/40 px-3">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400">
+        <span className="min-w-0 break-words text-sm text-ink-300">{summary}</span>
+        <span className="shrink-0 text-sm font-semibold text-ember-400">{open ? 'Hide' : title}</span>
+      </summary>
+      <div className="pb-3 pt-1">{children}</div>
+    </details>
   );
 }
 

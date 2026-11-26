@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { parsePgnGame, REPORT_VERSION, type GameReport, type ParsedGame, type PositionEval } from '@knightfall/core';
 import type { StoredGame } from '../db.ts';
-import { analysePositions, cloudEval, ENGINE_BUILD, ENGINES, getEnginePool, isAbortError, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
+import { analysePositions, cloudEval, criticalPlies, ENGINE_BUILD, ENGINES, extraPositionCap, getEnginePool, isAbortError, isMobileDevice, keyPositionCap, positionsToRefine, refineConsistently, REVIEW_MULTIPV, type EngineId } from '../engine/index.ts';
+import { setAnalysisRunning } from './busy.ts';
 import { buildReportOffThread } from './reportClient.ts';
 import { autoAddGamePuzzles } from './practice.ts';
 import { getAnalysis, getAnalysisPrefs, getGame, saveAnalysis } from './store.ts';
@@ -18,6 +19,9 @@ import { getAnalysis, getAnalysisPrefs, getGame, saveAnalysis } from './store.ts
 
 export type SessionStatus = 'loading' | 'analysing' | 'done' | 'error' | 'missing';
 
+/** While analysing: every position once ('positions'), then the key moments again, deeper ('key-moments'). */
+export type SessionPhase = 'positions' | 'key-moments';
+
 export interface SessionSnapshot {
   status: SessionStatus;
   game: StoredGame | null;
@@ -25,7 +29,9 @@ export interface SessionSnapshot {
   parsed: ParsedGame | null;
   /** One slot per position (moves + 1); filled as evaluations arrive, in any order. */
   evals: readonly (PositionEval | undefined)[];
-  /** Positions evaluated so far / in total. */
+  /** Which pass is running; `done` and `total` count that pass only. */
+  phase: SessionPhase;
+  /** Positions (or, in the key-moments phase, key positions) finished so far / in total. */
   done: number;
   total: number;
   /** Present when status is 'done'. */
@@ -50,7 +56,7 @@ export interface AnalysisSession {
 }
 
 const EMPTY: SessionSnapshot = {
-  status: 'loading', game: null, parsed: null, evals: [], done: 0, total: 0, report: null, engine: 'lite', depth: ENGINES.lite.depth, analysedAt: null, staleEngine: false, error: null,
+  status: 'loading', game: null, parsed: null, evals: [], phase: 'positions', done: 0, total: 0, report: null, engine: 'lite', depth: ENGINES.lite.depth, analysedAt: null, staleEngine: false, error: null,
 };
 
 function createSession(gameKey: string): AnalysisSession {
@@ -61,6 +67,7 @@ function createSession(gameKey: string): AnalysisSession {
 
   const set = (patch: Partial<SessionSnapshot>) => {
     snap = { ...snap, ...patch };
+    setAnalysisRunning(gameKey, snap.status === 'analysing');
     listeners.forEach((fn) => fn());
   };
 
@@ -73,10 +80,48 @@ function createSession(gameKey: string): AnalysisSession {
     const mine = ++run;
     const depth = ENGINES[engine].depth;
     const evals: (PositionEval | undefined)[] = new Array(parsed.fens.length).fill(undefined);
-    set({ status: 'analysing', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
+    set({ status: 'analysing', phase: 'positions', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
     try {
       const pool = getEnginePool(engine);
-      const all = await analysePositions({
+      // Second pass: find the key moments in the first-pass numbers and search those positions deeper.
+      // A failed second pass (not a cancel) keeps the first-pass evaluations: the review is still sound.
+      const refineKeyMomentsOf = async (first: PositionEval[]): Promise<PositionEval[]> => {
+        const keyDepth = ENGINES[engine].keyDepth;
+        let classes: GameReport['moves'][number]['class'][] | undefined;
+        try {
+          const early = await buildReportOffThread({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: first, ratings: { white: game.white.rating, black: game.black.rating } });
+          classes = early.moves.map((m) => m.class);
+        } catch {
+          classes = undefined; // great/brilliant moves are then not singled out; losses and swings still are
+        }
+        if (mine !== run) return first;
+        const plies = criticalPlies(parsed.fens, first, { classes, maxPositions: keyPositionCap(isMobileDevice()) });
+        const targets = positionsToRefine(first, plies, keyDepth).length;
+        if (!targets) return first;
+        set({ phase: 'key-moments', done: 0, total: targets });
+        try {
+          return await refineConsistently({
+            fens: parsed.fens,
+            evals: first,
+            plies,
+            depth: keyDepth,
+            maxExtra: extraPositionCap(isMobileDevice()),
+            multiPv: REVIEW_MULTIPV,
+            evaluate: (job) => pool.evaluate(job),
+            signal: ctl.signal,
+            onEval: (i, e, done, total) => {
+              if (mine !== run) return;
+              const next = snap.evals.slice();
+              next[i] = e;
+              set({ evals: next, done, total });
+            },
+          });
+        } catch (e) {
+          if (mine !== run || isAbortError(e)) throw e;
+          return first;
+        }
+      };
+      const firstPass = await analysePositions({
         fens: parsed.fens,
         depth,
         multiPv: REVIEW_MULTIPV,
@@ -91,13 +136,15 @@ function createSession(gameKey: string): AnalysisSession {
         },
       });
       if (mine !== run) return;
+      const all = await refineKeyMomentsOf(firstPass);
+      if (mine !== run) return;
       // The report is built in a worker (the brilliant check is CPU heavy); a cancel/restart meanwhile drops the result.
       const report = await buildReportOffThread({ startFen: parsed.startFen, sans: parsed.sans, ucis: parsed.ucis, fens: parsed.fens, evals: all, ratings: { white: game.white.rating, black: game.black.rating } });
       if (mine !== run) return;
       const analysedAt = Date.now();
       await saveAnalysis({ gameKey, analysedAt, engine, depth, report, engineBuild: ENGINE_BUILD });
       if (mine !== run) return;
-      set({ status: 'done', report, evals: all, done: all.length, analysedAt });
+      set({ status: 'done', phase: 'positions', report, evals: all, done: all.length, total: all.length, analysedAt });
       // Automatic "puzzles from your games"; a failure here must not affect the finished review.
       void autoAddGamePuzzles(game, report).catch(() => {});
     } catch (e) {

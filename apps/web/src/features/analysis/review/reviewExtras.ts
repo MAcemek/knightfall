@@ -1,4 +1,4 @@
-import type { AnalysedMove, EvalScore, MoveClass, ParsedGame } from '@knightfall/core';
+import { lineNotes, type AnalysedMove, type EvalScore, type MoveClass, type ParsedGame, type PositionEval } from '@knightfall/core';
 import { playUci } from './reviewLogic.ts';
 
 /** More pure helpers of the review page (no React, no IndexedDB). */
@@ -111,4 +111,51 @@ export function figurineSan(san: string, color: 'w' | 'b'): string {
   const f = FIGURINES[color];
   const lead = f[san[0]] ?? san[0];
   return lead + san.slice(1).replace(/=([QRBN])/, (_m, p: string) => `=${f[p]}`);
+}
+
+export interface LineRow {
+  /** "12. Nf3" / "12... Nf6", with figurines. */
+  label: string;
+  /** The idea behind the move ("takes the bishop"), or null. */
+  note: string | null;
+}
+
+/** The moves of an engine line from `fen` with a short note each. Rows and steps have the same length. */
+export function lineRows(fen: string, pv: readonly string[], max = 8): { steps: LineStep[]; rows: LineRow[] } {
+  const steps = lineSteps(fen, pv, max);
+  const notes = lineNotes(fen, pv, steps.length);
+  let color: 'w' | 'b' = sideToMoveOf(fen);
+  let num = Number(fen.split(' ')[5]) || 1;
+  const rows = steps.map((st, i) => {
+    const label = `${num}${color === 'w' ? '.' : '...'} ${figurineSan(st.san, color)}`;
+    if (color === 'b') num++;
+    color = color === 'w' ? 'b' : 'w';
+    return { label, note: notes[i]?.note ?? null };
+  });
+  return { steps, rows };
+}
+
+/** "Takes the bishop" for the phone bubble. */
+export function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export interface ReviewLine {
+  kind: 'explain' | 'best';
+  startFen: string;
+  steps: LineStep[];
+  rows: LineRow[];
+}
+
+/**
+ * The stored engine line behind Explain (what the opponent plays after the move) or Best (what to play instead),
+ * as board steps plus notes. Null when the position has no stored line or its first move is not playable.
+ */
+export function reviewLine(kind: 'explain' | 'best', move: Pick<AnalysedMove, 'ply' | 'fenBefore' | 'fenAfter'>, evals: readonly (PositionEval | undefined)[], max = 8): ReviewLine | null {
+  const explain = kind === 'explain';
+  const pv = evals[move.ply + (explain ? 1 : 0)]?.lines[0]?.pv;
+  if (!pv) return null;
+  const startFen = explain ? move.fenAfter : move.fenBefore;
+  const { steps, rows } = lineRows(startFen, pv, max);
+  return steps.length ? { kind, startFen, steps, rows } : null;
 }

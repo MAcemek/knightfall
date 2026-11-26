@@ -329,9 +329,10 @@ function goodInsight(ctx: InsightContext, move: Move): MoveInsight {
   return { motif: 'none' };
 }
 
-function stopsMateOr(best: MoveInsight['best'] | undefined): MoveInsight['best'] | undefined {
+function stopsMateOr(best: MoveInsight['best'] | undefined, alreadyMated: boolean): MoveInsight['best'] | undefined {
   if (!best) return undefined;
-  return best.reason === 'mates' ? best : { reason: 'stops-mate' };
+  // A mate already on the board is not stopped by the best move, only delayed: keep its own reason then.
+  return best.reason === 'mates' || alreadyMated ? best : { reason: 'stops-mate' };
 }
 
 /** Why this move was good or bad. Never throws; returns { motif: 'none' } when there is nothing verified to say. */
@@ -342,7 +343,9 @@ export function moveInsight(ctx: InsightContext): MoveInsight {
     const insight = badInsight(ctx, move);
     // After a move that allows a forced mate, the point of the best move is not getting mated, whatever else
     // it happens to do (unless it mates first).
-    const best = insight.motif === 'allows-mate' ? stopsMateOr(bestInsight(ctx, true)) : bestInsight(ctx, true);
+    const before = ctx.evalBefore.score;
+    const alreadyMated = isMateScore(before) && subjectiveValue(before, ctx.mover) < 0;
+    const best = insight.motif === 'allows-mate' ? stopsMateOr(bestInsight(ctx, true), alreadyMated) : bestInsight(ctx, true);
     return best ? { ...insight, best } : insight;
   }
   const insight = goodInsight(ctx, move);

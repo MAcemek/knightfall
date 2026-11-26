@@ -18,12 +18,12 @@ import { SelfReviewGate } from '../selfreview/SelfReviewGate.tsx';
 import { cleanSelfReviewRow, needsSelfReview, selfReviewResult } from '../selfreview/selfReviewLogic.ts';
 import { loadGateInputs, useSelfReviewRow } from '../selfreview/selfReviewStore.ts';
 import { EvalBar, EvalGraph, ExplorePanel, GRAPH_H, GRAPH_W, MoveBadge, ProgressBar, ReviewHeader, type GraphDot } from './parts.tsx';
-import { ActionRow, PhoneCoach, ReviewNav, ReviewView, type ClassFilterView, type ReviewActions, type TipMode } from './ReviewView.tsx';
+import { ActionRow, PhoneCoach, ReviewNav, ReviewView, type ClassFilterView, type LineView, type ReviewActions, type TipMode } from './ReviewView.tsx';
 import { SummaryView } from './SummaryView.tsx';
 import { WoodSlot } from './WoodSlot.tsx';
 import { woodSlotState } from './woodSlotLogic.ts';
-import { lineSteps, moveLabel, provisionalMoves, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
-import { barFraction, graphGeometry, initialPly, lineToSan, movesOfClass, playUci, positionInClass, stepInClass } from './reviewLogic.ts';
+import { moveLabel, provisionalMoves, reviewLine, sideToMoveOf, soundKind, userSide, type LineStep } from './reviewExtras.ts';
+import { barFraction, graphGeometry, initialPly, lineJump, lineToSan, movesOfClass, playUci, positionInClass, stepInClass } from './reviewLogic.ts';
 import { judgeRetryMove, retryCanMove, retryFinished, retryHint, retryJudge, retryMessage, retryResume, retryStart, type RetryState } from './retryLogic.ts';
 import { MOVE_CLASS_META } from '../../../shared/analysis/index.ts';
 
@@ -161,6 +161,8 @@ interface Preview {
   steps: LineStep[];
   /** -1 = start, steps.length = holding on the last position. */
   idx: number;
+  /** Stepped by hand (or paused): the timer leaves it where it is. */
+  paused?: boolean;
 }
 
 const ReviewBoard = memo(function ReviewBoard(props: {
@@ -395,7 +397,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
 
   /* "Show line": walk the best line, hold, return */
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || preview.paused) return;
     const holding = preview.idx >= preview.steps.length;
     const t = setTimeout(
       () => {
@@ -424,17 +426,16 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   const bestLine = useMemo(() => (shownMove && bestPv ? lineToSan(shownMove.fenBefore, bestPv, 8) : []), [shownMove, bestPv]);
   const showLine = () => {
     if (!shownMove || !bestPv || exploreRef.current) return;
-    const steps = lineSteps(shownMove.fenBefore, bestPv, 8);
-    if (steps.length) {
+    const line = reviewLine('best', shownMove, evals);
+    if (line) {
       setRetry(null);
-      setPreview({ kind: 'best', startFen: shownMove.fenBefore, steps, idx: -1 });
+      setPreview({ kind: 'best', startFen: line.startFen, steps: line.steps, idx: -1 });
     }
   };
 
   /* Explain / Best / Retry buttons */
   const canBest = !!shownMove && !exploring && !!bestPv && !!shownMove.best && shownMove.best.uci !== shownMove.uci && !BEST_FREE.has(shownMove.class);
   const explainText = shownMove && classified ? coachExplainText(shownMove, shownMove.insight, mySide) : '';
-  const explainPv = shownMove && report ? report.evals[shownMove.ply + 1]?.lines[0]?.pv : undefined;
   const canExplain = !!shownMove && !exploring && classified && explainText !== '';
   const canRetry = !!shownMove && !exploring && classified && RETRY_CLASSES.has(shownMove.class) && !!evals[shownMove.ply]?.lines.length;
   const toggleExplain = () => {
@@ -447,8 +448,8 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     setRetry(null);
     setPlaying(false);
     setTipMode('explain');
-    const steps = explainPv ? lineSteps(shownMove.fenAfter, explainPv, 5) : [];
-    setPreview(steps.length ? { kind: 'explain', startFen: shownMove.fenAfter, steps, idx: -1 } : null);
+    const line = reviewLine('explain', shownMove, evals);
+    setPreview(line ? { kind: 'explain', startFen: line.startFen, steps: line.steps, idx: -1 } : null);
   };
   const toggleBest = () => {
     if (!canBest) return;
@@ -460,6 +461,34 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     setPlaying(false);
     setTipMode('best');
     showLine();
+  };
+  /* The idea behind each move of the Explain / Best line, listed next to the board and stepped by hand */
+  const lineData = useMemo(
+    () => (shownMove && report && !exploring && !retry && (tipMode === 'explain' || tipMode === 'best') ? reviewLine(tipMode, shownMove, report.evals) : null),
+    [shownMove, report, exploring, retry, tipMode],
+  );
+  const lineView: LineView | null = lineData
+    ? { kind: lineData.kind, rows: lineData.rows, current: preview ? Math.min(preview.idx, lineData.rows.length - 1) : -1, paused: !!preview?.paused }
+    : null;
+  const gotoLineStep = (idx: number) => {
+    if (!lineData) return;
+    setPlaying(false);
+    if (idx >= 0) play(soundKind(lineData.steps[idx].san));
+    setPreview({ kind: lineData.kind, startFen: lineData.startFen, steps: lineData.steps, idx, paused: true });
+  };
+  const jumpLine = (to: 'first' | 'back' | 'next' | 'last') => {
+    if (lineData) gotoLineStep(lineJump(preview ? preview.idx : -1, lineData.steps.length, to));
+  };
+  const toggleLinePlay = () => {
+    if (!lineData) return;
+    if (preview && !preview.paused) {
+      setPreview({ ...preview, paused: true });
+      return;
+    }
+    // Resume where it stopped; from the last move, play it again from the start.
+    const at = preview ? Math.min(preview.idx, lineData.steps.length - 1) : -1;
+    const idx = at >= lineData.steps.length - 1 ? -1 : at;
+    setPreview({ kind: lineData.kind, startFen: lineData.startFen, steps: lineData.steps, idx, paused: false });
   };
   const toggleRetry = () => {
     if (!shownMove || !canRetry) return;
@@ -502,6 +531,10 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
     setPlaying(false);
     step(d);
   };
+  // While an Explain / Best line is shown, the nav bar steps through that line instead of the game.
+  const nav = lineView
+    ? { onFirst: () => jumpLine('first'), onBack: () => jumpLine('back'), onNext: () => jumpLine('next'), onLast: () => jumpLine('last'), onTogglePlay: toggleLinePlay, playing: !!preview && !preview.paused }
+    : { onFirst: first, onBack: () => stepBy(-1), onNext: () => stepBy(1), onLast: last, onTogglePlay: () => setPlaying((v) => !v), playing };
 
   /* Autoplay: one move per second until the end */
   useEffect(() => {
@@ -781,9 +814,10 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         }
         geom={geom}
         dots={dots}
-        playing={playing}
+        playing={nav.playing}
         perspective={mySide}
         tipMode={tipMode}
+        line={lineView}
         retry={retryInfo}
         filter={filterView}
         actions={actions}
@@ -795,6 +829,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
         onFilterStep={stepFilter}
         onFilterClear={() => setClassFilter(null)}
         onShowLine={showLine}
+        onLineSelect={gotoLineStep}
         onSummary={() => {
           setPlaying(false);
           setExplore(null);
@@ -803,11 +838,11 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           setClassFilter(null);
           setMode('summary');
         }}
-        onFirst={first}
-        onBack={() => stepBy(-1)}
-        onNext={() => stepBy(1)}
-        onLast={last}
-        onTogglePlay={() => setPlaying((v) => !v)}
+        onFirst={nav.onFirst}
+        onBack={nav.onBack}
+        onNext={nav.onNext}
+        onLast={nav.onLast}
+        onTogglePlay={nav.onTogglePlay}
         onSelect={(i) => {
           setPlaying(false);
           goTo(i);
@@ -822,7 +857,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   return (
     <div className="w-full">
       <ReviewHeader game={g} report={report} />
-      {status === 'analysing' && <ProgressBar done={s.done} total={s.total} engineLabel={ENGINES[engine].label} depth={s.depth} onCancel={s.cancel} />}
+      {status === 'analysing' && <ProgressBar done={s.done} total={s.total} engineLabel={ENGINES[engine].label} depth={s.depth} phase={s.phase} onCancel={s.cancel} />}
       {status === 'error' && (
         <div className="mx-auto mb-4 flex w-full max-w-6xl items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-4 py-3 text-sm" role="alert">
           <span className="text-bad-400">{s.error}</span>
@@ -844,6 +879,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
                 exploring={exploring}
                 perspective={mySide}
                 tipMode={tipMode}
+                line={lineView}
                 retry={retryInfo}
                 onShowLine={showLine}
                 onShowAnswer={showAnswer}
@@ -855,7 +891,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
           report && reviewing ? (
             <div className="space-y-2 lg:hidden">
               <ActionRow a={actions} onExplain={toggleExplain} onBest={toggleBest} onRetry={toggleRetry} onNext={() => stepBy(1)} />
-              <ReviewNav explore={!!explore} ply={curIndex} count={N} playing={playing} onFirst={first} onBack={() => stepBy(-1)} onNext={() => stepBy(1)} onLast={last} onTogglePlay={() => setPlaying((v) => !v)} />
+              <ReviewNav explore={!!explore} lineMode={!!lineView} ply={lineView ? lineView.current + 1 : curIndex} count={lineView ? lineView.rows.length : N} playing={nav.playing} onFirst={nav.onFirst} onBack={nav.onBack} onNext={nav.onNext} onLast={nav.onLast} onTogglePlay={nav.onTogglePlay} />
             </div>
           ) : undefined
         }

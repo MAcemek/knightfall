@@ -20,7 +20,7 @@ export function SetupPage() {
   return (
     <Panel>
       <h2 className="text-lg font-extrabold">Set up your 12 weeks</h2>
-      <p className="mb-4 mt-1 text-sm text-ink-400">A daily list of short tasks, a limit on bullet and a stop rule for blitz. Takes a minute.</p>
+      <p className="mb-4 mt-1 text-sm text-ink-400">A daily list of short tasks, a limit on bullet and a stop rule for blitz. Add your username if you have one, pick a start date and go. Ratings and targets can be filled in later.</p>
       {prefs === undefined ? (
         <p className="text-sm text-ink-400" role="status">
           Loading.

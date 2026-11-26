@@ -11,17 +11,19 @@ export interface EngineInfo {
   label: string;
   /** Worker script. Its .wasm sits next to it with the same base name. */
   url: string;
-  /** Depth of a full game review. */
+  /** Depth of the first pass of a game review (every position). */
   depth: number;
+  /** Depth of the second pass, which re-searches the key moments only. */
+  keyDepth: number;
 }
 
 export const ENGINES: Record<EngineId, EngineInfo> = {
-  lite: { id: 'lite', label: 'Stockfish 17 Lite', url: '/engine/stockfish-17.1-lite-single-03e3232.js', depth: 16 },
-  deep: { id: 'deep', label: 'Stockfish 17', url: '/engine/deep/stockfish-17.1-single-a496a04.js', depth: 20 },
+  lite: { id: 'lite', label: 'Stockfish 17 Lite', url: '/engine/stockfish-17.1-lite-single-03e3232.js', depth: 18, keyDepth: 24 },
+  deep: { id: 'deep', label: 'Stockfish 17', url: '/engine/deep/stockfish-17.1-single-a496a04.js', depth: 22, keyDepth: 26 },
 };
 
 /** Identifier stored with analyses: engine build + search settings family. Bump when results are no longer comparable. */
-export const ENGINE_BUILD = 'sf17.1';
+export const ENGINE_BUILD = 'sf17.1-r2';
 
 /**
  * Engine lines per position in a game review (matches WintrChess: MultiPV 2). The second line is what tells

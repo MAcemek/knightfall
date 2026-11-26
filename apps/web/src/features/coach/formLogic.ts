@@ -85,3 +85,27 @@ export function planFromForm(form: FormState): FormResult {
   }
   return { ok: true, plan: { username, startDate: form.startDate, baselines, targets } };
 }
+
+/* ---------- one-line summaries for the collapsed parts of the form ---------- */
+
+/** "Rapid 1500, Blitz 1400", or what to do when there are none. Only boxes that hold a valid rating count. */
+export function baselineSummary(form: Pick<FormState, 'baselines'>): string {
+  const parts = COACH_SPEEDS.flatMap((s) => {
+    const v = parseRatingInput(form.baselines[s]);
+    return v === null ? [] : [`${SPEED_LABEL[s]} ${v}`];
+  });
+  return parts.length ? parts.join(', ') : 'No ratings yet. Fetch them or add them by hand.';
+}
+
+/** "Rapid 1570 and 1625, Bullet 1200 (3 months)", or a line that says there are none. */
+export function targetSummary(form: Pick<FormState, 'targets'>): string {
+  const parts = COACH_SPEEDS.flatMap((s) => {
+    const three = parseRatingInput(form.targets[s].three);
+    const six = parseRatingInput(form.targets[s].six);
+    if (three !== null && six !== null) return [`${SPEED_LABEL[s]} ${three} and ${six}`];
+    if (three !== null) return [`${SPEED_LABEL[s]} ${three} (3 months)`];
+    if (six !== null) return [`${SPEED_LABEL[s]} ${six} (6 months)`];
+    return [];
+  });
+  return parts.length ? `Targets after 3 and 6 months: ${parts.join(', ')}` : 'No targets yet. They are suggested once you add a rating.';
+}

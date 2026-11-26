@@ -1,10 +1,10 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, useRef, type ReactNode } from 'react';
 import { coachBestText, coachExplainText, coachMoveText, moveSentence, showsBestMove, type AnalysedMove, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
 import { MOVE_CLASS_META, MoveGlyph } from '../../../shared/analysis/index.ts';
 import { Button, Icons } from '../../../shared/ui.tsx';
 import { CoachBubble } from './CoachBubble.tsx';
 import { EvalGraph, MoveList, type GraphDot } from './parts.tsx';
-import { figurineSan, formatScore } from './reviewExtras.ts';
+import { capitalise, figurineSan, formatScore, type LineRow } from './reviewExtras.ts';
 import type { GraphGeometry } from './reviewLogic.ts';
 import type { RetryTone } from './retryLogic.ts';
 
@@ -26,22 +26,22 @@ export function NavButton({ label, onClick, disabled, active, children }: { labe
 }
 
 /** First / back / play / next / last. Rendered under the board on phones and at the bottom of the panel on desktop. */
-export function ReviewNav(p: { explore: boolean; ply: number; count: number; playing: boolean; onFirst: () => void; onBack: () => void; onNext: () => void; onLast: () => void; onTogglePlay: () => void }) {
+export function ReviewNav(p: { explore: boolean; lineMode?: boolean; ply: number; count: number; playing: boolean; onFirst: () => void; onBack: () => void; onNext: () => void; onLast: () => void; onTogglePlay: () => void }) {
   return (
-      <div className="flex items-center gap-2" role="group" aria-label="Move navigation">
-        <NavButton label="First move" onClick={p.onFirst} disabled={!p.explore && p.ply === 0}>
+      <div className="flex items-center gap-2" role="group" aria-label={p.lineMode ? 'Line navigation' : 'Move navigation'}>
+        <NavButton label={p.lineMode ? 'First step' : 'First move'} onClick={p.onFirst} disabled={!p.explore && p.ply === 0}>
           <path d="M6 5v14M19 5l-9 7 9 7z" />
         </NavButton>
-        <NavButton label="Previous move" onClick={p.onBack}>
+        <NavButton label={p.lineMode ? 'Previous step' : 'Previous move'} onClick={p.onBack} disabled={!!p.lineMode && p.ply === 0}>
           <path d="M17 5l-9 7 9 7z" />
         </NavButton>
-        <NavButton label={p.playing ? 'Pause autoplay' : 'Play automatically'} onClick={p.onTogglePlay} active={p.playing} disabled={!!p.explore}>
+        <NavButton label={p.lineMode ? (p.playing ? 'Pause line' : 'Play line') : p.playing ? 'Pause autoplay' : 'Play automatically'} onClick={p.onTogglePlay} active={p.playing} disabled={!!p.explore}>
           {p.playing ? <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /> : <path d="M8 5l11 7-11 7z" />}
         </NavButton>
-        <NavButton label="Next move" onClick={p.onNext}>
+        <NavButton label={p.lineMode ? 'Next step' : 'Next move'} onClick={p.onNext} disabled={!!p.lineMode && p.ply >= p.count}>
           <path d="M7 5l9 7-9 7z" />
         </NavButton>
-        <NavButton label="Last move" onClick={p.onLast} disabled={!p.explore && p.ply >= p.count}>
+        <NavButton label={p.lineMode ? 'Last step' : 'Last move'} onClick={p.onLast} disabled={!p.explore && p.ply >= p.count}>
           <path d="M18 5v14M5 5l9 7-9 7z" />
         </NavButton>
       </div>
@@ -50,6 +50,50 @@ export function ReviewNav(p: { explore: boolean; ply: number; count: number; pla
 
 /** What the bubble shows under the headline. */
 export type TipMode = 'move' | 'explain' | 'best';
+
+/** The Explain or Best line shown next to the board: one row per move with the idea behind it. */
+export interface LineView {
+  kind: 'explain' | 'best';
+  rows: LineRow[];
+  /** The step on the board: -1 = the position before the line, rows.length - 1 = its last move. */
+  current: number;
+  paused: boolean;
+}
+
+const LINE_TITLE: Record<LineView['kind'], string> = { explain: 'Line the opponent can play', best: 'Better line' };
+
+/** Desktop: the moves of the line with a note each, the current one highlighted. Same height as the move list. */
+function LineList({ line, onSelect }: { line: LineView; onSelect: (index: number) => void }) {
+  const box = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    // Scroll only the list, never the window (same reason as the move list).
+    const c = box.current;
+    const el = c?.querySelector<HTMLElement>('[aria-current="step"]');
+    if (!c || !el) return;
+    const cr = c.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    if (er.top < cr.top) c.scrollTop += er.top - cr.top - 4;
+    else if (er.bottom > cr.bottom) c.scrollTop += er.bottom - cr.bottom + 4;
+  }, [line.current]);
+  return (
+    <ul ref={box} className="h-40 space-y-0.5 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none] lg:h-56" aria-label={LINE_TITLE[line.kind]}>
+      {line.rows.map((r, i) => (
+        <li key={i}>
+          <button
+            type="button"
+            onClick={() => onSelect(i)}
+            aria-current={i === line.current ? 'step' : undefined}
+            aria-label={r.note ? `${r.label}, ${r.note}` : r.label}
+            className={`grid min-h-9 w-full grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-ink-700 focus-visible:outline-2 focus-visible:outline-ember-400 ${i === line.current ? 'bg-ink-700 ring-1 ring-ember-400' : ''}`}
+          >
+            <span className="whitespace-nowrap font-mono font-bold text-ink-100">{r.label}</span>
+            <span className="min-w-0 break-words text-ink-300">{r.note ? capitalise(r.note) : ''}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Which of the action buttons are usable / lit. All four are always rendered so nothing moves between moves. */
 export interface ReviewActions {
@@ -114,11 +158,14 @@ export const PhoneCoach = memo(function PhoneCoach(props: {
   exploring: boolean;
   perspective: Side | null;
   tipMode: TipMode;
+  /** The Explain or Best line: the bubble shows the note of the current step. */
+  line: LineView | null;
   retry: { title: string; text: string; tone: RetryTone } | null;
   onShowLine: () => void;
   onShowAnswer: () => void;
 }) {
-  const { move, evalAfter, bestLine, previewing, exploring, tipMode, retry } = props;
+  const { move, evalAfter, bestLine, previewing, exploring, tipMode, retry, line } = props;
+  const stepRow = line && line.current >= 0 ? line.rows[Math.min(line.current, line.rows.length - 1)] : null;
   const bestSan = move?.best && move.best.uci !== move.uci ? move.best.san : null;
   const chip =
     move && !exploring ? (
@@ -161,7 +208,13 @@ export const PhoneCoach = memo(function PhoneCoach(props: {
     return (
       <div>
         {headline}
-        {shownTip && <p className="line-clamp-2 text-[13px] font-medium leading-4 text-ink-700" title={shownTip}>{shownTip}</p>}
+        {shownTip && <p className={`${stepRow ? 'line-clamp-1' : 'line-clamp-2'} text-[13px] font-medium leading-4 text-ink-700`} title={shownTip}>{shownTip}</p>}
+        {stepRow && line && (
+          <p className="line-clamp-2 text-[13px] font-bold leading-4 text-ink-900" aria-live="polite">
+            {line.current + 1} of {line.rows.length}: {stepRow.label}
+            {stepRow.note ? ` ${stepRow.note}` : ''}
+          </p>
+        )}
         {!longTip && showsBestMove(move.class) && bestSan && (
           <div className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium leading-5 text-ink-700">
             <span className="min-w-0 truncate">
@@ -210,6 +263,8 @@ export const ReviewView = memo(function ReviewView(props: {
   playing: boolean;
   perspective: Side | null;
   tipMode: TipMode;
+  /** The Explain or Best line, listed in place of the move list on desktop. */
+  line: LineView | null;
   /** Set while Retry is active: replaces the tip. */
   retry: { title: string; text: string; tone: RetryTone } | null;
   filter: ClassFilterView | null;
@@ -223,6 +278,7 @@ export const ReviewView = memo(function ReviewView(props: {
   onFilterStep: (dir: 1 | -1) => void;
   onFilterClear: () => void;
   onShowLine: () => void;
+  onLineSelect: (index: number) => void;
   onSummary: () => void;
   onFirst: () => void;
   onBack: () => void;
@@ -336,7 +392,14 @@ export const ReviewView = memo(function ReviewView(props: {
 
           <ActionRow a={props.actions} onExplain={props.onExplain} onBest={props.onBest} onRetry={props.onRetry} onNext={props.onNext} className="max-lg:hidden" />
 
-          <MoveList moves={moves} classified current={ply} onSelect={props.onSelect} />
+          {props.line && (
+            <div className="max-lg:hidden">
+              <LineList line={props.line} onSelect={props.onLineSelect} />
+            </div>
+          )}
+          <div className={props.line ? 'lg:hidden' : ''}>
+            <MoveList moves={moves} classified current={ply} onSelect={props.onSelect} />
+          </div>
         </>
       )}
 
@@ -345,7 +408,7 @@ export const ReviewView = memo(function ReviewView(props: {
       <EvalGraph geom={props.geom} count={N + 1} current={ply} dots={props.dots} onSeek={props.onSeek} />
 
       <div className="max-lg:hidden">
-        <ReviewNav explore={!!explorePanel} ply={ply} count={N} playing={props.playing} onFirst={props.onFirst} onBack={props.onBack} onNext={props.onNext} onLast={props.onLast} onTogglePlay={props.onTogglePlay} />
+        <ReviewNav explore={!!explorePanel} lineMode={!!props.line} ply={props.line ? props.line.current + 1 : ply} count={props.line ? props.line.rows.length : N} playing={props.playing} onFirst={props.onFirst} onBack={props.onBack} onNext={props.onNext} onLast={props.onLast} onTogglePlay={props.onTogglePlay} />
       </div>
     </div>
   );

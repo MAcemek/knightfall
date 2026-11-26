@@ -96,12 +96,12 @@ export function coachSummary(report: GameReport, opts: CoachOptions): string {
         ? `One slip in ${phase} decided this game. Let's find where it turned.`
         : `Your opponent took over in ${phase}. Let's see how they did it.`;
     }
-    if (decisive.material >= 3) return `${subject} won a piece in ${phase} and never let go!`;
+    if (decisive.material >= 3) return `${subject} won a piece in ${phase} and never let go.`;
     if (decisive.material >= 1) return `${subject} picked up material in ${phase} and kept control to the end.`;
     return `${subject} took charge in ${phase} and never looked back.`;
   }
   if (opts.result === '1/2-1/2') return 'A hard-fought draw. Both sides held their ground.';
-  if (acc !== null && acc >= 90) return 'Sharp, accurate play from start to finish!';
+  if (acc !== null && acc >= 90) return 'Sharp, accurate play from start to finish.';
   return 'A game with chances for both sides. Let\'s look at the key moments.';
 }
 
@@ -137,6 +137,7 @@ function who(side: Side, perspective: Side | null): Who {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Phrasings rotate with the ply, so two neighbouring moves never get the same sentence while another fits. */
 const pick = <T,>(options: T[], ply: number): T => options[ply % options.length];
 const pieceName = (t: PieceSymbol | undefined) => (t ? PIECE_NAME[t] : 'piece');
 const pointsWord = (n: number) => `${n} point${n === 1 ? '' : 's'}`;
@@ -149,6 +150,34 @@ function setup(move: TipMove, insight: MoveInsight | undefined, perspective: Sid
   return { me, them, onTarget, ply: move.ply };
 }
 
+type BestInfo = NonNullable<MoveInsight['best']>;
+
+/** What the engine's move does, as a verb phrase that fits after "Nd2 ". Only facts the insight verified. */
+const BEST_PLAN: Record<BestReason, (b: BestInfo, poss: string) => string[]> = {
+  mates: (b) =>
+    b.mateIn === 1
+      ? ['is checkmate', 'ends the game with checkmate']
+      : [`starts a forced ${mateWord(b.mateIn ?? 1)}`, `leads to ${mateWord(b.mateIn ?? 1)}`],
+  'wins-piece': (b) => [`wins the ${pieceName(b.piece)} on ${b.square}`, `picks up the ${pieceName(b.piece)} on ${b.square}`, `takes the ${pieceName(b.piece)} on ${b.square} for free`],
+  'wins-material': (b) => [`wins about ${pointsWord(b.material ?? 0)} of material`, `comes out ahead by about ${pointsWord(b.material ?? 0)}`],
+  'saves-piece': (b) => [`moves the ${pieceName(b.piece)} out of danger`, `gets the ${pieceName(b.piece)} to safety`, `rescues the ${pieceName(b.piece)} before it is lost`],
+  'stops-mate': () => ['stops the checkmate threat', 'keeps the king out of a mating attack'],
+  defends: (b) => [`keeps the ${pieceName(b.piece)} on ${b.square} from being lost`, `makes sure the ${pieceName(b.piece)} on ${b.square} is not lost`, `defends the ${pieceName(b.piece)} on ${b.square}`],
+  castles: () => ['tucks the king away and brings a rook into play', 'gets the king safe'],
+  develops: (b) => [`brings the ${pieceName(b.piece)} into the game`, `develops the ${pieceName(b.piece)}`, `gets the ${pieceName(b.piece)} off its starting square`],
+  'trades-when-ahead': () => ['trades pieces, which helps the side that is ahead', 'simplifies while ahead'],
+  'keeps-advantage': (_b, poss) => [`keeps ${poss} edge`, 'holds on to the advantage'],
+  holds: () => ['keeps the position together', 'is the most solid choice'],
+};
+
+/** "Better was Nd2, which develops the knight." when the engine's move and its reason are known, else nothing. */
+function betterSentence(move: TipMove, insight: MoveInsight, poss: string, ply: number): string[] {
+  const san = move.best?.san;
+  if (!san || !insight.best) return [];
+  const plan = pick(BEST_PLAN[insight.best.reason](insight.best, poss), ply);
+  return [`Better was ${san}, which ${plan}.`];
+}
+
 /** One or two sentences under "c3 is a mistake". '' when there is nothing verified to add. */
 export function coachMoveText(move: TipMove, insight: MoveInsight | undefined, perspective: Side | null): string {
   if (!insight) return '';
@@ -157,70 +186,97 @@ export function coachMoveText(move: TipMove, insight: MoveInsight | undefined, p
   const sq = insight.square;
   const n = insight.material ?? 0;
   const mate = mateWord(insight.mateIn ?? 1);
+  const better = () => betterSentence(move, insight, me.poss, ply);
   switch (insight.motif) {
     case 'allows-mate':
       return pick([
         `That lets ${them.obj} force ${mate}.`,
         `${cap(them.subj)} can now force ${mate}.`,
         `After this, ${them.subj} ${them.v('have', 'has')} a forced ${mate}.`,
+        `${cap(me.poss)} king is in a forced mating net: ${mate}.`,
       ], ply);
     case 'misses-mate':
-      return pick([`${cap(me.subj)} had a forced ${mate} here.`, `There was a forced ${mate} on the board.`], ply);
+      return pick([
+        `${cap(me.subj)} had a forced ${mate} here.`,
+        `There was a forced ${mate} on the board.`,
+        `A forced ${mate} was there, and this move lets it go.`,
+      ], ply);
     case 'hangs-piece':
       return onTarget
         ? pick([
             `That puts ${me.poss} ${piece} on ${sq} where it can just be captured.`,
             `${cap(me.poss)} ${piece} on ${sq} can be taken for free there.`,
+            `Moving to ${sq} leaves ${me.poss} ${piece} open to capture.`,
           ], ply)
         : pick([
             `That leaves ${me.poss} ${piece} on ${sq} hanging. ${cap(them.subj)} can just take it.`,
             `${cap(me.poss)} ${piece} on ${sq} is left without enough protection.`,
             `Watch the ${piece} on ${sq}: ${them.subj} can win it now.`,
+            `Nothing guards ${me.poss} ${piece} on ${sq} well enough, so ${them.subj} can win it.`,
           ], ply);
     case 'misses-free-piece':
-      return pick([`${cap(me.subj)} could have won a free ${piece} on ${sq}.`, `The ${piece} on ${sq} was up for grabs.`], ply);
+      return pick([
+        `${cap(me.subj)} could have won a free ${piece} on ${sq}.`,
+        `The ${piece} on ${sq} was up for grabs.`,
+        `A free ${piece} on ${sq} was there to be taken.`,
+      ], ply);
     case 'loses-material':
       return pick([
         `This costs ${me.subj} about ${pointsWord(n)} of material.`,
         `${cap(me.subj)} ${me.v('end up', 'ends up')} about ${pointsWord(n)} down after this.`,
+        `${cap(them.subj)} ${them.v('come', 'comes')} out about ${pointsWord(n)} ahead after this.`,
+        ...better(),
       ], ply);
     case 'misses-material':
       return pick([
         `There was a way to win about ${pointsWord(n)} of material.`,
         `${cap(me.subj)} could have come out about ${pointsWord(n)} ahead.`,
+        `The best move wins about ${pointsWord(n)} of material.`,
       ], ply);
     case 'walks-into-fork':
       return pick([
         `That lets ${them.poss} ${piece} jump to ${sq} and attack two of ${me.poss} pieces at once.`,
         `${cap(them.poss)} ${piece} can land on ${sq} and hit two targets together.`,
+        `A fork is coming: ${them.poss} ${piece} on ${sq} will attack two pieces.`,
       ], ply);
     case 'lets-off-hook':
       return pick([
         `${cap(me.subj)} had a real chance after the last move, and this lets it slip.`,
         `This does not make the most of ${them.poss} last move.`,
+        ...better(),
       ], ply);
     case 'throws-win':
       return pick([
         `${cap(me.subj)} ${me.v('were', 'was')} winning, and this gives most of it away.`,
         `This throws away a winning position.`,
+        ...better(),
       ], ply);
     case 'drifts':
-      return pick([`This lets ${me.poss} position slip a little.`, `A steadier move was available.`], ply);
+      return pick([`This weakens ${me.poss} position.`, `A steadier move was available.`, ...better()], ply);
     case 'sacrifice':
       return pick([
         `${cap(me.subj)} ${me.v('offer', 'offers')} the ${piece} on ${sq}, but taking it does not work out.`,
-        `A bold ${piece} sacrifice that pays off.`,
+        `A bold sacrifice of the ${piece} on ${sq} that pays off.`,
+        `The ${piece} on ${sq} is given up, and the engine confirms it pays off.`,
       ], ply);
     case 'only-move':
-      return pick([`The only move that keeps the advantage.`, `Everything else lets the edge slip.`], ply);
+      return pick([
+        `The only move that holds the position.`,
+        `Everything else is clearly worse.`,
+        `The only move here that keeps ${me.poss} position safe.`,
+      ], ply);
     case 'checkmate':
-      return pick([`That is checkmate.`, `Checkmate, game over.`], ply);
+      return pick([`That is checkmate.`, `Checkmate, game over.`, `That ends the game: checkmate.`], ply);
     case 'wins-free-piece':
-      return pick([`That wins a free ${piece} on ${sq}.`, `The ${piece} on ${sq} was there for the taking.`], ply);
+      return pick([
+        `That wins a free ${piece} on ${sq}.`,
+        `The ${piece} on ${sq} was there for the taking.`,
+        `Nothing guarded the ${piece} on ${sq}, and this takes it.`,
+      ], ply);
     case 'book':
-      return pick([`A standard opening move.`, `Well-known opening theory.`], ply);
+      return pick([`A standard opening move.`, `Well-known opening theory.`, `A move players have chosen here for years.`], ply);
     case 'forced':
-      return `It was the only legal move.`;
+      return pick([`It was the only legal move.`, `There was no other legal move.`], ply);
     default:
       return '';
   }
@@ -231,66 +287,92 @@ export function coachExplainText(move: TipMove, insight: MoveInsight | undefined
   if (!insight) return '';
   const { me, them, ply } = setup(move, insight, perspective);
   const piece = pieceName(insight.piece);
+  const sq = insight.square;
   const n = insight.material ?? 0;
   const reply = insight.replySan;
   const mate = mateWord(insight.mateIn ?? 1);
+  const best = move.best?.san;
   const down =
     insight.piece && insight.piece !== 'p' && n === PIECE_VALUE[insight.piece] ? `a ${piece} down` : `${pointsWord(n)} of material down`;
   switch (insight.motif) {
     case 'allows-mate':
+      // With the mate in one, the reply is the checkmate itself: nothing follows it.
+      if (reply && (insight.mateIn ?? 1) <= 1) {
+        return pick([
+          `After ${reply} it is checkmate.`,
+          `${cap(them.subj)} ${them.v('play', 'plays')} ${reply}, and that is checkmate.`,
+          `Best play for ${them.obj} is ${reply}, which is checkmate.`,
+        ], ply);
+      }
       return reply
         ? pick([
             `After ${reply} the mate cannot be stopped: ${mate}.`,
             `${cap(them.subj)} ${them.v('play', 'plays')} ${reply}, and ${mate} is forced.`,
+            `Best play for ${them.obj} is ${reply}, and ${mate} follows.`,
           ], ply)
-        : `The mate cannot be stopped: ${mate}.`;
+        : pick([`The mate cannot be stopped: ${mate}.`, `Nothing stops ${mate} after this.`], ply);
     case 'misses-mate':
-      return `The engine found a forced ${mate}. Playing something else gave it up.`;
-    case 'hangs-piece':
+      return pick([
+        `The engine found a forced ${mate}. Playing something else gave it up.`,
+        `A forced ${mate} was on the board, and this move missed it.`,
+        ...(insight.best?.reason === 'mates' && best ? [`${best} started a forced ${mate}. This move gave it up.`] : []),
+      ], ply);
+    case 'hangs-piece': {
+      const takes = !!reply && reply.includes('x') && insight.threat?.to === sq;
       return reply
         ? pick([
+            ...(takes ? [`${cap(them.subj)} ${them.v('play', 'plays')} ${reply}, taking the ${piece} on ${sq}, and ${me.subj} ${me.v('are', 'is')} ${down}.`] : []),
             `After ${reply} ${me.subj} ${me.v('are', 'is')} ${down}.`,
             `${cap(them.subj)} ${them.v('play', 'plays')} ${reply} and ${me.subj} ${me.v('end up', 'ends up')} ${down}.`,
           ], ply)
         : `${cap(me.subj)} ${me.v('lose', 'loses')} the ${piece}.`;
+    }
     case 'loses-material':
       return reply
-        ? `After ${reply}, the engine line leaves ${me.subj} about ${pointsWord(n)} down.`
+        ? pick([
+            `After ${reply}, the engine line leaves ${me.subj} about ${pointsWord(n)} down.`,
+            `${cap(them.subj)} ${them.v('play', 'plays')} ${reply} and ${them.v('come', 'comes')} out about ${pointsWord(n)} ahead.`,
+          ], ply)
         : `The engine line leaves ${me.subj} about ${pointsWord(n)} down.`;
     case 'walks-into-fork':
-      return `After ${reply ?? 'that reply'}, two pieces are attacked at once and ${me.subj} cannot save both. The engine line loses about ${pointsWord(n)}.`;
+      return reply
+        ? pick([
+            `After ${reply}, two pieces are attacked at once and ${me.subj} cannot save both. The engine line loses about ${pointsWord(n)}.`,
+            `${cap(them.subj)} ${them.v('play', 'plays')} ${reply}: the ${piece} on ${sq} attacks two pieces, and the engine line loses about ${pointsWord(n)}.`,
+          ], ply)
+        : `Two pieces are attacked at once and ${me.subj} cannot save both. The engine line loses about ${pointsWord(n)}.`;
     case 'misses-free-piece':
-      return `The ${piece} on ${insight.square} was not protected enough, and this move left it alone.`;
+      return pick([
+        `The ${piece} on ${sq} was not protected enough, and this move left it alone.`,
+        `${cap(me.subj)} could have taken the ${piece} on ${sq} for free instead.`,
+        ...(insight.best?.reason === 'wins-piece' && best ? [`${best} would have won the ${piece} on ${sq}.`] : []),
+      ], ply);
     case 'misses-material':
-      return `The engine line wins about ${pointsWord(n)} of material from here.`;
+      return pick([
+        `The engine line wins about ${pointsWord(n)} of material from here.`,
+        `A line that wins about ${pointsWord(n)} of material was available.`,
+        ...(best ? [`${best} starts a line that wins about ${pointsWord(n)} of material.`] : []),
+      ], ply);
     case 'lets-off-hook':
-      return `The last move gave ${me.subj} a chance. After this one the position is balanced again.`;
+      return pick([
+        `The last move gave ${me.subj} a chance. After this one the lead is smaller.`,
+        `The position favoured ${me.obj} before this move, and less so after it.`,
+      ], ply);
     case 'throws-win':
-      return `The engine rated ${me.poss} position as clearly winning before this move, and only slightly better afterwards.`;
+      return pick([
+        `The engine rated ${me.poss} position as clearly winning before this move, and no longer winning afterwards.`,
+        `Before this move the engine saw a clear win for ${me.obj}. After it, the win is gone.`,
+      ], ply);
     case 'drifts':
-      return `Nothing is lost outright, but the engine prefers another move here.`;
+      return pick([
+        `Nothing is lost outright, but the engine prefers another move here.`,
+        `The engine rates another move higher here, though nothing is lost outright.`,
+        ...(best ? [`Nothing is lost outright, but the engine prefers ${best}.`] : []),
+      ], ply);
     default:
       return coachMoveText(move, insight, perspective);
   }
 }
-
-type BestInfo = NonNullable<MoveInsight['best']>;
-const BEST_ENDINGS: Record<BestReason, (san: string, b: BestInfo, poss: string) => string[]> = {
-  mates: (san, b) =>
-    b.mateIn === 1
-      ? [`${san} is checkmate.`]
-      : [`${san} starts a forced ${mateWord(b.mateIn ?? 1)}.`, `${san} leads to ${mateWord(b.mateIn ?? 1)}.`],
-  'wins-piece': (san, b) => [`${san} wins the ${pieceName(b.piece)} on ${b.square}.`, `${san} picks up the ${pieceName(b.piece)} on ${b.square}.`],
-  'wins-material': (san, b) => [`${san} wins about ${pointsWord(b.material ?? 0)} of material.`, `${san} comes out ahead by about ${pointsWord(b.material ?? 0)}.`],
-  'saves-piece': (san, b) => [`${san} moves the ${pieceName(b.piece)} out of danger.`, `${san} gets the ${pieceName(b.piece)} to safety.`],
-  'stops-mate': (san) => [`${san} stops the checkmate threat.`, `${san} keeps the king out of a mating attack.`],
-  defends: (san, b) => [`${san} keeps the ${pieceName(b.piece)} on ${b.square} from being lost.`, `${san} makes sure the ${pieceName(b.piece)} on ${b.square} is not lost.`],
-  castles: (san) => [`${san} tucks the king away and brings a rook into play.`, `${san} gets the king safe.`],
-  develops: (san, b) => [`${san} brings the ${pieceName(b.piece)} into the game.`, `${san} develops a piece.`],
-  'trades-when-ahead': (san) => [`${san} trades pieces, which helps the side that is ahead.`],
-  'keeps-advantage': (san, _b, poss) => [`${san} keeps ${poss} edge.`, `${san} holds on to the advantage.`],
-  holds: (san) => [`${san} keeps the position together.`, `${san} is the most solid choice.`],
-};
 
 /** Best: why the engine's move is better. '' without a best move. */
 export function coachBestText(move: TipMove, insight: MoveInsight | undefined, perspective: Side | null): string {
@@ -298,8 +380,9 @@ export function coachBestText(move: TipMove, insight: MoveInsight | undefined, p
   const san = move.best?.san;
   if (!best || !san) return '';
   const { me, ply } = setup(move, insight, perspective);
-  return pick(BEST_ENDINGS[best.reason](san, best, me.poss), ply);
+  return `${san} ${pick(BEST_PLAN[best.reason](best, me.poss), ply)}.`;
 }
+
 
 /** Retry: 'best' = the engine's first move, 'good' = another line within LOSS_EXCELLENT of it, else 'wrong'. */
 export function judgeRetry(evalBefore: PositionEval, uci: string, mover: Side): 'best' | 'good' | 'wrong' {

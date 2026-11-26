@@ -14,7 +14,8 @@ test.setTimeout(180_000);
 
 test('phones: a friend battle, stage by stage', async ({ open }) => {
   const ana = await open('Ana');
-  const ben = await open('Ben');
+  // A 20-character name (the longest allowed): the Recent opponents row on Ana's lobby must truncate it, not widen the page.
+  const ben = await open('Bartholomew Wellings');
   const anaCode = await friendCode(ana);
 
   await checkStage(ana, 'lobby');
@@ -75,6 +76,12 @@ test('phones: a friend battle, stage by stage', async ({ open }) => {
 
   await backToLobby(ana.page);
   await backToLobby(ben.page);
+
+  // Back in the lobby with the other player listed under Recent opponents: nothing may push the page wider than the screen.
+  for (const [p, other] of [[ana, 'Bartholomew'], [ben, 'Ana']] as const) {
+    await expect(p.page.getByRole('listitem').filter({ hasText: other }).filter({ hasText: 'Challenge' })).toBeVisible();
+    await checkStage(p, 'lobby-recent-opponents', { shot: p === ana });
+  }
 
   // ---- club race on the same two phones ----
   await ana.page.getByRole('button', { name: 'Create room' }).click();

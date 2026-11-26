@@ -47,8 +47,8 @@ function LobbyView({ room }: { room: Room }) {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-[1fr_340px]">
-      <Panel className="space-y-4">
+    <div className="mx-auto grid w-full max-w-5xl gap-4 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px]">
+      <Panel className="min-w-0 space-y-4">
         <div>
           <div className="text-xs font-semibold text-ink-400">Club room code</div>
           <div className="mt-1 font-mono text-4xl font-black tracking-widest text-ink-100" data-testid="club-code">
@@ -88,7 +88,7 @@ function LobbyView({ room }: { room: Room }) {
 
 function PlayerList({ room, title }: { room: Room; title: string }) {
   return (
-    <Panel className="h-fit">
+    <Panel className="h-fit min-w-0">
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">{title}</h2>
       <ul className="space-y-1.5">
         {room.players.map((p) => (

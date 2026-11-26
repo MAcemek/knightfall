@@ -65,8 +65,8 @@ export function Lobby({ api }: { api: BattleApi }) {
   }, [api, searching]);
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-[1fr_340px]">
-      <div className="space-y-4">
+    <div className="mx-auto grid w-full max-w-5xl gap-4 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-4">
         {state.error && (
           <div className="flex animate-pop items-center justify-between gap-3 rounded-2xl border border-bad-500/40 bg-bad-500/10 px-4 py-3 text-sm font-semibold text-bad-400" role="alert">
             <span className="flex items-center gap-2">
@@ -104,7 +104,7 @@ export function Lobby({ api }: { api: BattleApi }) {
         </Panel>
       </div>
 
-      <Panel className="h-fit">
+      <Panel className="h-fit min-w-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider text-ink-400">Recent battles</h2>
           {recent && recent.length > 0 && (

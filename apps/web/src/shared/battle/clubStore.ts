@@ -15,6 +15,10 @@ let state: ClubUiState = initialClubState;
 const listeners = new Set<() => void>();
 let savedRace: string | null = null;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+/** After a drop the server keeps a member's seat this long (CLUB_DISCONNECT_MS there); a little less here. */
+const REJOIN_WINDOW_MS = 55_000;
+let rejoinDeadline: ReturnType<typeof setTimeout> | null = null;
+let rejoinAnswer: ReturnType<typeof setTimeout> | null = null;
 
 function dispatch(a: ClubAction): void {
   const next = clubReducer(state, a);
@@ -24,7 +28,14 @@ function dispatch(a: ClubAction): void {
     clearTimeout(pendingTimer);
     pendingTimer = null;
   }
+  if (!state.reconnecting) stopRejoinTimers();
   listeners.forEach((fn) => fn());
+}
+
+function stopRejoinTimers(): void {
+  if (rejoinDeadline) clearTimeout(rejoinDeadline);
+  if (rejoinAnswer) clearTimeout(rejoinAnswer);
+  rejoinDeadline = rejoinAnswer = null;
 }
 
 export const getClubState = (): ClubUiState => state;
@@ -50,10 +61,29 @@ function saveRace(): void {
   void db.battles.add(record).catch((e) => console.error('Failed to save club race', e));
 }
 
+/** The socket is back after a drop while in a room: join the same room again (the server matches me by friend code). */
+async function rejoin(): Promise<void> {
+  const code = state.room?.code;
+  if (!code || !state.reconnecting) return;
+  await whenWelcomed();
+  if (!state.reconnecting || state.room?.code !== code) return;
+  if (!conn.getSnapshot().serverCaps.includes('reconnect') || !conn.send({ type: 'club-join', code })) return dispatch({ type: 'rejoin-failed' });
+  if (rejoinAnswer) clearTimeout(rejoinAnswer);
+  rejoinAnswer = setTimeout(() => dispatch({ type: 'rejoin-failed' }), CLUB_REPLY_TIMEOUT_MS);
+}
+
 function onEvent(ev: conn.ConnEvent): void {
-  if (ev.type === 'open') return;
-  if (ev.type === 'closed') return dispatch({ type: 'connection-lost' });
+  if (ev.type === 'open') {
+    if (state.reconnecting) void rejoin();
+    return;
+  }
+  if (ev.type === 'closed') {
+    dispatch({ type: 'connection-lost' });
+    if (state.reconnecting && !rejoinDeadline) rejoinDeadline = setTimeout(() => dispatch({ type: 'rejoin-failed' }), REJOIN_WINDOW_MS);
+    return;
+  }
   if (ev.msg.type !== 'club-state' && ev.msg.type !== 'club-error') return;
+  if (ev.msg.type === 'club-error' && state.reconnecting) return dispatch({ type: 'rejoin-failed' });
   dispatch({ type: 'server', msg: ev.msg });
   saveRace();
 }

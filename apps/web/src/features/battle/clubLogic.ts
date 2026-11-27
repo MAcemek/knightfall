@@ -23,9 +23,11 @@ export interface ClubUiState {
   /** A create/join request that has not been answered yet. */
   pending: 'create' | 'join' | null;
   error: string | null;
+  /** The connection dropped while I was in a room: the room stays on screen while the app joins it again. */
+  reconnecting: boolean;
 }
 
-export const initialClubState: ClubUiState = { room: null, pending: null, error: null };
+export const initialClubState: ClubUiState = { room: null, pending: null, error: null, reconnecting: false };
 
 export type ClubAction =
   | { type: 'pending'; kind: 'create' | 'join' }
@@ -34,23 +36,29 @@ export type ClubAction =
   /** A request that could not be sent or was never answered. */
   | { type: 'fail'; error: string }
   | { type: 'connection-lost' }
+  /** The room could not be joined again after a reconnect (gone, full, or too late). */
+  | { type: 'rejoin-failed' }
   | { type: 'clear-error' };
 
 export function clubReducer(s: ClubUiState, a: ClubAction): ClubUiState {
   switch (a.type) {
     case 'pending':
-      return s.pending || s.room ? s : { room: null, pending: a.kind, error: null };
+      return s.pending || s.room ? s : { room: null, pending: a.kind, error: null, reconnecting: false };
     case 'fail':
       return { ...s, pending: null, error: a.error };
     case 'left':
       return s.room || s.pending || s.error ? initialClubState : s;
     case 'connection-lost':
-      return s.room || s.pending ? { ...initialClubState, error: 'Lost connection to the battle server. The club room was closed for you.' } : s;
+      // In a room: keep it on screen and join again once the socket is back. A create/join in flight is just lost.
+      if (s.room) return s.reconnecting ? s : { ...s, pending: null, reconnecting: true };
+      return s.pending ? { ...initialClubState, error: CLUB_CLOSED_TEXT } : s;
+    case 'rejoin-failed':
+      return s.reconnecting ? { ...initialClubState, error: CLUB_CLOSED_TEXT } : s;
     case 'clear-error':
       return s.error ? { ...s, error: null } : s;
     case 'server': {
       const m = a.msg;
-      if (m.type === 'club-error') return { room: s.room, pending: null, error: clubErrorText(m.reason) };
+      if (m.type === 'club-error') return { room: s.room, pending: null, error: clubErrorText(m.reason), reconnecting: s.reconnecting };
       if (m.type !== 'club-state') return s;
       const prev = s.room && s.room.code === m.code ? s.room : null;
       const participating = m.phase === 'lobby' ? true : prev ? prev.participating : false;
@@ -63,10 +71,13 @@ export function clubReducer(s: ClubUiState, a: ClubAction): ClubUiState {
         },
         pending: null,
         error: null,
+        reconnecting: false,
       };
     }
   }
 }
+
+const CLUB_CLOSED_TEXT = 'Lost connection to the battle server. The club room was closed for you.';
 
 /** Text for a `club-error` reason; unknown reasons get a generic line. */
 export function clubErrorText(reason: string): string {

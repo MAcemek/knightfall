@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientMessage, ServerMessage } from '@knightfall/core';
 import type { ConnEvent, ConnSnapshot } from './connection.ts';
 
@@ -10,6 +10,7 @@ const fake = vi.hoisted(() => ({
   sent: [] as ClientMessage[],
   listeners: new Set<(e: ConnEvent) => void>(),
   setPlayer: vi.fn(),
+  resume: (() => undefined) as () => string | undefined,
   battlesAdd: vi.fn(),
   setKV: vi.fn(),
 }));
@@ -27,6 +28,9 @@ vi.mock('./connection.ts', () => ({
   getSnapshot: () => fake.snap,
   getPlayer: () => fake.player,
   setPlayer: fake.setPlayer,
+  setResumeProvider: (fn: () => string | undefined) => {
+    fake.resume = fn;
+  },
   serverNow: () => Date.now(),
   whenOpen: () => Promise.resolve(),
   reconnectNow: () => {},
@@ -46,6 +50,7 @@ type Store = typeof import('./store.ts');
 let store: Store;
 
 const emit = (msg: ServerMessage) => fake.listeners.forEach((fn) => fn({ type: 'message', msg }));
+const closed = () => fake.listeners.forEach((fn) => fn({ type: 'closed' }));
 const online = (patch: Partial<ConnSnapshot> = {}): ConnSnapshot => ({ status: 'online', code: 'ABCDEF', socketOpen: true, moved: false, serverCaps: ['settings', 'club'], ...patch });
 
 beforeEach(async () => {
@@ -156,5 +161,99 @@ describe('friend settings and recent opponents', () => {
     await vi.waitFor(() => expect(fake.setKV).toHaveBeenCalledTimes(2));
     expect(fake.setKV).toHaveBeenNthCalledWith(1, 'recentOpponents', [expect.objectContaining({ code: 'ABCDEF', name: 'Bo', rating: 1000, w: 0 })]);
     expect(fake.battlesAdd).toHaveBeenCalledWith(expect.objectContaining({ opponentCode: 'ABCDEF', series: expect.objectContaining({ me: 1, opp: 0, over: false }) }));
+  });
+});
+
+describe('reconnecting during a battle', () => {
+  const play = () => {
+    emit({ type: 'welcome', code: 'ABCDEF', token: 't', caps: ['settings', 'club', 'reconnect'] });
+    emit({ type: 'matched', roomId: 'r1', seed: 3, opponent: { name: 'Bo', rating: 1200 } });
+    emit({ type: 'start', startsAt: Date.now(), endsAt: Date.now() + 180_000, serverNow: Date.now() });
+    store.goPlaying();
+    fake.sent = [];
+  };
+  const puzzle = (i: number) => ({ id: `p${i}`, rating: 500 + i });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('a drop keeps the match, asks for the room in the next hello, and gives up after 15 s', () => {
+    play();
+    closed();
+    expect(store.getBattleState()).toMatchObject({ phase: 'playing', reconnectingSince: expect.any(Number) });
+    expect(fake.resume()).toBe('r1');
+    vi.advanceTimersByTime(14_999);
+    expect(store.getBattleState().phase).toBe('playing');
+    vi.advanceTimersByTime(1);
+    expect(store.getBattleState()).toMatchObject({ phase: 'lobby', error: expect.stringMatching(/abandoned/) });
+    expect(fake.resume()).toBeUndefined();
+  });
+
+  it('a server that cannot hold seats abandons the battle at once, as before', () => {
+    emit({ type: 'welcome', code: 'ABCDEF', token: 't', caps: ['settings', 'club'] });
+    emit({ type: 'matched', roomId: 'r1', seed: 3, opponent: { name: 'Bo', rating: 1200 } });
+    closed();
+    expect(store.getBattleState().phase).toBe('lobby');
+    expect(store.getBattleState().error).toMatch(/abandoned/);
+  });
+
+  it('a server that does not announce reconnect when welcome arrives after the drop abandons the battle', () => {
+    play();
+    closed();
+    emit({ type: 'welcome', code: 'ABCDEF', token: 't', caps: ['settings'] });
+    expect(store.getBattleState().phase).toBe('lobby');
+  });
+
+  it('results made while offline are sent again after the resume, spaced out, and later ones wait their turn', () => {
+    play();
+    store.reportResult(puzzle(0), true); // reached the server
+    expect(fake.sent).toEqual([{ type: 'progress', index: 0, solved: 1, strikes: 0 }]);
+    closed();
+    fake.sent = [];
+    store.reportResult(puzzle(1), true);
+    store.reportResult(puzzle(2), false);
+    expect(fake.sent).toEqual([]);
+    emit({
+      type: 'matched', roomId: 'r1', seed: 3, opponent: { name: 'Bo', rating: 1200 },
+      resume: { me: { solved: 1, strikes: 0 }, opp: { solved: 2, strikes: 0 } },
+    });
+    expect(store.getBattleState()).toMatchObject({ reconnectingSince: 0, opp: { solved: 2 }, me: { solved: 2, strikes: 1 } });
+    expect(fake.sent).toEqual([{ type: 'progress', index: 1, solved: 2, strikes: 0 }]);
+    store.reportResult(puzzle(3), true); // while the replay is running
+    expect(fake.sent).toHaveLength(1);
+    vi.advanceTimersByTime(400);
+    expect(fake.sent.at(-1)).toEqual({ type: 'progress', index: 2, solved: 2, strikes: 1 });
+    vi.advanceTimersByTime(400);
+    expect(fake.sent.at(-1)).toEqual({ type: 'progress', index: 3, solved: 3, strikes: 1 });
+    // Back to normal afterwards.
+    vi.advanceTimersByTime(400);
+    store.reportResult(puzzle(4), true);
+    expect(fake.sent.at(-1)).toEqual({ type: 'progress', index: 4, solved: 4, strikes: 1 });
+    expect(fake.sent).toHaveLength(4);
+  });
+
+  it('a resume whose server count already matches sends nothing again', () => {
+    play();
+    store.reportResult(puzzle(0), true);
+    closed();
+    fake.sent = [];
+    emit({ type: 'matched', roomId: 'r1', seed: 3, opponent: { name: 'Bo', rating: 1200 }, resume: { me: { solved: 1, strikes: 0 }, opp: { solved: 0, strikes: 0 } } });
+    expect(fake.sent).toEqual([]);
+  });
+
+  it('the end that happened while away arrives after the resume and finishes the battle', () => {
+    play();
+    closed();
+    emit({ type: 'matched', roomId: 'r1', seed: 3, opponent: { name: 'Bo', rating: 1200 }, resume: { me: { solved: 0, strikes: 0 }, opp: { solved: 4, strikes: 0 } } });
+    emit({ type: 'end', result: 'loss', reason: 'time', you: { solved: 0, strikes: 0 }, opponent: { solved: 4, strikes: 0 } });
+    expect(store.getBattleState()).toMatchObject({ phase: 'ended', reconnectingSince: 0 });
+  });
+
+  it('an opponent who drops shows as away until they are back', () => {
+    play();
+    emit({ type: 'opponent-away', graceMs: 15_000 });
+    expect(store.getBattleState().oppAway).toBe(true);
+    emit({ type: 'opponent-back' });
+    expect(store.getBattleState().oppAway).toBe(false);
   });
 });

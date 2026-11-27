@@ -1,4 +1,4 @@
-import { db } from '../db.ts';
+import { db, getKV, KEYS, setKV } from '../db.ts';
 import { downloadJson } from '../download.ts';
 import { BACKUP_TABLES, DEVICE_KEYS, backupFileName, buildBackup, type CleanBackup, type TableName } from './backupLogic.ts';
 
@@ -17,9 +17,38 @@ export async function createBackup(): Promise<string> {
 /** Download a backup of this device. Returns the file name. */
 export async function saveBackup(): Promise<string> {
   const text = await createBackup();
-  const name = backupFileName(new Date());
+  const now = new Date();
+  const name = backupFileName(now, await getKV<string | null>(KEYS.playerName, null));
   downloadJson(name, text);
+  // Device-only key: never written into a backup file and never restored from one.
+  try {
+    await setKV(KEYS.lastBackupAt, now.toISOString());
+  } catch {
+    /* the file was saved; only the reminder timestamp is lost */
+  }
   return name;
+}
+
+export interface DeviceCounts {
+  attempts: number;
+  battles: number;
+  games: number;
+  customPuzzles: number;
+  rating: number | null;
+  playerName: string | null;
+}
+
+/** What this device holds now, shown beside the backup file's numbers before a replace. */
+export async function deviceCounts(): Promise<DeviceCounts> {
+  const [attempts, battles, games, customPuzzles, rating, playerName] = await Promise.all([
+    db.attempts.count(),
+    db.battles.count(),
+    db.games.count(),
+    db.customPuzzles.count(),
+    getKV<{ rating?: number } | null>(KEYS.puzzleRating, null),
+    getKV<string | null>(KEYS.playerName, null),
+  ]);
+  return { attempts, battles, games, customPuzzles, rating: typeof rating?.rating === 'number' ? Math.round(rating.rating) : null, playerName };
 }
 
 /**

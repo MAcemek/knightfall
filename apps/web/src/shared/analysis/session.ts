@@ -5,6 +5,7 @@ import { analysePositions, cloudEval, ENGINE_BUILD, ENGINES, getEnginePool, isAb
 import { setAnalysisRunning } from './busy.ts';
 import { buildReportOffThread } from './reportClient.ts';
 import { autoAddGamePuzzles } from './practice.ts';
+import { countEvals, interruptedPatch, knownFromPartial, type DoneView, type PartialRun } from './resumeLogic.ts';
 import { getAnalysis, getAnalysisPrefs, getGame, saveAnalysis } from './store.ts';
 
 /**
@@ -44,9 +45,9 @@ export interface SessionSnapshot {
 export interface AnalysisSession {
   subscribe(listener: () => void): () => void;
   getSnapshot(): SessionSnapshot;
-  /** (Re)analyse from scratch, optionally with another engine. Replaces the stored analysis when it finishes. */
+  /** (Re)analyse, optionally with another engine; continues an unfinished run of the same engine and depth. Replaces the stored analysis when it finishes. */
   restart(engine?: EngineId): void;
-  /** Stop a running analysis. Keeps what has been evaluated; restart() begins again. */
+  /** Stop a running analysis. Keeps what has been evaluated; restart() continues from it. */
   cancel(): void;
 }
 
@@ -59,6 +60,9 @@ function createSession(gameKey: string): AnalysisSession {
   const listeners = new Set<() => void>();
   let abort: AbortController | null = null;
   let run = 0;
+  /** Finished evaluations of an unfinished run (in memory only), and the good analysis a re-run falls back to. */
+  let partial: PartialRun | null = null;
+  let previous: DoneView<EngineId> | null = null;
 
   const set = (patch: Partial<SessionSnapshot>) => {
     snap = { ...snap, ...patch };
@@ -74,8 +78,11 @@ function createSession(gameKey: string): AnalysisSession {
     abort = ctl;
     const mine = ++run;
     const depth = ENGINES[engine].depth;
-    const evals: (PositionEval | undefined)[] = new Array(parsed.fens.length).fill(undefined);
-    set({ status: 'analysing', evals, done: 0, total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
+    previous = snap.status === 'done' && snap.report ? { report: snap.report, evals: snap.evals, engine: snap.engine, depth: snap.depth, analysedAt: snap.analysedAt, staleEngine: snap.staleEngine } : snap.status === 'analysing' ? previous : null;
+    const known = knownFromPartial(partial, engine, depth, parsed.fens.length);
+    const evals: (PositionEval | undefined)[] = known ?? new Array(parsed.fens.length).fill(undefined);
+    partial = { engine, depth, evals };
+    set({ status: 'analysing', evals, done: countEvals(evals), total: evals.length, report: null, engine, depth, analysedAt: null, staleEngine: false, error: null });
     try {
       const pool = getEnginePool(engine);
       const all = await analysePositions({
@@ -85,10 +92,12 @@ function createSession(gameKey: string): AnalysisSession {
         evaluate: (job) => pool.evaluate(job),
         cloud: cloudEval,
         signal: ctl.signal,
+        known,
         onEval: (i, e, done, total) => {
           if (mine !== run) return;
           const next = snap.evals.slice();
           next[i] = e;
+          partial = { engine, depth, evals: next };
           set({ evals: next, done, total });
         },
       });
@@ -99,6 +108,8 @@ function createSession(gameKey: string): AnalysisSession {
       const analysedAt = Date.now();
       await saveAnalysis({ gameKey, analysedAt, engine, depth, report, engineBuild: ENGINE_BUILD });
       if (mine !== run) return;
+      partial = null;
+      previous = null;
       set({ status: 'done', report, evals: all, done: all.length, total: all.length, analysedAt });
       // Automatic "puzzles from your games"; a failure here must not affect the finished review.
       void autoAddGamePuzzles(game, report).catch(() => {});
@@ -108,7 +119,7 @@ function createSession(gameKey: string): AnalysisSession {
       const aborted = isAbortError(e);
       if (aborted && ctl.signal.aborted) return;
       ctl.abort();
-      set({ status: 'error', error: aborted ? 'The analysis was interrupted. Try again.' : e instanceof Error ? e.message : 'The analysis failed.' });
+      set(interruptedPatch(previous, aborted ? 'The analysis was interrupted. Try again.' : e instanceof Error ? e.message : 'The analysis failed.'));
     }
   }
 
@@ -160,7 +171,7 @@ function createSession(gameKey: string): AnalysisSession {
       if (snap.status !== 'analysing') return;
       run++;
       abort?.abort();
-      set({ status: 'error', error: 'Analysis stopped.' });
+      set(interruptedPatch(previous, 'Analysis stopped.'));
     },
   };
 }

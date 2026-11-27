@@ -670,8 +670,10 @@ describe('club rooms', () => {
     vi.advanceTimersByTime(ms);
     hub.tick();
   };
-  const solve = (hub: BattleHub, c: Client, solved: number, strikes: number) =>
+  const solve = (hub: BattleHub, c: Client, solved: number, strikes: number) => {
+    vi.advanceTimersByTime(300); // the server wants 250 ms between one player's results
     hub.handle(c.s, { type: 'progress', index: solved + strikes - 1, solved, strikes });
+  };
   const names = (c: Client) => last(c, 'club-state')!.players.map((p) => p.name);
 
   it('create, join, start: everyone gets the same seed and times, and only the host can start', () => {

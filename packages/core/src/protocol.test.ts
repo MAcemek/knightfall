@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BATTLE_DURATION_MS,
+  BATTLE_RECONNECT_MS,
+  SERVER_CAPS,
   BATTLE_LEVEL_RAMP,
   BATTLE_RAMP,
   CLIENT_CAPS,
@@ -11,6 +13,7 @@ import {
   encode,
   rampFor,
   type ClientMessage,
+  type ServerMessage,
 } from './protocol.ts';
 
 describe('rampFor', () => {
@@ -33,8 +36,8 @@ describe('defaults and constants', () => {
   it('default settings are the classic 3 minute normal battle', () => {
     expect(DEFAULT_BATTLE_SETTINGS).toEqual({ durationMs: BATTLE_DURATION_MS, level: 'normal' });
   });
-  it('announces the settings and club capabilities', () => {
-    expect([...CLIENT_CAPS]).toEqual(['settings', 'club']);
+  it('announces the settings, club and reconnect capabilities', () => {
+    expect([...CLIENT_CAPS]).toEqual(['settings', 'club', 'reconnect']);
   });
   it('club limits', () => {
     expect(CLUB_MAX_PLAYERS).toBe(30);
@@ -51,5 +54,23 @@ describe('encode/decode of the new messages', () => {
   });
   it('an old hello without caps still decodes', () => {
     expect(decode<ClientMessage>('{"type":"hello","player":{"name":"A","rating":1200}}')).toMatchObject({ type: 'hello' });
+  });
+});
+
+describe('reconnect', () => {
+  it('holds a dropped seat for 15 seconds and both sides announce the capability', () => {
+    expect(BATTLE_RECONNECT_MS).toBe(15_000);
+    expect(SERVER_CAPS).toContain('reconnect');
+    expect(CLIENT_CAPS).toContain('reconnect');
+  });
+  it('round-trips a resuming hello and the resume fields of matched', () => {
+    const hello: ClientMessage = { type: 'hello', player: { name: 'A', rating: 1200 }, code: 'ABCDEF', token: 't', caps: ['reconnect'], resume: 'room-1' };
+    expect(decode<ClientMessage>(encode(hello))).toEqual(hello);
+    const matched: ServerMessage = {
+      type: 'matched', roomId: 'room-1', seed: 1, opponent: { name: 'B', rating: 1200 },
+      resume: { me: { solved: 2, strikes: 1 }, opp: { solved: 3, strikes: 0 } },
+    };
+    expect(decode<ServerMessage>(encode(matched))).toEqual(matched);
+    expect(decode<ServerMessage>(encode({ type: 'opponent-away', graceMs: BATTLE_RECONNECT_MS }))).toEqual({ type: 'opponent-away', graceMs: 15_000 });
   });
 });

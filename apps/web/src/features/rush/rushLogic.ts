@@ -170,3 +170,39 @@ export function toRushRun(mode: RushMode, core: RunCore, at: number): RushRun {
     at,
   };
 }
+
+/**
+ * Run clock that stops while the next puzzle loads, so a slow connection never costs the player time.
+ * `startAt`/`endAt` are timestamps from the same clock as `now`; pausing and resuming shifts both by the wait.
+ */
+export interface RunClock {
+  startAt: number;
+  /** Equals startAt for a run without a time limit. */
+  endAt: number;
+  /** When the current pause began, or null while the clock runs. */
+  pausedAt: number | null;
+}
+
+export function startClock(now: number, durationMs: number | null): RunClock {
+  return { startAt: now, endAt: now + (durationMs ?? 0), pausedAt: null };
+}
+
+export function pauseClock(c: RunClock, now: number): RunClock {
+  return c.pausedAt === null ? { ...c, pausedAt: now } : c;
+}
+
+export function resumeClock(c: RunClock, now: number): RunClock {
+  if (c.pausedAt === null) return c;
+  const waited = Math.max(0, now - c.pausedAt);
+  return { startAt: c.startAt + waited, endAt: c.endAt + waited, pausedAt: null };
+}
+
+/** Time left on the clock (frozen while paused). */
+export function clockRemaining(c: RunClock, now: number): number {
+  return Math.max(0, c.endAt - (c.pausedAt ?? now));
+}
+
+/** Time played so far (frozen while paused). */
+export function clockElapsed(c: RunClock, now: number): number {
+  return Math.max(0, (c.pausedAt ?? now) - c.startAt);
+}

@@ -3,8 +3,10 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { decode, encode, type ClientMessage } from '@knightfall/core';
 import { createChesscomLookup } from './chesscom.ts';
 import { isClientMessage } from './clientTypes.ts';
+import { guard } from './guard.ts';
 import { createHttpHandler } from './http.ts';
 import { BattleHub, Session } from './hub.ts';
+import { MessageRateLimiter } from './rateLimit.ts';
 
 /**
  * Knightfall server, one port:
@@ -14,6 +16,10 @@ import { BattleHub, Session } from './hub.ts';
 
 const PORT = Number(process.env.KF_SERVER_PORT ?? (process.env.NODE_ENV === 'production' ? process.env.PORT : undefined) ?? 8787);
 const HEARTBEAT_MS = 30_000;
+
+// One bad room or message must not take every battle down: log and keep serving.
+process.on('uncaughtException', (err) => console.error('[knightfall] uncaught exception', err));
+process.on('unhandledRejection', (reason) => console.error('[knightfall] unhandled rejection', reason));
 
 const hub = new BattleHub((line) => console.log(`[battle] ${line}`));
 hub.startTicking();
@@ -30,8 +36,21 @@ wss.on('connection', (ws) => {
     if (ws.readyState === ws.OPEN) ws.send(encode(msg));
   });
 
+  const limiter = new MessageRateLimiter();
   ws.on('message', (data, isBinary) => {
     if (isBinary) return;
+    const { verdict, firstDrop } = limiter.hit(Date.now());
+    if (verdict === 'close') {
+      if (ws.readyState === ws.OPEN) {
+        console.warn('[battle] closing a socket that sent too many messages');
+        ws.close(1008, 'Too many messages');
+      }
+      return;
+    }
+    if (verdict === 'drop') {
+      if (firstDrop) console.warn('[battle] ignoring messages from a socket that sends too fast');
+      return;
+    }
     const msg = decode<ClientMessage>(data.toString());
     if (!isClientMessage(msg)) return;
     try {
@@ -45,7 +64,7 @@ wss.on('connection', (ws) => {
   ws.on('error', () => ws.terminate());
 });
 
-const heartbeat = setInterval(() => {
+const heartbeat = setInterval(guard('heartbeat', () => {
   for (const ws of wss.clients) {
     if (alive.get(ws) === false) {
       ws.terminate();
@@ -54,7 +73,7 @@ const heartbeat = setInterval(() => {
     alive.set(ws, false);
     ws.ping();
   }
-}, HEARTBEAT_MS);
+}), HEARTBEAT_MS);
 
 server.on('listening', () => console.log(`[knightfall] server ready: ws://localhost:${PORT}/ws and http://localhost:${PORT}/api`));
 server.on('error', (err) => {

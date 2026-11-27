@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react';
-import { DEFAULT_BATTLE_SETTINGS, FRIEND_MOVED_MESSAGE, isValidCode, normalizeCode, type BattleScore, type BattleSettings } from '@knightfall/core';
+import { BATTLE_RECONNECT_MS, DEFAULT_BATTLE_SETTINGS, FRIEND_MOVED_MESSAGE, isValidCode, normalizeCode, type BattleScore, type BattleSettings } from '@knightfall/core';
 import { db, defaults, getKV, KEYS, setKV, type BattleRecord } from '../db.ts';
 import { getPlayerName } from '../profile.ts';
 import { toast } from '../toast.tsx';
 import {
-  battleReducer, initialBattleState, ratingAfterBattle, seriesAfter,
-  type BattleAction, type BattleState, type EndInfo,
+  battleReducer, initialBattleState, missingProgress, ratingAfterBattle, seriesAfter,
+  type BattleAction, type BattleState, type EndInfo, type ProgressReport,
 } from '../../features/battle/battleState.ts';
 import { challengeExtras, type Series } from '../../features/battle/friendSettings.ts';
 import { recordOpponentResult, removeOpponent, sanitizeRecent, upsertOpponent, type RecentOpponent } from '../../features/battle/recentOpponents.ts';
@@ -30,11 +30,56 @@ const battleListeners = new Set<() => void>();
 let savedRoom: string | null = null;
 let searchGen = 0;
 
+/** Gives up on a dropped battle when the server's grace is over. */
+let graceTimer: ReturnType<typeof setTimeout> | null = null;
+/** Results to send again after a reconnect, one every REPLAY_GAP_MS (the server wants a gap between a player's results). */
+let replayQueue: ProgressReport[] = [];
+let replayTimer: ReturnType<typeof setTimeout> | null = null;
+/** The last server's `welcome` announced the 'reconnect' capability: a dropped battle is worth holding on to. */
+let serverReconnects = false;
+const REPLAY_GAP_MS = 400;
+
 function dispatch(a: BattleAction): void {
   const next = battleReducer(state, a);
   if (next === state) return;
   state = next;
+  if (!state.reconnectingSince && graceTimer) {
+    clearTimeout(graceTimer);
+    graceTimer = null;
+  }
+  if (state.phase !== 'playing' && state.phase !== 'matched') stopReplay();
   battleListeners.forEach((fn) => fn());
+}
+
+function stopReplay(): void {
+  replayQueue = [];
+  if (replayTimer) clearTimeout(replayTimer);
+  replayTimer = null;
+}
+
+/** Send the queued results one by one, spaced out. */
+function flushReplay(roomId: string): void {
+  if (replayTimer || state.match?.roomId !== roomId) return;
+  const next = replayQueue.shift();
+  if (!next) return;
+  if (!state.reconnectingSince) conn.send({ type: 'progress', ...next });
+  else replayQueue.unshift(next);
+  if (replayQueue.length) {
+    replayTimer = setTimeout(() => {
+      replayTimer = null;
+      flushReplay(roomId);
+    }, REPLAY_GAP_MS);
+  }
+}
+
+/** The connection dropped mid-battle: hold the match for the server's grace, then fall back to abandoning it. */
+function holdBattle(): void {
+  dispatch({ type: 'reconnecting', at: Date.now() });
+  if (!state.reconnectingSince || graceTimer) return;
+  graceTimer = setTimeout(() => {
+    graceTimer = null;
+    if (state.reconnectingSince) dispatch({ type: 'connection-lost' });
+  }, BATTLE_RECONNECT_MS);
 }
 
 export const getBattleState = (): BattleState => state;
@@ -132,7 +177,15 @@ export function reportResult(puzzle: { id: string; rating: number }, solved: boo
   const solvedN = s.me.solved + (solved ? 1 : 0);
   const strikes = s.me.strikes + (solved ? 0 : 1);
   dispatch({ type: 'my-result', puzzle, solved });
-  conn.send({ type: 'progress', index, solved: solvedN, strikes });
+  const report = { index, solved: solvedN, strikes };
+  // While the connection is down the finished puzzles are sent after the reconnect, from the history. While
+  // earlier ones are still being sent again, this one waits its turn.
+  if (state.reconnectingSince) return;
+  if (replayQueue.length || replayTimer) {
+    replayQueue.push(report);
+    return;
+  }
+  conn.send({ type: 'progress', ...report });
 }
 
 export function rematch(): void {
@@ -297,13 +350,19 @@ let wired = false;
 function onEvent(ev: conn.ConnEvent): void {
   if (ev.type === 'open') return;
   if (ev.type === 'closed') {
-    dispatch({ type: 'connection-lost' });
+    if ((state.phase === 'matched' || state.phase === 'playing') && serverReconnects) holdBattle();
+    else dispatch({ type: 'connection-lost' });
     outgoingDispatch({ type: 'connection-lost' });
     incomingDispatch({ type: 'clear' });
     return;
   }
   const msg = ev.msg;
   switch (msg.type) {
+    case 'welcome':
+      serverReconnects = Array.isArray(msg.caps) && msg.caps.includes('reconnect');
+      // A server that cannot hold seats has already given the opponent the win.
+      if (!serverReconnects && state.reconnectingSince) dispatch({ type: 'connection-lost' });
+      return;
     case 'end':
       finish({ result: msg.result, reason: msg.reason, you: msg.you, opponent: msg.opponent });
       return;
@@ -314,6 +373,14 @@ function onEvent(ev: conn.ConnEvent): void {
       }
       outgoingDispatch({ type: 'matched' });
       incomingDispatch({ type: 'clear' });
+      if (msg.resume && state.reconnectingSince && state.match?.roomId === msg.roomId) {
+        // Seat taken back: send again whatever the server missed while the connection was down.
+        const missing = missingProgress(state.history, msg.resume.me);
+        dispatch({ type: 'server', msg, me: conn.getPlayer() });
+        replayQueue = missing;
+        flushReplay(msg.roomId);
+        return;
+      }
       dispatch({ type: 'server', msg, me: conn.getPlayer() });
       return;
     case 'challenge-status': {
@@ -352,6 +419,7 @@ function onEvent(ev: conn.ConnEvent): void {
 export function initBattleStore(): void {
   if (wired) return;
   wired = true;
+  conn.setResumeProvider(() => (state.reconnectingSince ? state.match?.roomId : undefined));
   conn.subscribe(onEvent);
 }
 

@@ -9,11 +9,19 @@ export const emptyScore = (): BattleScore => ({ solved: 0, strikes: 0 });
 
 export const isOut = (s: BattleScore) => s.strikes >= BATTLE_MAX_STRIKES;
 
+/**
+ * Pace cap: since the start, a player gets at most one result per this many ms on average (a human needs a second
+ * or more per puzzle). An average, not a gap between two messages: results queued during a wifi stall arrive together.
+ */
+export const MIN_RESULT_GAP_MS = 250;
+
 const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
 
 /**
  * Validate a client's progress report against the stored score.
  * Returns the accepted new score, or null when the report must be ignored.
+ * A new result (+1 solved or +1 strike) must carry `index` = the number of results so far and keep within the pace
+ * cap (MIN_RESULT_GAP_MS). Repeats of the current score are harmless and stay accepted.
  */
 export function acceptProgress(
   prev: BattleScore,
@@ -31,6 +39,10 @@ export function acceptProgress(
   const dStrikes = strikes - prev.strikes;
   // One puzzle result per message: either +1 solved or +1 strike (or a harmless repeat).
   if (dSolved > 1 || dStrikes > 1 || dSolved + dStrikes > 1) return null;
+  if (dSolved + dStrikes === 1) {
+    if (index !== prev.solved + prev.strikes) return null;
+    if (solved + strikes > 1 + Math.floor((now - startsAt) / MIN_RESULT_GAP_MS)) return null;
+  }
   return { solved, strikes };
 }
 

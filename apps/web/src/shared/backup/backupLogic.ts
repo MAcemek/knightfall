@@ -59,9 +59,9 @@ export const BACKUP_TABLES: readonly TableName[] = [
 /**
  * kv keys that belong to this device only: never written to a backup and never taken from one.
  * battleToken is a secret that proves ownership of the friend code; a restored ratedPending could be settled as a miss;
- * botGame is a game in progress with running clocks.
+ * botGame is a game in progress with running clocks; lastBackupAt is when a backup file was last saved FROM this device.
  */
-export const DEVICE_KEYS: readonly string[] = ['battleCode', 'battleToken', 'ratedPending', 'botGame'];
+export const DEVICE_KEYS: readonly string[] = ['battleCode', 'battleToken', 'ratedPending', 'botGame', 'lastBackupAt'];
 
 export interface BackupFile {
   format: string;
@@ -103,9 +103,20 @@ export function buildBackup(tables: Record<TableName, unknown[]>, dbVersion: num
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, dbVersion, exportedAt: nowIso, tables: out };
 }
 
-export function backupFileName(date: Date): string {
+/** Lowercase, [a-z0-9-] only, no leading, trailing or doubled dashes, at most 20 characters. Empty when nothing is left. */
+export function sanitizeNameForFile(name: string | null | undefined): string {
+  return (name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 20)
+    .replace(/-+$/g, '');
+}
+
+export function backupFileName(date: Date, playerName?: string | null): string {
   const p = (n: number) => String(n).padStart(2, '0');
-  return `knightfall-backup-${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}.json`;
+  const who = sanitizeNameForFile(playerName);
+  return `knightfall-backup-${who ? `${who}-` : ''}${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}.json`;
 }
 
 /* ---------- guards ---------- */

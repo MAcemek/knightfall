@@ -1,4 +1,5 @@
-import { BATTLE_COUNTDOWN_MS, BATTLE_DURATION_MS, BATTLE_REMATCH_WINDOW_MS, type BattleScore, type BattleSettings, type SeriesInfo } from '@knightfall/core';
+import { BATTLE_COUNTDOWN_MS, BATTLE_DURATION_MS, BATTLE_REMATCH_WINDOW_MS, type BattleScore, type BattleSettings, type SeriesInfo, type ServerMessage } from '@knightfall/core';
+import { guard } from './guard.ts';
 import type { Participant } from './participant.ts';
 import { acceptProgress, canClaim, emptyScore, endReason, resultFor, type EndReason } from './rules.ts';
 
@@ -47,6 +48,8 @@ export class Room {
   readonly departed = new Set<string>();
 
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** When each player's last accepted result arrived (null before the first). */
+  private leaverIndex = -1;
   private readonly extras?: [MatchedExtras, MatchedExtras];
   private readonly onEnd?: (room: Room) => void;
   private readonly countdownMs: number;
@@ -81,7 +84,7 @@ export class Room {
     this.startsAt = now + this.countdownMs;
     this.endsAt = this.startsAt + this.durationMs;
     for (const p of this.players) p.send({ type: 'start', startsAt: this.startsAt, endsAt: this.endsAt, serverNow: now });
-    this.timer = setTimeout(() => this.finish('time'), this.endsAt - now);
+    this.timer = setTimeout(guard('room timer', () => this.finish('time')), this.endsAt - now);
   }
 
   /** A progress report from a player. Returns true when it was accepted. */
@@ -121,6 +124,34 @@ export class Room {
     this.finish('opponent-left', i);
   }
 
+  /** A dropped player came back on a new connection: it takes over their seat. */
+  replacePlayer(oldId: string, next: Participant): boolean {
+    const i = this.indexOf(oldId);
+    if (i === -1) return false;
+    this.players[i] = next;
+    return true;
+  }
+
+  /**
+   * What a player who took their seat back needs to carry on: `matched` (same room, settings and series, plus
+   * both scores), `start` (the clock did not stop), and `end` when the battle finished while they were away.
+   */
+  resumeMessages(playerId: string, now = Date.now()): ServerMessage[] {
+    const i = this.indexOf(playerId);
+    if (i === -1) return [];
+    const opp = this.players[1 - i];
+    const flag = this.friendly ? { friendly: true as const } : {};
+    const out: ServerMessage[] = [
+      {
+        type: 'matched', roomId: this.id, seed: this.seed, opponent: { ...opp.info }, ...flag, ...this.extras?.[i],
+        resume: { me: { ...this.scores[i] }, opp: { ...this.scores[1 - i] } },
+      },
+      { type: 'start', startsAt: this.startsAt, endsAt: this.endsAt, serverNow: now },
+    ];
+    if (this.ended && this.endReason && i !== this.leaverIndex) out.push(this.endMessage(i));
+    return out;
+  }
+
   /** Remaining time in the rematch window (0 when closed). */
   rematchOpen(now = Date.now()): boolean {
     return this.ended && now - this.endedAt <= REMATCH_WINDOW_MS && this.departed.size === 0;
@@ -137,14 +168,19 @@ export class Room {
     this.ended = true;
     this.endedAt = Date.now();
     this.endReason = reason;
+    this.leaverIndex = leaverIndex;
     this.dispose();
     this.players.forEach((p, i) => {
       if (i === leaverIndex) return;
-      const you = { ...this.scores[i] };
-      const opponent = { ...this.scores[1 - i] };
-      const result = leaverIndex !== -1 ? 'win' : resultFor(you, opponent);
-      p.send({ type: 'end', result, reason, you, opponent });
+      p.send(this.endMessage(i));
     });
     this.onEnd?.(this);
+  }
+
+  private endMessage(i: number): Extract<ServerMessage, { type: 'end' }> {
+    const you = { ...this.scores[i] };
+    const opponent = { ...this.scores[1 - i] };
+    const result = this.leaverIndex !== -1 ? 'win' : resultFor(you, opponent);
+    return { type: 'end', result, reason: this.endReason!, you, opponent };
   }
 }

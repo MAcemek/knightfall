@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PositionEval } from '@knightfall/core';
-import { analysePositions } from './analyseGame.ts';
+import { analysePositions, planPositions } from './analyseGame.ts';
 import { createCloudEval, normalisePv, parseCloudEval, type CloudEvalClient } from './cloudEval.ts';
 import { EnginePool, isAbortError, poolSize, type EvalJob } from './pool.ts';
 import { parseBestMove, parseInfo, toWhitePov, UciEngine, type AnalyseOptions, type PoolEngine, type UciTransport } from './uci.ts';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+const AFTER_E4_E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+const AFTER_NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+const AFTER_NC6 = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
 const MATED = 'r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4';
 
 const evalOf = (fen: string, cp = 10): PositionEval => ({ fen, depth: 16, source: 'engine', lines: [{ score: { cp }, pv: ['e2e4'] }], score: { cp } });
@@ -390,6 +393,16 @@ describe('cloud eval', () => {
   });
 });
 
+describe('planPositions', () => {
+  it('splits ready, searched and copied positions', () => {
+    const known = [undefined, evalOf(AFTER_E4, 3), undefined, undefined, undefined, undefined];
+    const plan = planPositions([START, AFTER_E4, START, MATED, AFTER_E4_E5, AFTER_E4_E5], known);
+    expect(plan.ready.map(([i]) => i).sort()).toEqual([1, 3]);
+    expect(plan.searches).toEqual([0, 4]);
+    expect([...plan.copies]).toEqual([[0, [2]], [4, [5]]]);
+  });
+});
+
 describe('analysePositions', () => {
   const fens = [START, AFTER_E4, MATED];
 
@@ -422,7 +435,7 @@ describe('analysePositions', () => {
   });
   it('accepts cloud evals in order, stops asking at the first miss and sends the rest to the engine', async () => {
     const asked: string[] = [];
-    const many = [START, AFTER_E4, START, AFTER_E4, START];
+    const many = [START, AFTER_E4, AFTER_E4_E5, AFTER_NF3, AFTER_NC6];
     const cloud: CloudEvalClient = {
       get: async (fen) => {
         asked.push(fen);
@@ -468,6 +481,33 @@ describe('analysePositions', () => {
     const out = await analysePositions({ fens, depth: 16, known, evaluate: async (j) => (calls++, evalOf(j.fen)) });
     expect(calls).toBe(1);
     expect(out[0].score).toEqual({ cp: 77 });
+  });
+  it('searches a repeated position once and copies the result to every occurrence', async () => {
+    const asked: string[] = [];
+    const seen: [number, number][] = [];
+    const rep = [START, AFTER_E4, START, AFTER_E4, START];
+    const out = await analysePositions({ fens: rep, depth: 16, evaluate: async (j) => (asked.push(j.fen), evalOf(j.fen, asked.length)), onEval: (i, _e, done) => seen.push([i, done]) });
+    expect(asked.sort()).toEqual([START, AFTER_E4].sort());
+    expect(out.map((e) => e.fen)).toEqual(rep);
+    expect(out[2]).toEqual(out[0]);
+    expect(out[4]).toEqual(out[0]);
+    expect(out[3]).toEqual(out[1]);
+    expect(seen).toHaveLength(5);
+    expect(seen.map((s) => s[1]).sort()).toEqual([1, 2, 3, 4, 5]);
+  });
+  it('treats a repetition with other move counters as the same position, and gives the copy its own FEN', async () => {
+    const asked: string[] = [];
+    const later = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 4 3'; // the start position after Nf3 Nf6 Ng1 Ng8
+    const out = await analysePositions({ fens: [START, AFTER_E4, later], depth: 16, evaluate: async (j) => (asked.push(j.fen), evalOf(j.fen, 9)) });
+    expect(asked.sort()).toEqual([START, AFTER_E4].sort());
+    expect(out[2]).toEqual({ ...out[0], fen: later });
+  });
+  it('takes a repeated position from a known evaluation of the same FEN', async () => {
+    let calls = 0;
+    const known = [undefined, undefined, evalOf(START, 42)];
+    const out = await analysePositions({ fens: [START, AFTER_E4, START], depth: 16, known, evaluate: async (j) => (calls++, evalOf(j.fen)) });
+    expect(calls).toBe(1);
+    expect(out[0].score).toEqual({ cp: 42 });
   });
   it('rejects with AbortError when aborted, before or during the run', async () => {
     const pre = new AbortController();

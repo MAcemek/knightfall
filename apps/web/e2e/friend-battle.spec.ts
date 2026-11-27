@@ -159,8 +159,9 @@ test('a declined challenge says so, and an opponent who leaves mid-game hands yo
   await expectPlaying(ana, ben);
   await expectPuzzle(ana.page, 0, puzzleAt(matched.seed, 0, 'normal'));
 
+  // A closed browser looks like a dropped connection: the server holds Ben's seat for 15 s before Ana wins.
   await ben.context.close();
-  await expect(ana.page.getByText('Your opponent left the battle')).toBeVisible();
+  await expect(ana.page.getByText('Your opponent left the battle')).toBeVisible({ timeout: 25_000 });
   await expect(ana.page.getByText('Victory!')).toBeVisible();
   await expect(ana.page.getByText('Friend battle. Your battle rating is unchanged.')).toBeVisible();
   await backToLobby(ana.page);

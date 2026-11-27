@@ -9,10 +9,17 @@ const make = (o: { maxPlayers?: number } = {}) => {
   let n = 0;
   const codes = ['AAAAAA', 'BBBBBB', 'CCCCCC'];
   const reg = new ClubRegistry({ now: () => now, genCode: () => codes[Math.min(n++, 2)], genSeed: () => 42, countdownMs: 3000, ...o });
-  return { reg, advance: (ms: number) => (now += ms), at: () => now };
+  const advance = (ms: number) => (now += ms);
+  bump = advance;
+  return { reg, advance, at: () => now };
 };
+let bump = (_ms: number) => {};
 const p = (id: string) => ({ id, name: id.toUpperCase(), rating: 1200 });
-const solve = (reg: ClubRegistry, id: string, solved: number, strikes: number) => reg.progress(id, { index: solved + strikes - 1, solved, strikes });
+/** One more result for `id`: the index is the count before it, and 300 ms pass first (the server wants 250 between results). */
+const solve = (reg: ClubRegistry, id: string, solved: number, strikes: number) => {
+  bump(300);
+  return reg.progress(id, { index: solved + strikes - 1, solved, strikes });
+};
 
 /** A room with host h and members a, b, created and then started. */
 function lobby() {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BATTLE_SETTINGS } from '@knightfall/core';
-import { acceptProgress, canClaim, endReason, isDefaultSettings, resultFor, sanitizeSeries, sanitizeSettings } from './rules.ts';
+import { acceptProgress, canClaim, MIN_RESULT_GAP_MS, endReason, isDefaultSettings, resultFor, sanitizeSeries, sanitizeSettings } from './rules.ts';
 
 const s = (solved: number, strikes: number) => ({ solved, strikes });
 
@@ -11,7 +11,7 @@ describe('acceptProgress', () => {
   });
   it('accepts +1 solved or +1 strike', () => {
     expect(acceptProgress(s(0, 0), { solved: 1, strikes: 0, index: 0 }, start, start)).toEqual(s(1, 0));
-    expect(acceptProgress(s(1, 0), { solved: 1, strikes: 1, index: 1 }, start, start)).toEqual(s(1, 1));
+    expect(acceptProgress(s(1, 0), { solved: 1, strikes: 1, index: 1 }, start + 5000, start)).toEqual(s(1, 1));
   });
   it('rejects decreases, jumps and both at once', () => {
     expect(acceptProgress(s(2, 1), { solved: 1, strikes: 1, index: 3 }, start, start)).toBeNull();
@@ -21,13 +21,42 @@ describe('acceptProgress', () => {
   });
   it('rejects more than 3 strikes and reports once struck out', () => {
     expect(acceptProgress(s(0, 3), { solved: 1, strikes: 3, index: 4 }, start, start)).toBeNull();
-    expect(acceptProgress(s(0, 2), { solved: 0, strikes: 3, index: 2 }, start, start)).toEqual(s(0, 3));
+    expect(acceptProgress(s(0, 2), { solved: 0, strikes: 3, index: 2 }, start + 5000, start)).toEqual(s(0, 3));
   });
   it('rejects malformed values', () => {
     expect(acceptProgress(s(0, 0), { solved: '1', strikes: 0, index: 0 }, start, start)).toBeNull();
     expect(acceptProgress(s(0, 0), { solved: 1.5, strikes: 0, index: 0 }, start, start)).toBeNull();
     expect(acceptProgress(s(0, 0), { solved: 1, strikes: 0, index: -1 }, start, start)).toBeNull();
     expect(acceptProgress(s(0, 0), { solved: 1, strikes: null, index: 0 }, start, start)).toBeNull();
+  });
+});
+
+describe('acceptProgress plausibility', () => {
+  const start = 1000;
+  it('a new result must carry the index of the results so far', () => {
+    expect(acceptProgress(s(2, 1), { solved: 3, strikes: 1, index: 3 }, start + 5000, start)).toEqual(s(3, 1));
+    expect(acceptProgress(s(2, 1), { solved: 3, strikes: 1, index: 2 }, start + 5000, start)).toBeNull();
+    expect(acceptProgress(s(2, 1), { solved: 3, strikes: 1, index: 9 }, start + 5000, start)).toBeNull();
+    expect(acceptProgress(s(0, 0), { solved: 0, strikes: 1, index: 1 }, start + 5000, start)).toBeNull();
+  });
+  it('a harmless repeat is accepted whatever its index', () => {
+    expect(acceptProgress(s(2, 1), { solved: 2, strikes: 1, index: 0 }, start + 5000, start)).toEqual(s(2, 1));
+  });
+  it('caps the pace at one result per MIN_RESULT_GAP_MS since the start, on average', () => {
+    // the 2nd result is allowed from one gap after the start, the 5th from four gaps
+    expect(acceptProgress(s(1, 0), { solved: 2, strikes: 0, index: 1 }, start + MIN_RESULT_GAP_MS - 1, start)).toBeNull();
+    expect(acceptProgress(s(1, 0), { solved: 2, strikes: 0, index: 1 }, start + MIN_RESULT_GAP_MS, start)).toEqual(s(2, 0));
+    expect(acceptProgress(s(3, 1), { solved: 4, strikes: 1, index: 4 }, start + 4 * MIN_RESULT_GAP_MS - 1, start)).toBeNull();
+  });
+  it('accepts honest results that arrive together after a wifi stall', () => {
+    // solved 3 puzzles during a 5 s stall: the three reports land within a few ms of each other
+    const t = start + 20_000;
+    expect(acceptProgress(s(5, 0), { solved: 6, strikes: 0, index: 5 }, t, start)).toEqual(s(6, 0));
+    expect(acceptProgress(s(6, 0), { solved: 7, strikes: 0, index: 6 }, t + 2, start)).toEqual(s(7, 0));
+    expect(acceptProgress(s(7, 0), { solved: 8, strikes: 0, index: 7 }, t + 4, start)).toEqual(s(8, 0));
+  });
+  it('the first result can come at the start', () => {
+    expect(acceptProgress(s(0, 0), { solved: 1, strikes: 0, index: 0 }, start, start)).toEqual(s(1, 0));
   });
 });
 

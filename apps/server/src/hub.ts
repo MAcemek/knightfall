@@ -1,4 +1,5 @@
 import {
+  BATTLE_RECONNECT_MS,
   DEFAULT_BATTLE_SETTINGS,
   FRIEND_MOVED_MESSAGE,
   isValidCode,
@@ -11,6 +12,7 @@ import {
   type ServerMessage,
 } from '@knightfall/core';
 import { Bot, botInfoFor } from './bot.ts';
+import { guard } from './guard.ts';
 import { ChallengeBoard, CodeRegistry, type Challenge } from './challenges.ts';
 import { ClubRegistry, type Club } from './club.ts';
 import { Matchmaker } from './matchmaker.ts';
@@ -69,11 +71,13 @@ export class BattleHub {
   private readonly clubs = new ClubRegistry();
   /** Sessions of club members, by id (a session replaced by another tab is not in `sessions`). */
   private readonly clubSessions = new Map<string, Session>();
+  /** Seats held for players whose socket dropped mid-battle, by the id of the session that dropped. */
+  private readonly holds = new Map<string, { code: string; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(private readonly log: (line: string) => void = () => {}) {}
 
   startTicking(intervalMs = 1000): void {
-    this.tickTimer ??= setInterval(() => this.tick(), intervalMs);
+    this.tickTimer ??= setInterval(guard('tick', () => this.tick(), (line) => this.log(line)), intervalMs);
   }
 
   stop(): void {
@@ -84,6 +88,8 @@ export class BattleHub {
       r.players.forEach((p) => p instanceof Bot && p.stop());
     }
     this.rooms.clear();
+    for (const h of this.holds.values()) clearTimeout(h.timer);
+    this.holds.clear();
     for (const st of this.series.values()) if (st.timer) clearTimeout(st.timer);
     this.series.clear();
   }
@@ -116,6 +122,7 @@ export class BattleHub {
         this.helloed.add(s.id);
         s.send({ type: 'welcome', code: bound.code, token: bound.token, caps: [...SERVER_CAPS] });
         this.log(`hello  ${info.name} (${info.rating}) code ${bound.code}`);
+        if (typeof msg.resume === 'string' && s.caps.has('reconnect')) this.resume(s, msg.resume, bound.code, bound.displaced);
         break;
       }
       case 'challenge':
@@ -146,6 +153,7 @@ export class BattleHub {
         this.queue.remove(s.id);
         break;
       case 'progress': {
+        if (this.holds.has(s.id)) break; // a late frame of a dropped socket: the held seat's score stays frozen
         if (this.clubs.clubOf(s.id)) {
           const r = this.clubs.progress(s.id, msg);
           if (r.ok) this.afterClub(r.club, r.phaseChanged);
@@ -194,7 +202,7 @@ export class BattleHub {
 
   disconnect(s: Session): void {
     this.queue.remove(s.id);
-    this.detach(s.id);
+    if (!this.holdSeat(s)) this.detach(s.id);
     this.clubSessions.delete(s.id);
     const dropped = this.clubs.disconnect(s.id);
     if (dropped) this.afterClub(dropped.club, dropped.phaseChanged);
@@ -202,6 +210,56 @@ export class BattleHub {
     if (!this.sessions.has(s.id)) return;
     this.dropSession(s.id);
     this.codes.unbind(s.id);
+  }
+
+  /**
+   * A client that understands reconnecting lost its socket in the middle of a battle: keep its seat for
+   * BATTLE_RECONNECT_MS (its clock runs on, its score stays) instead of giving the opponent the win at once.
+   * Returns false when the seat is not held (old client, no friend code, no live battle): the caller leaves as before.
+   */
+  private holdSeat(s: Session): boolean {
+    const room = this.roomOf.get(s.id);
+    const code = this.codes.codeOf(s.id);
+    if (!room || room.ended || !code || !s.caps.has('reconnect') || !this.sessions.has(s.id) || this.holds.has(s.id)) return false;
+    const timer = setTimeout(
+      guard('seat hold', () => {
+        this.holds.delete(s.id);
+        this.log(`away   ${s.info.name} did not come back`);
+        this.detach(s.id);
+      }, (line) => this.log(line)),
+      BATTLE_RECONNECT_MS,
+    );
+    this.holds.set(s.id, { code, timer });
+    this.tellOpponent(room, s.id, { type: 'opponent-away', graceMs: BATTLE_RECONNECT_MS });
+    this.log(`away   ${s.info.name} dropped, seat held`);
+    return true;
+  }
+
+  /** Only clients that announced 'reconnect' understand the away/back messages. */
+  private tellOpponent(room: Room, id: string, msg: ServerMessage) {
+    const opp = room.opponentOf(id);
+    if (opp instanceof Session && opp.caps.has('reconnect')) opp.send(msg);
+  }
+
+  /**
+   * A hello that names the room it wants back (`resume`): when that room still holds this friend code's seat (the
+   * old socket is already closed, or still open and displaced by this one), move the seat to this session and send
+   * it where the battle stands.
+   */
+  private resume(s: Session, roomId: string, code: string, displaced?: string) {
+    const held = [...this.holds].find(([, h]) => h.code === code)?.[0];
+    const oldId = [held, displaced].find((id) => id && this.roomOf.get(id)?.id === roomId);
+    const room = oldId ? this.roomOf.get(oldId) : undefined;
+    if (!oldId || !room || room.indexOf(oldId) === -1 || room.indexOf(s.id) !== -1) return;
+    const hold = this.holds.get(oldId);
+    if (hold) clearTimeout(hold.timer);
+    this.holds.delete(oldId);
+    room.replacePlayer(oldId, s);
+    this.roomOf.delete(oldId);
+    this.roomOf.set(s.id, room);
+    this.log(`back   ${s.info.name} took the seat back`);
+    this.tellOpponent(room, s.id, { type: 'opponent-back' });
+    for (const m of room.resumeMessages(s.id)) s.send(m);
   }
 
   /**
@@ -229,14 +287,20 @@ export class BattleHub {
 
   /** Periodic work: pair waiting players, give lonely ones a bot. */
   tick(now = Date.now()): void {
-    this.matchPairs(now);
-    for (const p of this.queue.takeStale(now)) this.startWithBot(p);
-    this.codes.sweep();
-    this.tickClubs(now);
-    for (const c of this.board.takeExpired(now)) {
-      this.withdraw(c, 'expired');
-      this.log('invite expired');
-    }
+    // Each part on its own: one failing part must not stop the others from running this tick.
+    const step = (label: string, fn: () => void) => guard(label, fn, (line) => this.log(line))();
+    step('matchmaking', () => this.matchPairs(now));
+    step('bots', () => {
+      for (const p of this.queue.takeStale(now)) this.startWithBot(p);
+    });
+    step('codes', () => this.codes.sweep());
+    step('clubs', () => this.tickClubs(now));
+    step('invites', () => {
+      for (const c of this.board.takeExpired(now)) {
+        this.withdraw(c, 'expired');
+        this.log('invite expired');
+      }
+    });
   }
 
   /** In a live battle, waiting for the next game of a series, or in a club room. */
@@ -473,7 +537,7 @@ export class BattleHub {
       this.log(`series ${room.id} decided ${st.points[0]}-${st.points[1]}`);
       return;
     }
-    st.timer = setTimeout(() => this.nextGame(room), SERIES_GAP_MS);
+    st.timer = setTimeout(guard('series', () => this.nextGame(room), (line) => this.log(line)), SERIES_GAP_MS);
   }
 
   private nextGame(room: Room) {
@@ -510,7 +574,7 @@ export class BattleHub {
   private clubCreate(s: Session, rawSettings: unknown) {
     if (!this.clubReady(s)) return;
     this.leaveClub(s.id);
-    const club = this.clubs.create({ id: s.id, ...s.info }, sanitizeSettings(rawSettings));
+    const club = this.clubs.create(this.clubJoiner(s), sanitizeSettings(rawSettings));
     this.clubSessions.set(s.id, s);
     this.log(`club   ${club.code} created by ${s.info.name}`);
     this.afterClub(club, true);
@@ -521,11 +585,18 @@ export class BattleHub {
     if (here && here.code === normalizeCode(typeof rawCode === 'string' ? rawCode : '')) return this.afterClub(here, true);
     if (!this.clubReady(s)) return;
     this.leaveClub(s.id);
-    const r = this.clubs.join(rawCode, { id: s.id, ...s.info });
+    const r = this.clubs.join(rawCode, this.clubJoiner(s));
     if (!r.ok) return s.send({ type: 'club-error', reason: r.reason });
     this.clubSessions.set(s.id, s);
-    this.log(`club   ${r.club.code} ${s.info.name} joined (${r.club.members.size})`);
+    if (r.replaced) this.clubSessions.delete(r.replaced);
+    this.log(`club   ${r.club.code} ${s.info.name} ${r.replaced ? 'is back' : 'joined'} (${r.club.members.size})`);
     this.afterClub(r.club, true);
+  }
+
+  /** A club member is known by their friend code, so a player who rejoins on a new connection finds their seat. */
+  private clubJoiner(s: Session) {
+    const code = this.codes.codeOf(s.id);
+    return { id: s.id, ...(code ? { code } : {}), ...s.info };
   }
 
   private leaveClub(id: string) {
@@ -553,6 +624,6 @@ export class BattleHub {
         this.clubSessions.delete(id);
       }
     }
-    for (const club of this.clubs.all()) this.afterClub(club, changed.includes(club));
+    for (const club of this.clubs.all()) guard('club broadcast', () => this.afterClub(club, changed.includes(club)), (line) => this.log(line))();
   }
 }

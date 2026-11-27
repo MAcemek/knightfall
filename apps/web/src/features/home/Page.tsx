@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { dailyStreak, utcDateKey } from '@knightfall/core';
+import { useBackupReminder } from '../../shared/backup/useBackupReminder.ts';
 import { db } from '../../shared/db.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { useReviewSummary } from '../../shared/progress/index.ts';
@@ -39,6 +40,7 @@ export default function HomePage() {
       solved,
     };
   }, []);
+  const backupReminder = useBackupReminder();
   const reviews = useReviewSummary();
   const coach = useToday();
   const modes = coach && !coach.plan ? [...MODES, COACH_MODE] : MODES;
@@ -92,6 +94,16 @@ export default function HomePage() {
             ))}
           </ol>
         </Panel>
+      )}
+
+      {backupReminder && (
+        <Link to="/settings#backup" className={`${STRIP} transition hover:bg-ember-500/15`}>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-bold uppercase tracking-wider text-ember-400">Back up your progress</span>
+            <span className="block text-sm font-normal text-ink-300">{backupReminder}</span>
+          </span>
+          <span className="shrink-0 font-bold">Save a backup</span>
+        </Link>
       )}
 
       {(reviews?.due ?? 0) > 0 && (

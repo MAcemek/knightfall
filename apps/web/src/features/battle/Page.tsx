@@ -15,7 +15,8 @@ import { battleViewKey } from './battleView.ts';
 export default function BattlePage() {
   const api = useBattle();
   const { state } = api;
-  const club = useClub().room;
+  const clubState = useClub();
+  const club = clubState.room;
   const match = state.match;
   const [introDoneFor, setIntroDoneFor] = useState<string | null>(null);
   const inMatch = state.phase === 'matched' || state.phase === 'playing';
@@ -57,7 +58,14 @@ export default function BattlePage() {
       />
 
       {club ? (
-        <ClubRoom room={club} />
+        <>
+          {clubState.reconnecting && (
+            <div data-testid="club-reconnecting" role="status" className="mb-3 rounded-xl border border-ember-400/30 bg-ember-400/10 px-4 py-2.5 text-sm font-semibold text-ember-300">
+              Connection lost. Reconnecting to your room…
+            </div>
+          )}
+          <ClubRoom room={club} />
+        </>
       ) : match && inMatch ? (
         <BattleGame key={match.roomId} state={state} match={match} serverNow={api.serverNow} onResult={api.reportResult} onResign={api.resign} onClaim={api.claim} />
       ) : match && state.phase === 'ended' && state.end ? (

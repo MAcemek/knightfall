@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { battleReducer, initialBattleState, introTagline, ratingAfterBattle, resignText, seriesAfter, seriesText, tugShare, type BattleState, type EndInfo } from './battleState.ts';
+import { battleReducer, initialBattleState, introTagline, missingProgress, ratingAfterBattle, resignText, seriesAfter, seriesText, tugShare, type BattleState, type EndInfo } from './battleState.ts';
 
 const me = { name: 'Me', rating: 1200 };
 const run = (s: BattleState, ...actions: Parameters<typeof battleReducer>[1][]) => actions.reduce(battleReducer, s);
@@ -132,5 +132,77 @@ describe('introTagline and resignText', () => {
     expect(resignText(true, { game: 1, length: 3, me: 0, opp: 0 } as never)).toContain('ends the whole series');
     expect(resignText(true)).toContain('casual battle');
     expect(resignText(false)).toContain('rating drops');
+  });
+});
+
+describe('reconnecting mid-battle', () => {
+  const playing = () =>
+    run(
+      matched(),
+      { type: 'go' },
+      { type: 'my-result', puzzle: { id: 'a', rating: 500 }, solved: true },
+      { type: 'my-result', puzzle: { id: 'b', rating: 540 }, solved: false },
+      { type: 'server', me, msg: { type: 'opponent-progress', solved: 1, strikes: 0, index: 0 } },
+    );
+
+  it('keeps the match while reconnecting, and gives up with the old abandoned message', () => {
+    const s = battleReducer(playing(), { type: 'reconnecting', at: 500 });
+    expect(s).toMatchObject({ phase: 'playing', reconnectingSince: 500, me: { solved: 1, strikes: 1 } });
+    const gone = battleReducer(s, { type: 'connection-lost' });
+    expect(gone.phase).toBe('lobby');
+    expect(gone.error).toMatch(/abandoned/);
+    expect(gone.reconnectingSince).toBe(0);
+  });
+
+  it('only matches and playing phases can be reconnecting, and only the first drop counts', () => {
+    expect(battleReducer(initialBattleState, { type: 'reconnecting', at: 1 })).toBe(initialBattleState);
+    const s = battleReducer(playing(), { type: 'reconnecting', at: 500 });
+    expect(battleReducer(s, { type: 'reconnecting', at: 900 })).toBe(s);
+  });
+
+  it('a resume matched for the same room keeps my progress and takes the server score of the opponent', () => {
+    const s = battleReducer(playing(), { type: 'reconnecting', at: 500 });
+    const back = battleReducer(s, {
+      type: 'server', me,
+      msg: { type: 'matched', roomId: 'r1', seed: 7, opponent: { name: 'Op', rating: 1250 }, resume: { me: { solved: 1, strikes: 0 }, opp: { solved: 3, strikes: 1 } } },
+    });
+    expect(back).toMatchObject({ phase: 'playing', reconnectingSince: 0, me: { solved: 1, strikes: 1 }, opp: { solved: 3, strikes: 1 } });
+    expect(back.history).toHaveLength(2);
+    expect(back.match).toMatchObject({ roomId: 'r1', startsAt: 100 });
+  });
+
+  it('a matched for another room starts fresh even when it carries resume', () => {
+    const s = battleReducer(playing(), { type: 'reconnecting', at: 500 });
+    const next = battleReducer(s, {
+      type: 'server', me,
+      msg: { type: 'matched', roomId: 'r2', seed: 9, opponent: { name: 'Op', rating: 1250 }, resume: { me: { solved: 0, strikes: 0 }, opp: { solved: 0, strikes: 0 } } },
+    });
+    expect(next).toMatchObject({ phase: 'matched', reconnectingSince: 0, history: [], me: { solved: 0 } });
+  });
+
+  it('shows and clears the opponent-away state', () => {
+    let s = battleReducer(playing(), { type: 'server', me, msg: { type: 'opponent-away', graceMs: 15_000 } });
+    expect(s.oppAway).toBe(true);
+    s = battleReducer(s, { type: 'server', me, msg: { type: 'opponent-back' } });
+    expect(s.oppAway).toBe(false);
+    expect(battleReducer(initialBattleState, { type: 'server', me, msg: { type: 'opponent-away', graceMs: 1 } })).toBe(initialBattleState);
+    const away = battleReducer(playing(), { type: 'server', me, msg: { type: 'opponent-away', graceMs: 15_000 } });
+    expect(battleReducer(away, { type: 'ended', end }).oppAway).toBe(false);
+  });
+
+  it('missingProgress lists the results the server has not seen, with cumulative counts', () => {
+    const h = [
+      { id: 'a', rating: 500, solved: true },
+      { id: 'b', rating: 540, solved: false },
+      { id: 'c', rating: 580, solved: true },
+      { id: 'd', rating: 620, solved: true },
+    ];
+    expect(missingProgress(h, { solved: 1, strikes: 1 })).toEqual([
+      { index: 2, solved: 2, strikes: 1 },
+      { index: 3, solved: 3, strikes: 1 },
+    ]);
+    expect(missingProgress(h, { solved: 3, strikes: 1 })).toEqual([]);
+    expect(missingProgress(h, { solved: 0, strikes: 0 })).toHaveLength(4);
+    expect(missingProgress([], { solved: 0, strikes: 0 })).toEqual([]);
   });
 });

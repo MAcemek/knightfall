@@ -33,6 +33,18 @@ const CODE = /^[A-Z0-9]{3}-[A-Z0-9]{3}$/;
  */
 export async function openPlayer(browser: Browser, name: string, options: BrowserContextOptions = {}): Promise<Player> {
   const context = await browser.newContext({ serviceWorkers: 'block', ...options });
+  // Remember every WebSocket the page opens, so a test can drop the connection the way a flaky network does.
+  await context.addInitScript(() => {
+    const w = window as unknown as { __kfSockets: WebSocket[] };
+    w.__kfSockets = [];
+    const Native = window.WebSocket;
+    window.WebSocket = class extends Native {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        w.__kfSockets.push(this);
+      }
+    };
+  });
   const page = await context.newPage();
   const player: Player = { name, context, page, received: [], pageErrors: [], consoleErrors: [] };
 
@@ -57,6 +69,20 @@ export async function openPlayer(browser: Browser, name: string, options: Browse
   await page.goto('/battle');
   await expect(page.getByTestId('my-code')).toHaveText(CODE);
   return player;
+}
+
+/**
+ * Cut the player's connection like a wifi blip: the page's sockets are closed and the browser stays offline for
+ * `offlineMs`, so the app's reconnect attempts fail until the network is back. Resolves when it is back.
+ * `whileOffline` runs in between (the player keeps solving puzzles).
+ */
+export async function blip(p: Player, offlineMs: number, whileOffline?: () => Promise<void>): Promise<void> {
+  await p.page.evaluate(() => (window as unknown as { __kfSockets: WebSocket[] }).__kfSockets.forEach((s) => s.close()));
+  await p.context.setOffline(true);
+  const started = Date.now();
+  await whileOffline?.();
+  await p.page.waitForTimeout(Math.max(0, offlineMs - (Date.now() - started)));
+  await p.context.setOffline(false);
 }
 
 export async function friendCode(p: Player): Promise<string> {

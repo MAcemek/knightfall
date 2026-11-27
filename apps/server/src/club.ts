@@ -20,7 +20,10 @@ export const CLUB_BROADCAST_MS = 250;
 export type ClubStateMessage = Extract<ServerMessage, { type: 'club-state' }>;
 
 export interface ClubMember {
+  /** The id of the member's current session. It changes when they rejoin on a new connection. */
   id: string;
+  /** Friend code of the member (absent for a session that never said hello): the same code rejoining takes the seat back. */
+  code?: string;
   name: string;
   rating: number;
   solved: number;
@@ -29,6 +32,7 @@ export interface ClubMember {
   disconnectedAt: number;
   /** When the current `solved` count was reached (null until the first solve). Breaks ties in the ranking. */
   reachedAt: number | null;
+  /** When the last accepted result arrived (null before the first). */
   /** Joined during a race: not ranked until the next race. */
   spectator: boolean;
 }
@@ -42,6 +46,13 @@ export function rankMembers<T extends Pick<ClubMember, 'solved' | 'strikes' | 'r
     if (at(a) === at(b)) return 0;
     return at(a) < at(b) ? -1 : 1;
   });
+}
+
+export interface ClubJoiner {
+  id: string;
+  code?: string;
+  name: string;
+  rating: number;
 }
 
 /** One club room: a lobby, then one simultaneous race at a time. Pure state; the registry and hub drive it. */
@@ -59,7 +70,7 @@ export class Club {
   constructor(
     readonly code: string,
     readonly settings: BattleSettings,
-    host: { id: string; name: string; rating: number },
+    host: ClubJoiner,
     now: number,
   ) {
     this.hostId = host.id;
@@ -67,11 +78,33 @@ export class Club {
     this.addMember(host, false);
   }
 
-  addMember(p: { id: string; name: string; rating: number }, spectator: boolean): void {
+  addMember(p: ClubJoiner, spectator: boolean): void {
     this.members.set(p.id, { ...p, solved: 0, strikes: 0, connected: true, disconnectedAt: 0, reachedAt: null, spectator });
     this.touch();
   }
 
+  /** The member with this friend code, if any. */
+  byCode(code: string): ClubMember | undefined {
+    for (const m of this.members.values()) if (m.code === code) return m;
+    return undefined;
+  }
+
+  /** Move a member to a new session id, keeping their score, spectator flag and host seat. Returns the old id. */
+  rebind(m: ClubMember, p: ClubJoiner): string {
+    const oldId = m.id;
+    const rebuilt = new Map<string, ClubMember>();
+    for (const [id, x] of this.members) rebuilt.set(id === oldId ? p.id : id, id === oldId ? m : x);
+    this.members.clear();
+    for (const [id, x] of rebuilt) this.members.set(id, x);
+    m.id = p.id;
+    m.name = p.name;
+    m.rating = p.rating;
+    m.connected = true;
+    m.disconnectedAt = 0;
+    if (this.hostId === oldId) this.hostId = p.id;
+    this.touch();
+    return oldId;
+  }
   removeMember(id: string): void {
     this.members.delete(id);
     this.reassignHost();
@@ -165,7 +198,7 @@ export class Club {
   }
 }
 
-export type ClubResult = { ok: true; club: Club; phaseChanged: boolean } | { ok: false; reason: string };
+export type ClubResult = { ok: true; club: Club; phaseChanged: boolean; replaced?: string } | { ok: false; reason: string };
 
 export interface ClubRegistryOptions {
   now?: () => number;
@@ -219,7 +252,7 @@ export class ClubRegistry {
   }
 
   /** Open a room with `host` in it. The caller leaves the host's previous club first. */
-  create(host: { id: string; name: string; rating: number }, settings: BattleSettings): Club {
+  create(host: ClubJoiner, settings: BattleSettings): Club {
     let code = this.genCode();
     while (this.clubs.has(code)) code = this.genCode();
     const club = new Club(code, settings, host, this.now());
@@ -228,13 +261,25 @@ export class ClubRegistry {
     return club;
   }
 
-  /** Join by code. During a race the newcomer waits as a spectator for the next one. The caller leaves the previous club first. */
-  join(rawCode: unknown, p: { id: string; name: string; rating: number }): ClubResult {
+  /**
+   * Join by code. During a race the newcomer waits as a spectator for the next one. The caller leaves the previous
+   * club first. A player whose friend code is already a member (their old connection dropped) takes that seat back
+   * with score and spectator flag kept; `replaced` is then the old session id.
+   */
+  join(rawCode: unknown, p: ClubJoiner): ClubResult {
     const code = normalizeCode(typeof rawCode === 'string' ? rawCode : '');
     const club = isValidCode(code) ? this.clubs.get(code) : undefined;
     if (!club) return { ok: false, reason: 'Room not found' };
     if (club.members.has(p.id)) return { ok: true, club, phaseChanged: false };
     const now = this.now();
+    const same = p.code ? club.byCode(p.code) : undefined;
+    if (same) {
+      const oldId = club.rebind(same, p);
+      this.byMember.delete(oldId);
+      this.byMember.set(p.id, code);
+      club.lastActivity = now;
+      return { ok: true, club, phaseChanged: club.advance(now), replaced: oldId };
+    }
     const phaseChanged = club.advance(now);
     if (club.members.size >= this.maxPlayers) return { ok: false, reason: 'Room is full' };
     club.addMember(p, club.phase !== 'lobby');

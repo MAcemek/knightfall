@@ -89,6 +89,12 @@ let me: PlayerInfo = { name: 'Player', rating: defaults.battleRating };
 let lastHello: PlayerInfo | null = null;
 let stored: { code: string | null; token: string | null } = { code: null, token: null };
 let identityReady: Promise<void> = Promise.resolve();
+let resumeRoom: () => string | undefined = () => undefined;
+
+/** The battle store says which room to ask for back in `hello` (set while a dropped battle is being held for us). */
+export function setResumeProvider(fn: () => string | undefined): void {
+  resumeRoom = fn;
+}
 
 /** Current server time estimate (epoch ms). */
 export const serverNow = (): number => Date.now() + offset;
@@ -135,7 +141,12 @@ function sendHello(): void {
   void identityReady.then(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN || !helloChanged(lastHello, me)) return;
     lastHello = { ...me };
-    send({ type: 'hello', player: lastHello, caps: [...CLIENT_CAPS], ...(stored.code && stored.token ? { code: stored.code, token: stored.token } : {}) });
+    const resume = resumeRoom();
+    send({
+      type: 'hello', player: lastHello, caps: [...CLIENT_CAPS],
+      ...(stored.code && stored.token ? { code: stored.code, token: stored.token } : {}),
+      ...(resume ? { resume } : {}),
+    });
   });
 }
 
@@ -236,7 +247,7 @@ function onMessage(msg: ServerMessage): void {
       stored = { code: msg.code, token: msg.token };
       void Promise.all([setKV(KEYS.battleCode, msg.code), setKV(KEYS.battleToken, msg.token)]).catch(() => {});
       setSnap({ status: 'online', code: msg.code, moved: false, serverCaps: Array.isArray(msg.caps) ? msg.caps.filter((c): c is string => typeof c === 'string') : [] });
-      return;
+      break; // also passed on: the battle store learns from it whether the server can hold a dropped seat
     case 'error':
       if (msg.message === FRIEND_MOVED_MESSAGE) setSnap({ moved: true });
       break;

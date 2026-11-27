@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Puzzle } from '@knightfall/core';
 import type { RushRun } from '../../shared/db.ts';
-import { applyResult, formatClock, initialCore, MAX_STRIKES, modeHistory, summarize, toRushRun, type RushAttempt } from './rushLogic.ts';
+import { applyResult, clockElapsed, clockRemaining, formatClock, initialCore, pauseClock, resumeClock, startClock, MAX_STRIKES, modeHistory, summarize, toRushRun, type RushAttempt } from './rushLogic.ts';
 
 const pz = (id: string, rating: number): Puzzle => ({ id, fen: '8/8/8/8/8/8/8/8 w - - 0 1', moves: [], opponentFirst: true, rating, themes: [], source: 'lichess' });
 const att = (index: number, rating: number, solved: boolean, timeMs = 1000): RushAttempt => ({ index, puzzle: pz(`p${index}`, rating), solved, timeMs });
@@ -71,5 +71,52 @@ describe('modeHistory', () => {
     expect(h.best).toBe(Math.max(...runs.filter((r) => r.mode === '3min').map((r) => r.score)));
     expect(h.last).toEqual([7, 6, 5, 4, 3].map((i) => i * 3 % 11));
     expect(modeHistory(runs, '5min').best).toBeNull();
+  });
+});
+
+describe('run clock', () => {
+  it('counts down normally while running', () => {
+    const c = startClock(1000, 180_000);
+    expect(clockRemaining(c, 1000)).toBe(180_000);
+    expect(clockRemaining(c, 31_000)).toBe(150_000);
+    expect(clockElapsed(c, 31_000)).toBe(30_000);
+  });
+
+  it('a 3 s load does not reduce the remaining time', () => {
+    let c = startClock(0, 180_000);
+    c = pauseClock(c, 10_000);
+    expect(clockRemaining(c, 11_500)).toBe(170_000);
+    expect(clockRemaining(c, 13_000)).toBe(170_000);
+    c = resumeClock(c, 13_000);
+    expect(clockRemaining(c, 13_000)).toBe(170_000);
+    expect(clockRemaining(c, 15_000)).toBe(168_000);
+    expect(clockElapsed(c, 15_000)).toBe(12_000);
+  });
+
+  it('pausing twice or resuming while running changes nothing', () => {
+    let c = pauseClock(startClock(0, 60_000), 5_000);
+    expect(pauseClock(c, 9_000).pausedAt).toBe(5_000);
+    c = resumeClock(c, 8_000);
+    expect(resumeClock(c, 20_000)).toBe(c);
+  });
+
+  it('the clock still runs out after the waits, and survival has no limit', () => {
+    let c = startClock(0, 10_000);
+    c = resumeClock(pauseClock(c, 2_000), 7_000);
+    expect(clockRemaining(c, 14_999)).toBe(1);
+    expect(clockRemaining(c, 15_000)).toBe(0);
+    const s = startClock(0, null);
+    expect(clockElapsed(resumeClock(pauseClock(s, 1_000), 4_000), 6_000)).toBe(3_000);
+  });
+
+  it('strikes still end the run as before', () => {
+    let core = initialCore();
+    let out = applyResult(core, att(0, 600, false));
+    core = out.core;
+    for (let i = 1; i < MAX_STRIKES; i++) {
+      out = applyResult(core, att(i, 600, false));
+      core = out.core;
+    }
+    expect(out.struckOut).toBe(true);
   });
 });

@@ -42,8 +42,26 @@ describe('clubReducer', () => {
   it('resets on leave and reports a lost connection', () => {
     const s = feed(state('lobby', [pl('a', 0)]));
     expect(clubReducer(s, { type: 'left' })).toEqual(initialClubState);
-    expect(clubReducer(s, { type: 'connection-lost' }).error).toMatch(/Lost connection/);
+    expect(clubReducer({ ...initialClubState, pending: 'join' }, { type: 'connection-lost' }).error).toMatch(/Lost connection/);
     expect(clubReducer(initialClubState, { type: 'connection-lost' })).toBe(initialClubState);
+  });
+  it('keeps the room on screen after a lost connection, until it is joined again or given up', () => {
+    const s = feed(state('playing', [pl('a', 1)], { seed: 1, startsAt: 5, endsAt: 9 }));
+    const lost = clubReducer(s, { type: 'connection-lost' });
+    expect(lost).toMatchObject({ reconnecting: true, error: null, room: { code: 'ABC234' } });
+    expect(clubReducer(lost, { type: 'connection-lost' })).toBe(lost);
+    // The server answers the new join with a state of the same room: back to normal.
+    const back = clubReducer(lost, { type: 'server', msg: state('playing', [pl('a2', 2)], { seed: 1, startsAt: 5, endsAt: 9, you: 'a2' }) });
+    expect(back).toMatchObject({ reconnecting: false, room: { you: 'a2' } });
+    // The room is gone: closed for me, as before.
+    const failed = clubReducer(lost, { type: 'rejoin-failed' });
+    expect(failed).toEqual({ ...initialClubState, error: 'Lost connection to the battle server. The club room was closed for you.' });
+    expect(clubReducer(s, { type: 'rejoin-failed' })).toBe(s);
+  });
+  it('a racer who rejoins is still a racer', () => {
+    const s = feed(state('lobby', [pl('a', 0)]), state('playing', [pl('a', 1)], { startsAt: 5, endsAt: 9, seed: 1 }));
+    const back = clubReducer(clubReducer(s, { type: 'connection-lost' }), { type: 'server', msg: state('playing', [pl('a2', 1)], { startsAt: 5, endsAt: 9, seed: 1, you: 'a2' }) });
+    expect(back.room?.participating).toBe(true);
   });
 });
 

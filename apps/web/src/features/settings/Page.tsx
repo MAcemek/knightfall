@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { readStorageLine } from '../../shared/storage/persist.ts';
 import { Board } from '../../shared/Board/index.ts';
 import { sfx } from '../../shared/fx/index.ts';
 import { useInstall } from '../../shared/pwa/install.ts';
@@ -15,6 +16,11 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
   const { view: installState, install } = useInstall();
+  const [storage, setStorage] = useState('');
+
+  useEffect(() => {
+    void readStorageLine().then(setStorage);
+  }, []);
 
   useEffect(() => {
     if (profile) setName(profile.name);
@@ -153,6 +159,7 @@ export default function SettingsPage() {
 
       <div className="animate-rise" style={{ animationDelay: '200ms' }}>
         <BackupPanel />
+        {storage && <p className="mt-2 px-1 text-sm text-ink-400">{storage}</p>}
       </div>
 
       {installState !== 'none' && (

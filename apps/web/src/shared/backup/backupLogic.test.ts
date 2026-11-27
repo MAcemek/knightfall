@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REPORT_VERSION } from '@knightfall/core';
 import { db } from '../db.ts';
-import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, DEVICE_KEYS, backupFileName, buildBackup, parseBackup, type TableName } from './backupLogic.ts';
+import { BACKUP_FORMAT, sanitizeNameForFile, BACKUP_TABLES, BACKUP_VERSION, DEVICE_KEYS, backupFileName, buildBackup, parseBackup, type TableName } from './backupLogic.ts';
 
 const DB_VERSION = 5;
 
@@ -307,5 +307,19 @@ describe('backupFileName', () => {
   it('uses the local date', () => {
     expect(backupFileName(new Date(2026, 0, 5, 23, 59))).toBe('knightfall-backup-2026-01-05.json');
     expect(backupFileName(new Date(2026, 10, 23))).toBe('knightfall-backup-2026-11-23.json');
+  });
+});
+
+describe('backup file name with a player name', () => {
+  it('puts a sanitised name before the date', () => {
+    expect(backupFileName(new Date(2026, 0, 5), 'Swift Knight 42')).toBe('knightfall-backup-swift-knight-42-2026-01-05.json');
+    expect(backupFileName(new Date(2026, 0, 5), 'Zoë / Ünal!')).toBe('knightfall-backup-zo-nal-2026-01-05.json');
+  });
+  it('falls back to the plain name when nothing usable is left', () => {
+    expect(backupFileName(new Date(2026, 0, 5), '日本')).toBe('knightfall-backup-2026-01-05.json');
+    expect(sanitizeNameForFile(null)).toBe('');
+  });
+  it('lastBackupAt is device-only', () => {
+    expect(DEVICE_KEYS).toContain('lastBackupAt');
   });
 });

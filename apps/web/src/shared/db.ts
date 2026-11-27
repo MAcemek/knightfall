@@ -329,6 +329,8 @@ export const KEYS = {
   coachLibrary: 'coachLibrary',
   /** The bot game being played (features/play). Belongs to this device. */
   botGame: 'botGame',
+  /** ISO time a backup file was last saved from this device (shared/backup). Device-only: never in a backup. */
+  lastBackupAt: 'lastBackupAt',
 } as const;
 
 export interface StreakState {

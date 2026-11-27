@@ -62,6 +62,10 @@ export interface BattleState {
   history: PlayedPuzzle[];
   end: EndInfo | null;
   rematch: RematchState;
+  /** When the connection dropped mid-battle (0 while connected): the match is kept for a while to take the seat back. */
+  reconnectingSince: number;
+  /** The server says the opponent's connection dropped; their seat is held. */
+  oppAway: boolean;
 }
 
 export const initialBattleState: BattleState = {
@@ -77,6 +81,8 @@ export const initialBattleState: BattleState = {
   history: [],
   end: null,
   rematch: 'none',
+  reconnectingSince: 0,
+  oppAway: false,
 };
 
 export type BattleAction =
@@ -84,6 +90,8 @@ export type BattleAction =
   | { type: 'search-started'; at: number }
   | { type: 'cancel' }
   | { type: 'to-lobby'; error?: string | null }
+  /** The connection dropped mid-battle and the server holds the seat: keep the match and try to get back. */
+  | { type: 'reconnecting'; at: number }
   | { type: 'connection-lost' }
   | { type: 'server'; msg: ServerMessage; me: PlayerInfo }
   | { type: 'go' }
@@ -105,6 +113,8 @@ export function battleReducer(s: BattleState, a: BattleAction): BattleState {
       return s.phase === 'searching' || s.phase === 'connecting' ? { ...s, phase: 'lobby' } : s;
     case 'to-lobby':
       return { ...initialBattleState, error: a.error ?? null };
+    case 'reconnecting':
+      return inMatch(s.phase) && !s.reconnectingSince ? { ...s, reconnectingSince: a.at } : s;
     case 'connection-lost':
       if (s.phase === 'ended') return { ...s, rematch: 'unavailable' };
       if (s.phase === 'lobby') return s;
@@ -117,7 +127,7 @@ export function battleReducer(s: BattleState, a: BattleAction): BattleState {
       return { ...s, me, history: [...s.history, { ...a.puzzle, solved: a.solved }] };
     }
     case 'ended':
-      return { ...s, phase: 'ended', end: a.end, me: a.end.you, opp: a.end.opponent, rematch: 'none' };
+      return { ...s, phase: 'ended', end: a.end, me: a.end.you, opp: a.end.opponent, rematch: 'none', reconnectingSince: 0, oppAway: false };
     case 'rematch-requested':
       return s.phase === 'ended' && s.rematch !== 'unavailable' ? { ...s, rematch: 'requested' } : s;
     case 'rematch-expired':
@@ -134,6 +144,10 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
     case 'queued':
       return s.phase === 'searching' ? { ...s, queuePosition: msg.position } : s;
     case 'matched':
+      // A seat taken back after a drop: the same room goes on from where the client is; only the opponent's score is the server's.
+      if (msg.resume && s.match && s.match.roomId === msg.roomId && inMatch(s.phase)) {
+        return { ...s, opp: { ...msg.resume.opp }, oppTick: s.oppTick + 1, reconnectingSince: 0, oppAway: false, error: null };
+      }
       return {
         ...s,
         phase: 'matched',
@@ -145,9 +159,15 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
         history: [],
         end: null,
         rematch: 'none',
+        reconnectingSince: 0,
+        oppAway: false,
       };
     case 'start':
       return s.match && s.phase === 'matched' ? { ...s, match: { ...s.match, startsAt: msg.startsAt, endsAt: msg.endsAt } } : s;
+    case 'opponent-away':
+      return inMatch(s.phase) ? { ...s, oppAway: true } : s;
+    case 'opponent-back':
+      return s.oppAway ? { ...s, oppAway: false } : s;
     case 'opponent-progress':
       if (!inMatch(s.phase)) return s;
       return { ...s, opp: { solved: msg.solved, strikes: msg.strikes }, oppTick: s.oppTick + 1 };
@@ -163,6 +183,31 @@ function onServer(s: BattleState, msg: ServerMessage, me: PlayerInfo): BattleSta
       // 'end' is handled by the battle store (needs persistence) and dispatched as 'ended'; 'pong' adjusts the clock.
       return s;
   }
+}
+
+/** A `progress` message as the client sends it after a puzzle. */
+export interface ProgressReport {
+  index: number;
+  solved: number;
+  strikes: number;
+}
+
+/**
+ * The progress messages the server has not seen: every played puzzle after the first `serverScore.solved +
+ * serverScore.strikes` of them. After a reconnect the server tells us its count, and we send the rest again
+ * (a message sent into a dying socket is lost without any error).
+ */
+export function missingProgress(history: readonly PlayedPuzzle[], serverScore: BattleScore): ProgressReport[] {
+  const seen = serverScore.solved + serverScore.strikes;
+  const out: ProgressReport[] = [];
+  let solved = 0;
+  let strikes = 0;
+  history.forEach((h, index) => {
+    if (h.solved) solved++;
+    else strikes++;
+    if (index >= seen) out.push({ index, solved, strikes });
+  });
+  return out;
 }
 
 /** Share of the tug-of-war bar that belongs to me (0..1). */

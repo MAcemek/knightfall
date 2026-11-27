@@ -9,6 +9,8 @@ function fake(id: string, rating = 1200): Participant & { inbox: ServerMessage[]
   return { id, isBot: false, info: { name: id, rating }, inbox, send: (m) => inbox.push(m) };
 }
 
+/** More than the 250 ms the server wants between two results of one player. */
+const RESULT_GAP = 300;
 const ends = (p: { inbox: ServerMessage[] }) => p.inbox.filter((m): m is Extract<ServerMessage, { type: 'end' }> => m.type === 'end');
 
 beforeEach(() => {
@@ -57,9 +59,12 @@ describe('Room', () => {
     const { a, b, room } = make();
     vi.advanceTimersByTime(3000);
     room.progress('b', { index: 0, solved: 1, strikes: 0 });
+    vi.advanceTimersByTime(RESULT_GAP);
     room.progress('a', { index: 0, solved: 0, strikes: 1 });
+    vi.advanceTimersByTime(RESULT_GAP);
     room.progress('a', { index: 1, solved: 0, strikes: 2 });
     expect(room.ended).toBe(false);
+    vi.advanceTimersByTime(RESULT_GAP);
     room.progress('a', { index: 2, solved: 0, strikes: 3 });
     expect(room.ended).toBe(true);
     expect(ends(a)[0]).toMatchObject({ result: 'loss', reason: 'strikes' });
@@ -70,10 +75,16 @@ describe('Room', () => {
     const { a, b, room } = make();
     vi.advanceTimersByTime(3000);
     room.progress('a', { index: 0, solved: 1, strikes: 0 });
-    for (let i = 1; i <= 3; i++) room.progress('a', { index: i, solved: 1, strikes: i });
+    for (let i = 1; i <= 3; i++) {
+      vi.advanceTimersByTime(RESULT_GAP);
+      room.progress('a', { index: i, solved: 1, strikes: i });
+    }
     expect(room.ended).toBe(false);
     room.progress('b', { index: 0, solved: 1, strikes: 0 });
-    for (let i = 1; i <= 3; i++) room.progress('b', { index: i, solved: 1, strikes: i });
+    for (let i = 1; i <= 3; i++) {
+      vi.advanceTimersByTime(RESULT_GAP);
+      room.progress('b', { index: i, solved: 1, strikes: i });
+    }
     expect(room.ended).toBe(true);
     expect(ends(a)[0]).toMatchObject({ result: 'draw', reason: 'strikes' });
     expect(ends(b)[0]).toMatchObject({ result: 'draw', reason: 'strikes' });
@@ -182,7 +193,10 @@ describe('Room vs bot: play on and claim', () => {
     return { human, bot, room };
   };
   const strikeOut = (room: Room, id: string) => {
-    for (let k = 1; k <= 3; k++) room.progress(id, { index: k - 1, solved: 0, strikes: k });
+    for (let k = 1; k <= 3; k++) {
+      vi.advanceTimersByTime(RESULT_GAP);
+      room.progress(id, { index: k - 1, solved: 0, strikes: k });
+    }
   };
 
   it('does not end when the bot strikes out behind a human, and the human can claim', () => {
@@ -190,6 +204,7 @@ describe('Room vs bot: play on and claim', () => {
     room.progress('h', { index: 0, solved: 1, strikes: 0 });
     strikeOut(room, 'bot');
     expect(room.ended).toBe(false);
+    vi.advanceTimersByTime(RESULT_GAP);
     room.progress('h', { index: 1, solved: 2, strikes: 0 }); // keeps padding the score
     expect(room.claim('h')).toBe(true);
     expect(ends(human)[0]).toMatchObject({ result: 'win', reason: 'claimed', you: { solved: 2 } });
@@ -201,6 +216,7 @@ describe('Room vs bot: play on and claim', () => {
     expect(room.claim('h')).toBe(false);
     strikeOut(room, 'bot');
     expect(room.claim('h')).toBe(false); // 0 - 0, not ahead
+    vi.advanceTimersByTime(RESULT_GAP);
     room.progress('h', { index: 0, solved: 1, strikes: 0 });
     expect(room.claim('h')).toBe(true);
   });

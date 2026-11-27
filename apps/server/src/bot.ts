@@ -1,4 +1,5 @@
 import { BATTLE_MAX_STRIKES, BATTLE_RAMP, rampRating, type PlayerInfo, type ServerMessage } from '@knightfall/core';
+import { guard } from './guard.ts';
 import { newId, type Participant } from './participant.ts';
 
 const TIERS: { max: number; name: string }[] = [
@@ -88,7 +89,7 @@ export class Bot implements Participant {
   }
 
   private later(fn: () => void, ms: number) {
-    this.timers.push(setTimeout(fn, ms));
+    this.timers.push(setTimeout(guard('bot', fn), ms));
   }
 
   private step() {

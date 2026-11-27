@@ -34,9 +34,15 @@ export interface SeriesInfo {
   opp: number;
 }
 /** Capabilities a client announces in `hello`. */
-export const CLIENT_CAPS = ['settings', 'club'] as const;
-/** Features this server supports, announced in `welcome` (an older server sends none). */
-export const SERVER_CAPS = ['settings', 'club'] as const;
+export const CLIENT_CAPS = ['settings', 'club', 'reconnect'] as const;
+/**
+ * Features this server supports, announced in `welcome` (an older server sends none).
+ * 'reconnect': a 1v1 seat is held for BATTLE_RECONNECT_MS after a socket drop, a `hello` with `resume` takes it
+ * back, and a club member who joins again with the same friend code gets their place back.
+ */
+export const SERVER_CAPS = ['settings', 'club', 'reconnect'] as const;
+/** How long a dropped player's seat in a 1v1 battle is held before the opponent wins. */
+export const BATTLE_RECONNECT_MS = 15_000;
 export const CLUB_MAX_PLAYERS = 30;
 /** A club room with no activity this long is closed. */
 export const CLUB_IDLE_MS = 30 * 60 * 1000;
@@ -85,7 +91,7 @@ export type ClientMessage =
   | { type: 'claim' }
   | { type: 'ping' }
   /** Sent on every (re)connect and when name/rating changes. Old clients never send it. */
-  | { type: 'hello'; player: PlayerInfo; code?: string; token?: string; caps?: string[] }
+  | { type: 'hello'; player: PlayerInfo; code?: string; token?: string; caps?: string[]; /** Room id of a battle this client is trying to get back into after a drop (needs the 'reconnect' cap). */ resume?: string }
   | { type: 'challenge'; code: string; settings?: BattleSettings; series?: 1 | 3 }
   | { type: 'challenge-cancel' }
   | { type: 'challenge-respond'; id: string; accept: boolean }
@@ -123,10 +129,16 @@ export type ServerMessage =
       opponentCode?: string;
       settings?: BattleSettings;
       series?: SeriesInfo;
+      /** Only when a dropped player takes their seat back: the scores of both sides right now. */
+      resume?: { me: BattleScore; opp: BattleScore };
     }
   /** startsAt/endsAt are server epoch ms; clients use serverNow to compute a clock offset. */
   | { type: 'start'; startsAt: number; endsAt: number; serverNow: number }
   | { type: 'opponent-progress'; solved: number; strikes: number; index: number }
+  /** Only to clients that announced 'reconnect': the opponent's connection dropped, their seat is held for `graceMs`. */
+  | { type: 'opponent-away'; graceMs: number }
+  /** The opponent is connected again. */
+  | { type: 'opponent-back' }
   | {
       type: 'end';
       result: 'win' | 'loss' | 'draw';

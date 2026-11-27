@@ -5,7 +5,7 @@ import { prefetchSequence, sequencePuzzle } from '../../shared/puzzleSource.ts';
 import { db, type RushMode } from '../../shared/db.ts';
 import { sfx } from '../../shared/fx/index.ts';
 import { beginTimedPlay } from '../../shared/timedPlay.ts';
-import { applyResult, initialCore, RUSH_MODES, toRushRun, type RushModeConfig, type RunCore } from './rushLogic.ts';
+import { applyResult, clockElapsed, clockRemaining, initialCore, pauseClock, resumeClock, RUSH_MODES, startClock, toRushRun, type RunClock, type RushModeConfig, type RunCore } from './rushLogic.ts';
 
 export type RushPhase = 'countdown' | 'playing' | 'ending' | 'over';
 export type EndReason = 'time' | 'strikes' | 'quit';
@@ -46,6 +46,8 @@ export interface RushGame {
 const COUNT_STEP_MS = 750;
 const NEXT_AFTER_SOLVE_MS = 250;
 const NEXT_AFTER_MISS_MS = 600;
+/** How many puzzles are fetched ahead of the one on the board. */
+const PREFETCH_AHEAD = 5;
 
 /** The i-th puzzle of this run, skipping any puzzle already seen in it (same buckets, alternate seeds). */
 async function pickPuzzle(seed: number, index: number, ramp: RushModeConfig['ramp'], seen: Set<string>): Promise<Puzzle> {
@@ -93,8 +95,7 @@ export function useRushGame(mode: RushMode): RushGame {
   const seen = useRef(new Set<string>());
   const indexRef = useRef(0);
   const loadToken = useRef(0);
-  const startAt = useRef(0);
-  const endAt = useRef(0);
+  const clock = useRef<RunClock>(startClock(0, null));
   const flashKey = useRef(0);
 
   const later = (fn: () => void, ms: number) => {
@@ -108,12 +109,15 @@ export function useRushGame(mode: RushMode): RushGame {
   const show = useCallback((index: number, p: Promise<Puzzle>) => {
     const token = ++loadToken.current;
     setError(null);
+    // The clock waits for the puzzle (also after a failed load, until a retry succeeds).
+    clock.current = pauseClock(clock.current, performance.now());
     p.then((pz) => {
       if (!alive.current || token !== loadToken.current || phaseRef.current !== 'playing') return;
+      clock.current = resumeClock(clock.current, performance.now());
       seen.current.add(pz.id);
       setCurrentIndex(index);
       setPuzzle(pz);
-      prefetchSequence(seed, index + 1, 3, cfg.ramp);
+      prefetchSequence(seed, index + 1, PREFETCH_AHEAD, cfg.ramp);
     }).catch((e: unknown) => {
       if (!alive.current || token !== loadToken.current) return;
       setError(e instanceof Error ? e.message : 'Could not load the next puzzle.');
@@ -152,8 +156,8 @@ export function useRushGame(mode: RushMode): RushGame {
     setPhase('ending');
     setEndReason(reason);
     setShowGo(false);
-    if (cfg.durationMs) setRemaining(reason === 'time' ? 0 : Math.max(0, endAt.current - performance.now()));
-    else setElapsed(performance.now() - startAt.current);
+    if (cfg.durationMs) setRemaining(reason === 'time' ? 0 : clockRemaining(clock.current, performance.now()));
+    else setElapsed(clockElapsed(clock.current, performance.now()));
     if (reason === 'time') sfx.go();
     later(() => setPhase('over'), reason === 'quit' ? 350 : 1400);
     void persist(coreRef.current);
@@ -195,7 +199,7 @@ export function useRushGame(mode: RushMode): RushGame {
     seen.current = new Set();
     const first = pickPuzzle(seed, 0, cfg.ramp, seen.current);
     first.catch(() => {}); // surfaced via show() at "Go"
-    prefetchSequence(seed, 1, 3, cfg.ramp);
+    prefetchSequence(seed, 1, PREFETCH_AHEAD, cfg.ramp);
     setCount(3);
     sfx.countdown();
     later(() => {
@@ -210,8 +214,7 @@ export function useRushGame(mode: RushMode): RushGame {
       setCount(0);
       sfx.go();
       setShowGo(true);
-      startAt.current = performance.now();
-      endAt.current = startAt.current + (cfg.durationMs ?? 0);
+      clock.current = startClock(performance.now(), cfg.durationMs);
       setPhase('playing');
       indexRef.current = 0;
       show(0, first);
@@ -231,7 +234,7 @@ export function useRushGame(mode: RushMode): RushGame {
     const id = setInterval(() => {
       const now = performance.now();
       if (cfg.durationMs) {
-        const rem = Math.max(0, endAt.current - now);
+        const rem = clockRemaining(clock.current, now);
         setRemaining(rem);
         const sec = Math.ceil(rem / 1000);
         if (rem > 0 && sec <= 10 && sec !== lastTick) {
@@ -240,7 +243,7 @@ export function useRushGame(mode: RushMode): RushGame {
         }
         if (rem <= 0) end('time');
       } else {
-        setElapsed(now - startAt.current);
+        setElapsed(clockElapsed(clock.current, now));
       }
     }, 100);
     return () => clearInterval(id);

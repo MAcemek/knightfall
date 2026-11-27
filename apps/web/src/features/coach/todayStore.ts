@@ -3,14 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Attempt, type WoodSet } from '../../shared/db.ts';
 import { getAnalysisPrefs } from '../../shared/analysis/index.ts';
 import { getSettings } from '../../shared/settings.ts';
-import { isDateKey, localDateKey, weekStart } from '../../shared/localDate.ts';
+import { isDateKey, localDateKey } from '../../shared/localDate.ts';
 import { readBlunderTotals } from '../blundercheck/blunderStore.ts';
 import { dayCount } from '../blundercheck/blunderLogic.ts';
 import { activeSet, readSetAttempts } from '../woodpecker/woodStore.ts';
 import { currentCycle, isUsableSet, pace } from '../woodpecker/woodLogic.ts';
 import { adaptTasks, checkTarget, countFocusAttempts, FOCUS_TARGET, NO_ADAPT, WOOD_AHEAD_MINUTES, woodAdvice, type Adapt } from './adaptLogic.ts';
 import { EMPTY_SNAPSHOT, readSnapshot } from './adaptStore.ts';
-import type { CoachPlan } from './planLogic.ts';
+import { planWeekStart, type CoachPlan } from './planLogic.ts';
 import { readPlan } from './planStore.ts';
 import { putDay } from './stopStore.ts';
 import { sanitizeNotes } from './stopRules.ts';
@@ -33,7 +33,7 @@ export interface TodayData {
   summary: DaySummary;
   /** The first task that counts and is not done; null when all are done. */
   next: Task | null;
-  /** Days of this Monday to Sunday week with a task done, counted the way the Week page counts them. */
+  /** Days of this plan week with a task done, counted the way the Week page counts them. */
   weekDays: number;
 }
 
@@ -108,7 +108,8 @@ export async function readToday(today: string, now = Date.now()): Promise<TodayD
     woodMinutes: advice?.kind === 'ahead' ? WOOD_AHEAD_MINUTES : undefined,
   });
   const ticks = cleanTicks(dayRow?.ticks);
-  const weekDays = plan ? weekActivity({ ...(await readWeek(weekStart(today), today)), monday: weekStart(today), today, plan }).daysActive : 0;
+  const weekFirst = plan ? planWeekStart(plan.startDate, today) : '';
+  const weekDays = plan ? weekActivity({ ...(await readWeek(weekFirst, today)), weekFirst, today, plan }).daysActive : 0;
   return { today, plan, tasks, auto, ticks, summary: summary(tasks, auto, ticks), next: nextTask(tasks, auto, ticks), weekDays };
 }
 

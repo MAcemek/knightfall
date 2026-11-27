@@ -13,13 +13,13 @@ import type { WeekGame, WeekInput } from './weekLogic.ts';
 
 /** The week's rows from the local database. Every query is bounded by the week. The counting is in weekLogic.ts. */
 
-export type WeekData = Omit<WeekInput, 'monday' | 'today' | 'plan'>;
+export type WeekData = Omit<WeekInput, 'weekFirst' | 'today' | 'plan'>;
 
 /** Reads only, so it is safe inside a live query. The check and focus targets are the ones the Today list had on `today` (or the week's last day for a past week). */
-export async function readWeek(monday: string, today: string = localDateKey(new Date())): Promise<WeekData> {
-  const sunday = addDays(monday, 6);
-  const start = dayBounds(monday).start;
-  const end = dayBounds(sunday).end;
+export async function readWeek(weekFirst: string, today: string = localDateKey(new Date())): Promise<WeekData> {
+  const weekLast = addDays(weekFirst, 6);
+  const start = dayBounds(weekFirst).start;
+  const end = dayBounds(weekLast).end;
   const [prefs, checkTotals, activity, attempts, rush, rows, selfReviews, days, ratings, themeRows] = await Promise.all([
     getAnalysisPrefs(),
     readBlunderTotals(),
@@ -28,11 +28,11 @@ export async function readWeek(monday: string, today: string = localDateKey(new 
     db.rushRuns.where('at').between(start, end, true, false).toArray(),
     db.games.where('playedAt').between(start, end, true, false).toArray(),
     db.selfReviews.where('at').between(start, end, true, false).toArray(),
-    db.coachDays.where('date').between(monday, sunday, true, true).toArray(),
-    db.ratingLog.where('date').between(monday, sunday, true, true).toArray(),
+    db.coachDays.where('date').between(weekFirst, weekLast, true, true).toArray(),
+    db.ratingLog.where('date').between(weekFirst, weekLast, true, true).toArray(),
     db.attempts.where('at').between(start, end, true, false).filter((a) => a.mode === 'theme').toArray(),
   ]);
-  const snapshot = await readSnapshot(dayBounds(today < sunday ? today : sunday).start, prefs);
+  const snapshot = await readSnapshot(dayBounds(today < weekLast ? today : weekLast).start, prefs);
   // Cycles finished this week, from the sets the week's attempts belong to.
   const setIds = [...new Set(attempts.map((a) => a.setId).filter((id): id is string => !!id))];
   const sets = (await db.woodSets.bulkGet(setIds)).filter((s): s is WoodSet => !!s && Array.isArray(s.cycles));
@@ -75,7 +75,7 @@ export async function readWeek(monday: string, today: string = localDateKey(new 
   };
 }
 
-/** Live rows of the week that starts on `monday`. Undefined while loading. */
-export function useWeekData(monday: string): WeekData | undefined {
-  return useLiveQuery(() => readWeek(monday), [monday]);
+/** Live rows of the week that starts on `weekFirst`. Undefined while loading. */
+export function useWeekData(weekFirst: string): WeekData | undefined {
+  return useLiveQuery(() => readWeek(weekFirst), [weekFirst]);
 }

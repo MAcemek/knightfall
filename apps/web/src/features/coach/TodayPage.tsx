@@ -135,7 +135,7 @@ function NextUp({ task, auto, today }: { task: Task | null; auto: TodayData['aut
 }
 
 function TodayBody({ plan, data, sync }: { plan: CoachPlan; data: TodayData; sync: CoachSync }) {
-  const stop = useStopState(data.today);
+  const stop = useStopState(data.today, plan.startDate);
   const { today, tasks, auto, ticks, summary, next } = data;
   const w = weekInfo(plan.startDate, today);
   const open = tasks.filter((t) => !isTaskDone(t, auto, ticks));

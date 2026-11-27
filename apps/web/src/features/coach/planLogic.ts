@@ -1,3 +1,4 @@
+import { addDays } from '@knightfall/core';
 import type { CoachSpeed } from '../../shared/db.ts';
 import { USERNAME } from '../../shared/importers/mappers.ts';
 import { daysBetween, isDateKey } from '../../shared/localDate.ts';
@@ -111,6 +112,11 @@ export function weekInfo(startDate: string, today: string): WeekInfo {
   if (offset >= PLAN_DAYS) return { state: 'after', day: PLAN_DAYS, week: 12, phase: 3, offset };
   const week = Math.floor(offset / 7) + 1;
   return { state: 'running', day: offset + 1, week, phase: Math.ceil(week / 4) as 1 | 2 | 3, offset };
+}
+
+/** First day of the plan week that `date` falls in (weeks of 7 days from `startDate`; before the start it counts backwards). */
+export function planWeekStart(startDate: string, date: string): string {
+  return addDays(startDate, 7 * Math.floor(daysBetween(startDate, date) / 7));
 }
 
 export const PHASES: Record<1 | 2 | 3, string> = {

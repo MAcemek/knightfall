@@ -25,13 +25,13 @@ export interface StopState {
   lastSync: number | null;
 }
 
-/** Bullet count and blitz streak for `today`, live. Undefined while loading. */
-export function useStopState(today: string): StopState | undefined {
+/** Bullet count (in the plan week that starts from `startDate`) and blitz streak for `today`, live. Undefined while loading. */
+export function useStopState(today: string, startDate?: string): StopState | undefined {
   return useLiveQuery(async () => {
     const [activity, day] = await Promise.all([readActivity(), db.coachDays.get(today)]);
     const notes = sanitizeNotes(day?.blitz);
-    return { bullet: bulletThisWeek(activity.games, today), blitz: blitzSession(activity.games, notes, today), notes, lastSync: activity.lastSync };
-  }, [today]);
+    return { bullet: bulletThisWeek(activity.games, today, startDate), blitz: blitzSession(activity.games, notes, today), notes, lastSync: activity.lastSync };
+  }, [today, startDate]);
 }
 
 /** Saves a day row; a row with nothing in it is removed. */

@@ -1,4 +1,5 @@
 import { dayKeyOf, isDateKey, weekStart } from '../../shared/localDate.ts';
+import { planWeekStart } from './planLogic.ts';
 
 /**
  * Stop rules for fast games: at most 10 bullet games a week and a stop after two blitz losses in a row.
@@ -91,14 +92,14 @@ export interface BulletWeek {
   state: BulletState;
 }
 
-/** Bullet games from this week's Monday to `today`, local days. */
-export function bulletThisWeek(games: readonly ActivityGame[], today: string): BulletWeek {
-  const monday = weekStart(today);
+/** Bullet games from the first day of this plan week (this week's Monday without a plan) to `today`, local days. */
+export function bulletThisWeek(games: readonly ActivityGame[], today: string, startDate?: string): BulletWeek {
+  const first = startDate ? planWeekStart(startDate, today) : weekStart(today);
   let count = 0;
   for (const g of games) {
     if (g.speed !== 'bullet') continue;
     const day = dayKeyOf(g.at);
-    if (day >= monday && day <= today) count++;
+    if (day >= first && day <= today) count++;
   }
   return { count, limit: BULLET_LIMIT, state: count >= BULLET_LIMIT ? 'full' : count >= BULLET_NEAR ? 'near' : 'ok' };
 }

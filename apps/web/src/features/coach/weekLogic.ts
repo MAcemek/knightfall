@@ -1,47 +1,50 @@
 import { addDays } from '@knightfall/core';
 import type { CoachDay, CoachSpeed, GameSource, RatingLogRow } from '../../shared/db.ts';
-import { daysBetween, dayKeyOf, weekStart } from '../../shared/localDate.ts';
+import { daysBetween, dayKeyOf } from '../../shared/localDate.ts';
 import { dayScore, type BlunderTotals } from '../blundercheck/blunderLogic.ts';
-import { COACH_SPEEDS, PLAN_DAYS, type CoachPlan } from './planLogic.ts';
+import { COACH_SPEEDS, PLAN_DAYS, planWeekStart, type CoachPlan } from './planLogic.ts';
 import { CLOCK_LOW, clockShare, ratingDelta, ratingSeries, targetLine, type ClockRow, type ClockStat } from './progressLogic.ts';
 import { BULLET_LIMIT, blitzSession, type CoachActivity } from './stopRules.ts';
 import { BLUNDER_HIGH, FOCUS_TARGET } from './adaptLogic.ts';
 import { CHECK_TARGET, RAPID_TARGET, WOOD_MINUTES, cleanTicks, todayTasks, type ListId } from './todayLogic.ts';
 
-/** The weekly review: counts for one local Monday to Sunday of the plan. Pure functions over plain arrays, no storage. */
+/**
+ * The weekly review: counts for one week of the plan. A plan week is 7 days from the plan's start date (the same weeks
+ * as the Today page's "Week N of 12"), not a calendar Monday to Sunday. Pure functions over plain arrays, no storage.
+ */
 
 /* ---------- which week ---------- */
 
 export interface WeekRange {
-  /** Monday of the week the plan starts in. */
+  /** First day of plan week 1 (the plan's start date). */
   first: string;
-  /** Monday of the week the plan ends in. */
+  /** First day of the last plan week (week 12). */
   last: string;
 }
 
 export function planWeekRange(startDate: string): WeekRange {
-  return { first: weekStart(startDate), last: weekStart(addDays(startDate, PLAN_DAYS - 1)) };
+  return { first: startDate, last: addDays(startDate, PLAN_DAYS - 7) };
 }
 
-const clampWeek = (monday: string, range: WeekRange) => (monday < range.first ? range.first : monday > range.last ? range.last : monday);
+const clampWeek = (weekFirst: string, range: WeekRange) => (weekFirst < range.first ? range.first : weekFirst > range.last ? range.last : weekFirst);
 
-/** The Monday to show first: this week, kept inside the plan. */
+/** The week to show first: this week, kept inside the plan. */
 export function defaultWeek(range: WeekRange, today: string): string {
-  return clampWeek(weekStart(today), range);
+  return clampWeek(planWeekStart(range.first, today), range);
 }
 
-/** The Monday `step` weeks away, kept inside the plan. */
-export function shiftWeek(monday: string, step: number, range: WeekRange): string {
-  return clampWeek(addDays(monday, step * 7), range);
+/** The week `step` weeks away, kept inside the plan. */
+export function shiftWeek(weekFirst: string, step: number, range: WeekRange): string {
+  return clampWeek(addDays(weekFirst, step * 7), range);
 }
 
-export function weekDays(monday: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+export function weekDays(weekFirst: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(weekFirst, i));
 }
 
-/** 1-based number of the week inside the plan. */
-export function weekNumber(monday: string, range: WeekRange): number {
-  return Math.round(daysBetween(range.first, monday) / 7) + 1;
+/** 1-based number of the week inside the plan (equal to the Today page's week). */
+export function weekNumber(weekFirst: string, range: WeekRange): number {
+  return Math.round(daysBetween(range.first, weekFirst) / 7) + 1;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -53,8 +56,8 @@ export function shortDate(dateKey: string): string {
 }
 
 /** "17 Nov to 23 Nov" */
-export function weekLabel(monday: string): string {
-  return `${shortDate(monday)} to ${shortDate(addDays(monday, 6))}`;
+export function weekLabel(weekFirst: string): string {
+  return `${shortDate(weekFirst)} to ${shortDate(addDays(weekFirst, 6))}`;
 }
 
 /* ---------- the week's facts ---------- */
@@ -72,7 +75,7 @@ export interface WeekGame {
 }
 
 export interface WeekInput {
-  monday: string;
+  weekFirst: string;
   today: string;
   plan: Pick<CoachPlan, 'username' | 'startDate' | 'baselines' | 'targets'>;
   woodAttempts: readonly { at: number; solved: boolean; timeMs: number }[];
@@ -144,12 +147,12 @@ export interface Weekly {
   kinds: KindCount[];
 }
 
-/** Counts days from Monday to Sunday of the week, only inside the plan and never after today. This is the one "days active" number in the app. */
+/** Counts the 7 days of the plan week, only inside the plan and never after today. This is the one "days active" number in the app. */
 export function weekActivity(i: WeekInput): Weekly {
   let daysActive = 0;
   const kinds: KindCount[] = KINDS.map((k) => ({ ...k, done: 0, planned: 0, ...(k.id === 'focus' && i.focusTheme ? { to: `/train/theme/${i.focusTheme}` } : {}) }));
   const lastPlanDay = addDays(i.plan.startDate, PLAN_DAYS - 1);
-  for (const date of weekDays(i.monday)) {
+  for (const date of weekDays(i.weekFirst)) {
     if (date > i.today) break;
     if (date < i.plan.startDate || date > lastPlanDay) continue;
     const done = doneOn(date, i);
@@ -183,7 +186,7 @@ export function puzzleWeek(i: WeekInput): PuzzleWeek {
   const scores = i.rushRuns.map((r) => r.score).filter((s) => Number.isFinite(s));
   let total = 0;
   let correct = 0;
-  for (const date of weekDays(i.monday)) {
+  for (const date of weekDays(i.weekFirst)) {
     const d = dayScore(i.checkTotals, date);
     total += d.total;
     correct += d.correct;
@@ -220,7 +223,7 @@ export interface GameWeek {
 const FAST_KEEP_DAYS = 34;
 
 export function gameWeek(i: WeekInput): GameWeek {
-  const sunday = addDays(i.monday, 6);
+  const weekLast = addDays(i.weekFirst, 6);
   const rapidSite = i.games.filter((g) => g.source !== 'bot' && g.speed === 'rapid' && g.side !== null);
   const blunders = rapidSite.flatMap((g) => (g.blunders !== null && Number.isFinite(g.blunders) && g.blunders >= 0 ? [g.blunders] : []));
   const clockRows = i.games
@@ -228,7 +231,7 @@ export function gameWeek(i: WeekInput): GameWeek {
     .sort((a, b) => b.playedAt - a.playedAt)
     .map((g) => g.clock as ClockRow);
   let stops = 0;
-  for (const date of weekDays(i.monday)) {
+  for (const date of weekDays(i.weekFirst)) {
     const notes = i.days.find((d) => d.date === date)?.blitz ?? [];
     if (blitzSession(i.activity.games, notes, date).stop) stops++;
   }
@@ -239,9 +242,9 @@ export function gameWeek(i: WeekInput): GameWeek {
     analysed: blunders.length,
     blundersPerGame: blunders.length ? blunders.reduce((s, x) => s + x, 0) / blunders.length : null,
     clock: clockShare(clockRows),
-    bullet: i.activity.games.filter((g) => g.speed === 'bullet' && dayKeyOf(g.at) >= i.monday && dayKeyOf(g.at) <= sunday).length,
+    bullet: i.activity.games.filter((g) => g.speed === 'bullet' && dayKeyOf(g.at) >= i.weekFirst && dayKeyOf(g.at) <= weekLast).length,
     bulletLimit: BULLET_LIMIT,
-    fastKnown: i.activity.lastSync !== null && i.monday >= addDays(i.today, -FAST_KEEP_DAYS),
+    fastKnown: i.activity.lastSync !== null && i.weekFirst >= addDays(i.today, -FAST_KEEP_DAYS),
     blitzStopDays: stops,
   };
 }
@@ -257,8 +260,8 @@ export interface RatingWeek {
 }
 
 export function ratingWeek(i: WeekInput): RatingWeek[] {
-  const sunday = addDays(i.monday, 6);
-  const rows = i.ratings.filter((r) => typeof r.date === 'string' && r.date >= i.monday && r.date <= sunday);
+  const weekLast = addDays(i.weekFirst, 6);
+  const rows = i.ratings.filter((r) => typeof r.date === 'string' && r.date >= i.weekFirst && r.date <= weekLast);
   const out: RatingWeek[] = [];
   for (const speed of COACH_SPEEDS) {
     const series = ratingSeries(rows, speed, i.plan.username || undefined);
@@ -333,7 +336,7 @@ export function summarizeWeek(i: WeekInput): WeekSummary {
   const puzzles = puzzleWeek(i);
   const games = gameWeek(i);
   const ratings = ratingWeek(i);
-  const future = i.monday > i.today;
+  const future = i.weekFirst > i.today;
   const empty =
     act.daysActive === 0 && !puzzles.woodDone && !puzzles.rushRuns && !puzzles.checkTotal && !games.rapid && !games.bot && !games.reviews && !games.bullet && !games.blitzStopDays && !ratings.length;
   return { ...act, puzzles, games, ratings, focus: future || empty ? [] : nextFocus({ ...act, games }), future, empty };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emptyBaselines, emptyTargets } from './planLogic.ts';
+import { addDays } from '@knightfall/core';
+import { emptyBaselines, emptyTargets, PLAN_DAYS, weekInfo } from './planLogic.ts';
 import { EMPTY_ACTIVITY } from './stopRules.ts';
 import { defaultWeek, nextFocus, planWeekRange, shiftWeek, summarizeWeek, weekDays, weekLabel, weekNumber, type GameWeek, type WeekGame, type WeekInput } from './weekLogic.ts';
 
@@ -9,31 +10,41 @@ const SUN = '2026-11-22';
 
 const plan = { username: '', startDate: '2026-11-02', baselines: emptyBaselines(), targets: emptyTargets() };
 const input = (over: Partial<WeekInput> = {}): WeekInput => ({
-  monday: MON, today: SUN, plan, woodAttempts: [], woodFinishedAt: [], rushRuns: [], checkTotals: { days: {} }, games: [], reviews: [], days: [], activity: { ...EMPTY_ACTIVITY, games: [] }, ratings: [], ...over,
+  weekFirst: MON, today: SUN, plan, woodAttempts: [], woodFinishedAt: [], rushRuns: [], checkTotals: { days: {} }, games: [], reviews: [], days: [], activity: { ...EMPTY_ACTIVITY, games: [] }, ratings: [], ...over,
 });
 const game = (over: Partial<WeekGame> = {}): WeekGame => ({ playedAt: local(2026, 11, 21), source: 'chesscom', speed: 'rapid', side: 'w', blunders: null, clock: null, ...over });
 
 describe('weeks of the plan', () => {
-  const range = planWeekRange('2026-11-04'); // a Wednesday
-  it('runs from the Monday of the first day to the Monday of the last day', () => {
-    expect(range.first).toBe('2026-11-02');
-    expect(range.last).toBe('2027-01-25');
+  const start = '2026-11-04'; // a Wednesday
+  const range = planWeekRange(start);
+  it('runs from the plan start to the first day of week 12', () => {
+    expect(range.first).toBe('2026-11-04');
+    expect(range.last).toBe('2027-01-20');
   });
-  it('starts on this week and stays inside the plan', () => {
-    expect(defaultWeek(range, '2026-11-18')).toBe('2026-11-16');
+  it('starts on this plan week and stays inside the plan', () => {
+    expect(defaultWeek(range, '2026-11-18')).toBe('2026-11-18');
+    expect(defaultWeek(range, '2026-11-17')).toBe('2026-11-11');
     expect(defaultWeek(range, '2026-10-01')).toBe(range.first);
     expect(defaultWeek(range, '2028-01-01')).toBe(range.last);
   });
   it('steps by whole weeks and stops at both ends', () => {
-    expect(shiftWeek('2026-11-16', -1, range)).toBe('2026-11-09');
-    expect(shiftWeek('2026-11-02', -1, range)).toBe('2026-11-02');
+    expect(shiftWeek('2026-11-18', -1, range)).toBe('2026-11-11');
+    expect(shiftWeek('2026-11-04', -1, range)).toBe('2026-11-04');
     expect(shiftWeek(range.last, 1, range)).toBe(range.last);
   });
   it('numbers and labels a week', () => {
-    expect(weekNumber('2026-11-16', range)).toBe(3);
-    expect(weekLabel('2026-11-16')).toBe('16 Nov to 22 Nov');
+    expect(weekNumber('2026-11-18', range)).toBe(3);
+    expect(weekLabel('2026-11-18')).toBe('18 Nov to 24 Nov');
     expect(weekDays(MON)).toHaveLength(7);
     expect(weekDays(MON)[6]).toBe(SUN);
+  });
+  it('gives every day of the plan the same week number as the Today page, from 1 to 12', () => {
+    for (let d = 0; d < PLAN_DAYS; d++) {
+      const day = addDays(start, d);
+      expect(weekNumber(defaultWeek(range, day), range)).toBe(weekInfo(start, day).week);
+    }
+    expect(weekNumber(defaultWeek(range, addDays(start, PLAN_DAYS - 1)), range)).toBe(12);
+    expect(weekNumber(range.last, range)).toBe(12);
   });
 });
 
@@ -99,10 +110,10 @@ describe('the adapted list', () => {
   });
   it('counts only days inside the plan', () => {
     const rushRuns = [local(2026, 11, 2), local(2026, 11, 3), local(2026, 11, 4)].map((at) => ({ at, score: 5 }));
-    const first = summarizeWeek(input({ monday: '2026-11-02', plan: { ...plan, startDate: '2026-11-04' }, rushRuns }));
+    const first = summarizeWeek(input({ weekFirst: '2026-11-02', plan: { ...plan, startDate: '2026-11-04' }, rushRuns }));
     expect(kindOf(first, 'rush')).toMatchObject({ done: 1, planned: 3 });
     expect(first.daysActive).toBe(1);
-    const last = summarizeWeek(input({ monday: '2027-01-25', today: '2027-01-31', plan: { ...plan, startDate: '2026-11-04' }, rushRuns: [local(2027, 1, 26), local(2027, 1, 28)].map((at) => ({ at, score: 5 })) }));
+    const last = summarizeWeek(input({ weekFirst: '2027-01-25', today: '2027-01-31', plan: { ...plan, startDate: '2026-11-04' }, rushRuns: [local(2027, 1, 26), local(2027, 1, 28)].map((at) => ({ at, score: 5 })) }));
     expect(kindOf(last, 'rush')).toMatchObject({ done: 1, planned: 2 });
     expect(last.daysActive).toBe(1);
   });

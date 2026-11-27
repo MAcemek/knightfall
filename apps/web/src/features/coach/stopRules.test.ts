@@ -70,6 +70,12 @@ describe('bulletThisWeek', () => {
     const games = [game(1, at(2026, 11, 15), 'bullet'), game(2, at(2026, 11, 16), 'bullet'), game(3, at(2026, 11, 17), 'bullet')];
     expect(bulletThisWeek(games, '2026-11-16').count).toBe(1);
   });
+  it('with a plan, counts from the first day of the plan week, not the Monday', () => {
+    // A plan that started on Thursday 2026-11-05: its weeks run Thursday to Wednesday, so 2026-11-18 is in the week from 2026-11-12.
+    const games = [game(1, at(2026, 11, 11), 'bullet'), game(2, at(2026, 11, 12), 'bullet'), game(3, at(2026, 11, 14), 'bullet'), game(4, at(2026, 11, 17), 'bullet')];
+    expect(bulletThisWeek(games, today, '2026-11-05').count).toBe(3);
+    expect(bulletThisWeek(games, today).count).toBe(1);
+  });
 });
 
 describe('blitzSession', () => {

@@ -6,7 +6,7 @@ import { useLocalToday } from './todayStore.ts';
 import { defaultWeek, planWeekRange, shiftWeek, summarizeWeek, weekLabel, weekNumber, type RatingWeek, type WeekSummary } from './weekLogic.ts';
 import { useWeekData } from './weekStore.ts';
 
-/** /coach/week: one Monday to Sunday of the plan, looked back on. */
+/** /coach/week: one plan week (7 days from the plan's start date, as on the Today page), looked back on. */
 
 const pct = (x: number | null) => (x === null ? 'None' : `${Math.round(x * 100)}%`);
 const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
@@ -21,26 +21,26 @@ export function WeekPage({ plan }: { plan: CoachPlan }) {
   const range = useMemo(() => planWeekRange(plan.startDate), [plan.startDate]);
   const [picked, setPicked] = useState<string | null>(null);
   const current = defaultWeek(range, today);
-  const monday = picked ? shiftWeek(picked, 0, range) : current;
-  const data = useWeekData(monday);
-  const summary = useMemo(() => (data ? summarizeWeek({ ...data, monday, today, plan }) : null), [data, monday, today, plan]);
+  const weekFirst = picked ? shiftWeek(picked, 0, range) : current;
+  const data = useWeekData(weekFirst);
+  const summary = useMemo(() => (data ? summarizeWeek({ ...data, weekFirst, today, plan }) : null), [data, weekFirst, today, plan]);
 
   return (
     <div className="space-y-4">
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-lg font-extrabold">Week {weekNumber(monday, range)}</h2>
-            <p className="text-sm text-ink-400">{weekLabel(monday)}</p>
+            <h2 className="text-lg font-extrabold">Week {weekNumber(weekFirst, range)}</h2>
+            <p className="text-sm text-ink-400">{weekLabel(weekFirst)}</p>
           </div>
           <div className="flex items-center gap-1" role="group" aria-label="Choose a week">
-            <button type="button" className={stepClass} aria-label="Previous week" disabled={monday <= range.first} onClick={() => setPicked(shiftWeek(monday, -1, range))}>
+            <button type="button" className={stepClass} aria-label="Previous week" disabled={weekFirst <= range.first} onClick={() => setPicked(shiftWeek(weekFirst, -1, range))}>
               Back
             </button>
-            <button type="button" className={stepClass} aria-label="Next week" disabled={monday >= range.last} onClick={() => setPicked(shiftWeek(monday, 1, range))}>
+            <button type="button" className={stepClass} aria-label="Next week" disabled={weekFirst >= range.last} onClick={() => setPicked(shiftWeek(weekFirst, 1, range))}>
               Next
             </button>
-            {monday !== current && (
+            {weekFirst !== current && (
               <button type="button" className={stepClass} onClick={() => setPicked(null)}>
                 This week
               </button>

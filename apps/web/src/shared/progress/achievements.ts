@@ -115,7 +115,7 @@ export function longestDayRun(dateKeys: Iterable<string>): number {
 export const ESTABLISHED_AFTER = 10;
 
 export interface SnapshotInput {
-  attempts: readonly Pick<Attempt, 'mode' | 'solved'>[];
+  attempts: readonly Pick<Attempt, 'mode' | 'solved' | 'puzzleId'>[];
   rushRuns: readonly Pick<RushRun, 'score' | 'bestCombo'>[];
   battles: readonly Pick<BattleRecord, 'result' | 'club'>[];
   daily: readonly Pick<DailyRecord, 'date' | 'solved'>[];
@@ -129,9 +129,15 @@ export function buildSnapshot(i: SnapshotInput): ProgressSnapshot {
   let ratedCount = 0;
   let themeSolved = 0;
   let reviewSolved = 0;
+  // Custom puzzles can be replayed at will (your own included): each one counts once.
+  const customSolved = new Set<string>();
   for (const a of i.attempts) {
     if (a.mode === 'rated') ratedCount++;
     if (!a.solved) continue;
+    if (a.mode === 'custom') {
+      if (customSolved.has(a.puzzleId)) continue;
+      customSolved.add(a.puzzleId);
+    }
     solvedTotal++;
     if (a.mode === 'theme') themeSolved++;
     else if (a.mode === 'review') reviewSolved++;

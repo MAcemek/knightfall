@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { coachExplainText, parsePgnGame, type MoveClass, type ParsedGame, type PositionEval, type Side } from '@knightfall/core';
+import { coachExplainText, parsePgnGame, terminalEval, type MoveClass, type ParsedGame, type PositionEval, type Side } from '@knightfall/core';
 import { addMistakesToPractice, practicePuzzles, useAnalysisPrefs, useAnalysisSession } from '../../../shared/analysis/index.ts';
 import { Board, type BoardArrow } from '../../../shared/Board/index.ts';
 import { ENGINES, getEnginePool } from '../../../shared/engine/index.ts';
@@ -360,6 +360,12 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   useEffect(() => {
     if (!exploreFen) {
       setLive(null);
+      return;
+    }
+    const finished = terminalEval(exploreFen);
+    if (finished) {
+      // Mate, stalemate or bare kings: the engine has nothing to say (and would be marked broken), so show the fixed result.
+      setLive({ fen: exploreFen, e: finished });
       return;
     }
     const ctl = new AbortController();

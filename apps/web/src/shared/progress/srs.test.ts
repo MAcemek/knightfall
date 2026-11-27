@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReviewItem } from '../db.ts';
-import { dueReviews, formatInterval, gradeReview, ingestAttempts, lapseReview, newReview, REVIEW_INTERVALS_MS, REVIEW_MAX_BOX, reviewSummary, type MissAttempt } from './srs.ts';
+import { dueReviews, formatInterval, gradeReview, ingestAttempts, lapseReview, newReview, REVIEW_INTERVALS_MS, REVIEW_MAX_BOX, reviewResult, reviewSummary, type MissAttempt } from './srs.ts';
 
 const NOW = 1_700_000_000_000;
 const DAY = 86_400_000;
@@ -15,6 +15,26 @@ describe('newReview / lapseReview', () => {
   it('a lapse resets the box and counts', () => {
     const r = lapseReview(item({ box: 3, lapses: 1 }), NOW + 5);
     expect(r).toMatchObject({ box: 0, lapses: 2, due: NOW + 5 + REVIEW_INTERVALS_MS[0] });
+  });
+});
+
+describe('reviewResult', () => {
+  const src = { puzzleId: 'game-1', puzzleRating: 1300, themes: ['fork'] };
+  const T = 5_000_000;
+  it('a puzzle that is not queued (graduated, or served by "Practise all") and is missed goes back in the queue', () => {
+    expect(reviewResult(undefined, src, { solved: false, clean: false }, T)).toEqual({
+      item: { ...newReview(src, T), lastAt: T },
+      graduated: false,
+    });
+  });
+  it('a puzzle that is not queued and is solved stays out', () => {
+    expect(reviewResult(undefined, src, { solved: true, clean: true }, T)).toEqual({ item: null, graduated: false });
+  });
+  it('a queued puzzle is graded, and a clean solve in the top box graduates', () => {
+    const top = { ...newReview(src, 0), box: REVIEW_MAX_BOX };
+    expect(reviewResult(top, src, { solved: true, clean: true }, T)).toEqual({ item: null, graduated: true });
+    const low = newReview(src, 0);
+    expect(reviewResult(low, src, { solved: true, clean: true }, T)).toEqual({ item: gradeReview(low, { solved: true, clean: true }, T), graduated: false });
   });
 });
 

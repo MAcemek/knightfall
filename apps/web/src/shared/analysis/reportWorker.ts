@@ -21,9 +21,17 @@ export type ReportWorkerReply = { id: number; ok: true; report: GameReport } | {
 let openingsPromise: Promise<OpeningTable | null> | null = null;
 
 function loadOpenings(): Promise<OpeningTable | null> {
+  // A failed fetch is not cached: the next call tries again (this one still resolves null).
   openingsPromise ??= fetch('/openings.json')
-    .then((r) => (r.ok ? (r.json() as Promise<OpeningTable>) : null))
-    .catch(() => null);
+    .then((r) => {
+      if (r.ok) return r.json() as Promise<OpeningTable>;
+      openingsPromise = null;
+      return null;
+    })
+    .catch(() => {
+      openingsPromise = null;
+      return null;
+    });
   return openingsPromise;
 }
 

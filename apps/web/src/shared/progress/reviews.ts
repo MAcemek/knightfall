@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Puzzle } from '@knightfall/core';
 import { db, getKV, KEYS, setKV, type ReviewItem } from '../db.ts';
-import { dueReviews, gradeReview, ingestAttempts, reviewSummary, type ReviewSummary } from './srs.ts';
+import { dueReviews, ingestAttempts, reviewResult, reviewSummary, type ReviewSummary } from './srs.ts';
 
 /** IndexedDB side of the review queue. The rules live in srs.ts. */
 
@@ -44,16 +44,10 @@ export async function recordReview(puzzle: Puzzle, r: { solved: boolean; hintsUs
   const now = Date.now();
   return db.transaction('rw', db.reviews, db.attempts, async () => {
     const cur = await db.reviews.get(puzzle.id);
-    let item: ReviewItem | null = null;
-    let graduated = false;
-    if (cur) {
-      item = gradeReview(cur, { solved: r.solved, clean: r.solved && r.hintsUsed === 0 && r.mistakes === 0 }, now);
-      if (item) await db.reviews.put(item);
-      else {
-        graduated = true;
-        await db.reviews.delete(puzzle.id);
-      }
-    }
+    const src = { puzzleId: puzzle.id, puzzleRating: puzzle.rating, themes: puzzle.themes };
+    const { item, graduated } = reviewResult(cur, src, { solved: r.solved, clean: r.solved && r.hintsUsed === 0 && r.mistakes === 0 }, now);
+    if (item) await db.reviews.put(item);
+    else if (graduated) await db.reviews.delete(puzzle.id);
     await db.attempts.add({
       puzzleId: puzzle.id,
       mode: 'review',

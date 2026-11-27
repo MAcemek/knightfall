@@ -194,12 +194,29 @@ describe('ClubRegistry connections and closing', () => {
     expect(reg.clubOf('a')).toBeNull();
   });
 
-  it('a disconnected host passes the room on once removed', () => {
+  it('a disconnected host passes the room on at once, to a member who is still connected', () => {
+    const { reg, club } = lobby();
+    reg.disconnect('a');
+    reg.disconnect('h');
+    expect(club.hostId).toBe('b');
+    expect(reg.start('b')).toMatchObject({ ok: true });
+  });
+
+  it('a host who leaves passes the room to a connected member, not a disconnected one', () => {
+    const { reg, club } = lobby();
+    reg.disconnect('a');
+    reg.leave('h');
+    expect(club.hostId).toBe('b');
+  });
+
+  it('when everyone is disconnected the host stays, and the room closes once they are removed', () => {
     const { reg, advance, club } = lobby();
     reg.disconnect('h');
+    reg.disconnect('a');
+    reg.disconnect('b');
+    expect(club.hostId).toBe('b');
     advance(CLUB_DISCONNECT_MS);
-    reg.tick();
-    expect(club.hostId).toBe('a');
+    expect(reg.tick().closed.map((c) => c.club)).toEqual([club]);
   });
 
   it('a room whose members all disconnected closes when they are removed', () => {

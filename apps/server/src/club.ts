@@ -74,8 +74,20 @@ export class Club {
 
   removeMember(id: string): void {
     this.members.delete(id);
-    if (this.hostId === id) this.hostId = this.members.keys().next().value ?? id;
+    this.reassignHost();
     this.touch();
+  }
+
+  /**
+   * When the host left or lost their connection, hand the room to the earliest connected racer (else the earliest
+   * connected spectator, else the earliest member). A dropped host comes back as a new member, so waiting is useless.
+   */
+  reassignHost(): void {
+    const host = this.members.get(this.hostId);
+    if (host?.connected) return;
+    const all = [...this.members.values()];
+    const next = all.find((m) => m.connected && !m.spectator) ?? all.find((m) => m.connected) ?? (host ? undefined : all[0]);
+    if (next) this.hostId = next.id;
   }
 
   /** The racers (not spectators), in join order. */
@@ -303,6 +315,7 @@ export class ClubRegistry {
     if (!club || !m) return null;
     m.connected = false;
     m.disconnectedAt = this.now();
+    club.reassignHost();
     club.touch();
     return { club, phaseChanged: club.endIfDone() };
   }

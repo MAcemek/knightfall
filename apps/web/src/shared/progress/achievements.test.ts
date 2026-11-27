@@ -57,16 +57,22 @@ describe('buildSnapshot', () => {
   it('counts attempts by mode', () => {
     const s = buildSnapshot(input({
       attempts: [
-        { mode: 'rated', solved: true }, { mode: 'rated', solved: false }, { mode: 'theme', solved: true },
-        { mode: 'review', solved: true }, { mode: 'review', solved: false }, { mode: 'rush', solved: true },
+        { mode: 'rated', solved: true, puzzleId: 'p' }, { mode: 'rated', solved: false, puzzleId: 'p' }, { mode: 'theme', solved: true, puzzleId: 'p' },
+        { mode: 'review', solved: true, puzzleId: 'p' }, { mode: 'review', solved: false, puzzleId: 'p' }, { mode: 'rush', solved: true, puzzleId: 'p' },
       ],
     }));
     expect(s).toMatchObject({ solvedTotal: 4, ratedCount: 2, themeSolved: 1, reviewSolved: 1 });
   });
+  it('counts each custom puzzle once, however often it is replayed', () => {
+    const replays = Array.from({ length: 1000 }, () => ({ mode: 'custom' as const, solved: true, puzzleId: 'mine' }));
+    const s = buildSnapshot(input({ attempts: [...replays, { mode: 'custom', solved: true, puzzleId: 'other' }, { mode: 'rated', solved: true, puzzleId: 'mine' }] }));
+    expect(s.solvedTotal).toBe(3);
+    expect(evaluateAchievements(s)).not.toContain('solve-1000');
+  });
   it('hides a provisional rating', () => {
-    const few = Array.from({ length: ESTABLISHED_AFTER - 1 }, () => ({ mode: 'rated' as const, solved: true }));
+    const few = Array.from({ length: ESTABLISHED_AFTER - 1 }, () => ({ mode: 'rated' as const, solved: true, puzzleId: 'p' }));
     expect(buildSnapshot(input({ attempts: few, puzzleRating: 1650.4 })).establishedRating).toBe(0);
-    expect(buildSnapshot(input({ attempts: [...few, { mode: 'rated', solved: false }], puzzleRating: 1650.4 })).establishedRating).toBe(1650);
+    expect(buildSnapshot(input({ attempts: [...few, { mode: 'rated', solved: false, puzzleId: 'p' }], puzzleRating: 1650.4 })).establishedRating).toBe(1650);
   });
   it('aggregates rush, battle, daily, streak and custom', () => {
     const s = buildSnapshot(input({

@@ -141,7 +141,8 @@ export async function fetchChesscomUserGames(username: string, opts: UserGamesOp
   for (const month of months) {
     if (games.length >= max) break;
     const res = await request(fetchFn, `${root}/${month}`, 'chess.com', 'application/json', signal);
-    if (!res.ok) continue;
+    if (res.status === 404) continue;
+    if (!res.ok) throw new ImportError('network', `chess.com answered with an error (${res.status}).`);
     const archive = (await res.json()) as { games?: unknown };
     const rows = (Array.isArray(archive.games) ? archive.games : [])
       .filter((raw) => !accept || accept(raw))

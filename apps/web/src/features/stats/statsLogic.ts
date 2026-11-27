@@ -1,6 +1,7 @@
 import type { Attempt, BattleRecord, RushMode, RushRun } from '../../shared/db.ts';
 import { localDateKey } from '../../shared/localDate.ts';
 import { LOW_PRIORITY_THEMES } from '../../shared/themes.ts';
+import { capMs } from '../woodpecker/woodLogic.ts';
 
 /** Pure aggregation for the Stats page (no React, no IndexedDB). */
 
@@ -133,7 +134,8 @@ export function totals(attempts: readonly Pick<Attempt, 'solved' | 'timeMs'>[]):
     attempted: attempts.length,
     solved,
     accuracy: attempts.length ? solved / attempts.length : null,
-    timeMs: attempts.reduce((s, a) => s + (a.timeMs || 0), 0),
+    // Each attempt counts at most 5 minutes: a puzzle left open (or settled days later) is not time spent solving.
+    timeMs: attempts.reduce((s, a) => s + capMs(a.timeMs), 0),
   };
 }
 

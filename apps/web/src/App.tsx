@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { FxLayer } from './shared/fx/index.ts';
 import { Icons } from './shared/ui.tsx';
+import { ErrorBoundary } from './shared/ErrorBoundary.tsx';
 import { useProfile } from './shared/profile.ts';
 import { ProgressWatcher, useReviewSummary } from './shared/progress/index.ts';
 import { setSetting, useSettings } from './shared/settings.ts';
@@ -147,6 +148,7 @@ export function App() {
 
       <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 lg:px-8 lg:pb-8 lg:pt-8">
         <div key={section} className="animate-page-in">
+          <ErrorBoundary key={pathname}>
           <Suspense fallback={<div className="p-10 text-center text-ink-400">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -165,6 +167,7 @@ export function App() {
               <Route path="*" element={<div className="p-10 text-center text-ink-400">Page not found.</div>} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 

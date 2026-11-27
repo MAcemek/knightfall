@@ -485,4 +485,24 @@ describe('analysePositions', () => {
   it('propagates an engine failure', async () => {
     await expect(analysePositions({ fens, depth: 16, evaluate: async () => Promise.reject(new Error('engine died')) })).rejects.toThrow('engine died');
   });
+  it('aborts the remaining jobs and stops reporting after one job fails', async () => {
+    const signals: AbortSignal[] = [];
+    const resolvers: (() => void)[] = [];
+    const seen: number[] = [];
+    const p = analysePositions({
+      fens: [START, AFTER_E4, START],
+      depth: 16,
+      onEval: (i) => seen.push(i),
+      evaluate: (j) => {
+        signals.push(j.signal!);
+        if (signals.length === 1) return Promise.reject(new Error('engine died'));
+        return new Promise<PositionEval>((resolve) => resolvers.push(() => resolve(evalOf(j.fen))));
+      },
+    });
+    await expect(p).rejects.toThrow('engine died');
+    expect(signals.every((s) => s.aborted)).toBe(true);
+    resolvers.forEach((r) => r());
+    await tick();
+    expect(seen).toEqual([]);
+  });
 });

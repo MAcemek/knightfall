@@ -72,6 +72,8 @@ describe('pgn', () => {
     expect(parseClock('5:00')).toBe(300000);
     expect(parseClock('soon')).toBeNull();
     expect(extractClocks('1. e4 {[%clk 0:00:59.9]} e5 { [%eval 0.1] [%clk 0:01:00] }')).toEqual([59900, 60000]);
+    expect(extractClocks('1. e4 {[%clk 0:03:00]} e5 {[%clk 0:03:00]} (1... c5 {[%clk 0:02:59]}) 2. Nf3 {[%clk 0:02:58]} *')).toEqual([180000, 180000, 178000]);
+    expect(extractClocks('1. e4 {[%clk 0:03:00]} (1. d4 {a ) b [%clk 0:02:00]} d5 (1... Nf6 (1... c5 {[%clk 0:01:00]}) {[%clk 0:01:01]}) {[%clk 0:00:09]}) e5 {[%clk 0:02:50]} *')).toEqual([180000, 170000]);
     expect(pgnDateToMs('2026.10.14', '18:04:06')).toBe(Date.UTC(2026, 9, 14, 18, 4, 6));
     expect(pgnDateToMs('2026.10.14')).toBe(Date.UTC(2026, 9, 14));
     expect(pgnDateToMs('????.??.??')).toBeNull();

@@ -169,8 +169,8 @@ export const PhoneCoach = memo(function PhoneCoach(props: {
   const bestSan = move?.best && move.best.uci !== move.uci ? move.best.san : null;
   const chip =
     move && !exploring ? (
-      <span className="rounded-md bg-ink-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-ink-100" aria-label={`Evaluation ${formatScore(evalAfter?.score)}`}>
-        {formatScore(evalAfter?.score)}
+      <span className="rounded-md bg-ink-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-ink-100" aria-label={`Evaluation ${formatScore(evalAfter?.score, evalAfter?.terminal)}`}>
+        {formatScore(evalAfter?.score, evalAfter?.terminal)}
       </span>
     ) : undefined;
   const tip = move ? coachMoveText(move, move.insight, props.perspective) : '';
@@ -292,8 +292,8 @@ export const ReviewView = memo(function ReviewView(props: {
   const N = moves.length;
   const bestSan = move?.best && move.best.uci !== move.uci ? move.best.san : null;
   const chip = move ? (
-    <span className="rounded-md bg-ink-900 px-2 py-0.5 font-mono text-xs font-bold text-ink-100" aria-label={`Evaluation ${formatScore(evalAfter?.score)}`}>
-      {formatScore(evalAfter?.score)}
+    <span className="rounded-md bg-ink-900 px-2 py-0.5 font-mono text-xs font-bold text-ink-100" aria-label={`Evaluation ${formatScore(evalAfter?.score, evalAfter?.terminal)}`}>
+      {formatScore(evalAfter?.score, evalAfter?.terminal)}
     </span>
   ) : undefined;
 

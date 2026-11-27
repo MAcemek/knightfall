@@ -91,6 +91,8 @@ describe('totals / rush / battle', () => {
   it('totals', () => {
     expect(totals([])).toEqual({ attempted: 0, solved: 0, accuracy: null, timeMs: 0 });
     expect(totals([{ solved: true, timeMs: 1000 }, { solved: false, timeMs: 3000 }])).toEqual({ attempted: 2, solved: 1, accuracy: 0.5, timeMs: 4000 });
+    // a puzzle left open for three days counts 5 minutes, not 72 hours
+    expect(totals([{ solved: false, timeMs: 3 * 24 * 3600_000 }, { solved: true, timeMs: 1000 }]).timeMs).toBe(5 * 60_000 + 1000);
   });
   it('rushBests per mode', () => {
     const b = rushBests([

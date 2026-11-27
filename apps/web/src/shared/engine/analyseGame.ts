@@ -40,18 +40,24 @@ function legalMoveCount(fen: string): number {
 
 /** Resolves with one evaluation per FEN. Rejects with AbortError when aborted, or the first engine error. */
 export async function analysePositions(opts: AnalysePositionsOptions): Promise<PositionEval[]> {
-  const { fens, depth, evaluate, cloud, signal, known, onEval } = opts;
+  const { fens, depth, evaluate, cloud, known, onEval } = opts;
   const multiPv = opts.multiPv ?? 2;
   const total = fens.length;
   const out: (PositionEval | undefined)[] = new Array(total).fill(undefined);
   let done = 0;
+  // Internal controller: chained to the caller's signal, and aborted on the first failure so nothing else keeps running.
+  const ctl = new AbortController();
+  const signal = ctl.signal;
+  const onOuterAbort = () => ctl.abort();
+  if (opts.signal?.aborted) ctl.abort();
+  else opts.signal?.addEventListener('abort', onOuterAbort, { once: true });
   const finish = (i: number, e: PositionEval) => {
-    if (out[i]) return;
+    if (out[i] || signal.aborted) return;
     out[i] = e;
     done++;
     onEval?.(i, e, done, total);
   };
-  if (signal?.aborted) throw new AbortError();
+  if (signal.aborted) throw new AbortError();
 
   const pending: number[] = [];
   fens.forEach((fen, i) => {
@@ -72,7 +78,7 @@ export async function analysePositions(opts: AnalysePositionsOptions): Promise<P
     let k = 0;
     if (cloud) {
       for (; k < pending.length; k++) {
-        if (signal?.aborted) throw new AbortError();
+        if (signal.aborted) throw new AbortError();
         const i = pending[k];
         const hit = await cloud.get(fens[i], multiPv, Math.min(multiPv, legalMoveCount(fens[i])), signal);
         if (!hit || hit.depth < depth) break; // first miss: the cloud is done for this game
@@ -88,8 +94,11 @@ export async function analysePositions(opts: AnalysePositionsOptions): Promise<P
     await Promise.all(jobs);
   } catch (e) {
     cloudJob.catch(() => {});
+    ctl.abort();
     throw e;
+  } finally {
+    opts.signal?.removeEventListener('abort', onOuterAbort);
   }
-  if (signal?.aborted) throw new AbortError();
+  if (signal.aborted) throw new AbortError();
   return out as PositionEval[];
 }

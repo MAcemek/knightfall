@@ -13,6 +13,11 @@ describe('formatScore / barLabel', () => {
     expect(formatScore(undefined)).toBe('–');
     expect(barLabel({ mate: -3 })).toBe('M3');
     expect(barLabel({ cp: -250 })).toBe('2.5');
+    // A checkmated final position shows '#', not 'M1'.
+    expect(formatScore({ mate: 1 }, 'checkmate')).toBe('#');
+    expect(formatScore({ mate: -1 }, 'checkmate')).toBe('#');
+    expect(barLabel({ mate: -1 }, 'checkmate')).toBe('#');
+    expect(formatScore({ cp: 0 }, 'stalemate')).toBe('0.0');
   });
 });
 

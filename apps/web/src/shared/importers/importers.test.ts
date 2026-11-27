@@ -242,6 +242,22 @@ describe('chess.com fetchers', () => {
     await expect(fetchChesscomUserGames('x', { fetchFn: async () => json({}) })).rejects.toMatchObject({ code: 'invalid' });
     await expect(fetchChesscomUserGames('dave', { fetchFn: async () => json({}, 429) })).rejects.toMatchObject({ code: 'rate_limited', message: 'chess.com is busy. Try again in a minute.' });
   });
+  it('fails when a monthly archive answers with a server error instead of skipping it', async () => {
+    const fetchFn: FetchFn = async (url) => {
+      if (url === `${root}/archives`) return json({ archives: [`${root}/2026/10`] });
+      return json({}, 503);
+    };
+    await expect(fetchChesscomUserGames('dave', { fetchFn, now: NOW })).rejects.toMatchObject({ code: 'network' });
+  });
+  it('still skips a monthly archive that is missing (404)', async () => {
+    const fetchFn: FetchFn = async (url) => {
+      if (url === `${root}/archives`) return json({ archives: [`${root}/2026/10`, `${root}/2026/09`] });
+      if (url === `${root}/2026/09`) return json({ games: [chesscomArchiveGame('4', 50)] });
+      return json({}, 404);
+    };
+    const games = await fetchChesscomUserGames('dave', { fetchFn, now: NOW });
+    expect(games.map((g) => g.key)).toEqual(['cc-live-4']);
+  });
   it('looks a link up through the Knightfall server', async () => {
     const a = chesscomArchiveGame('123', 1790978999);
     const urls: string[] = [];

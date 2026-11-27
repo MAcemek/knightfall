@@ -43,6 +43,23 @@ export function gradeReview(item: ReviewItem, r: { solved: boolean; clean: boole
   return { ...item, box, due: now + REVIEW_INTERVALS_MS[box], lastAt: now, reps: item.reps + 1 };
 }
 
+/**
+ * A review-session result for a puzzle that may not be in the queue (it graduated, or "Practise all" served it):
+ * queued → gradeReview; not queued and missed → queued again as a fresh miss; not queued and solved → nothing.
+ */
+export function reviewResult(
+  cur: ReviewItem | undefined,
+  src: { puzzleId: string; puzzleRating: number; themes?: string[] },
+  r: { solved: boolean; clean: boolean },
+  now: number,
+): { item: ReviewItem | null; graduated: boolean } {
+  if (cur) {
+    const item = gradeReview(cur, r, now);
+    return { item, graduated: item === null };
+  }
+  return { item: r.solved ? null : { ...newReview(src, now), lastAt: now }, graduated: false };
+}
+
 /** Items due at `now`, most overdue first. */
 export function dueReviews(items: readonly ReviewItem[], now: number, limit = Infinity): ReviewItem[] {
   return items

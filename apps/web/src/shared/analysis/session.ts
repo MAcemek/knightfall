@@ -103,8 +103,12 @@ function createSession(gameKey: string): AnalysisSession {
       // Automatic "puzzles from your games"; a failure here must not affect the finished review.
       void autoAddGamePuzzles(game, report).catch(() => {});
     } catch (e) {
-      if (mine !== run || isAbortError(e)) return;
-      set({ status: 'error', error: e instanceof Error ? e.message : 'The analysis failed.' });
+      if (mine !== run) return;
+      // An abort from this session's own controller is a cancel/restart; any other abort (e.g. the pool was disposed) is a failure.
+      const aborted = isAbortError(e);
+      if (aborted && ctl.signal.aborted) return;
+      ctl.abort();
+      set({ status: 'error', error: aborted ? 'The analysis was interrupted. Try again.' : e instanceof Error ? e.message : 'The analysis failed.' });
     }
   }
 

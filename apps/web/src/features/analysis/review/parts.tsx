@@ -69,9 +69,9 @@ export const EvalBar = memo(function EvalBar({ fraction, e, orientation }: { fra
   const whiteAhead = fraction >= 0.5;
   // The label sits at the leading side's end of the bar.
   const labelAtBottom = whiteBottom === whiteAhead;
-  const label = barLabel(e?.score);
+  const label = barLabel(e?.score, e?.terminal);
   return (
-    <div className="relative w-6 shrink-0 overflow-hidden rounded-md bg-ink-950 shadow-inner sm:w-7" role="img" aria-label={`Evaluation ${formatScore(e?.score)}`}>
+    <div className="relative w-6 shrink-0 overflow-hidden rounded-md bg-ink-950 shadow-inner sm:w-7" role="img" aria-label={`Evaluation ${formatScore(e?.score, e?.terminal)}`}>
       <div
         className="absolute inset-x-0 bg-ink-100"
         style={{ height: `${fraction * 100}%`, [whiteBottom ? 'bottom' : 'top']: 0, transition: `height ${ms}ms cubic-bezier(0.2,0.8,0.2,1)` }}

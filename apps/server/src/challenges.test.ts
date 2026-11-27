@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isValidCode } from '@knightfall/core';
-import { ChallengeBoard, CodeRegistry, CODE_RESERVE_MS, randomCode } from './challenges.ts';
+import { ChallengeBoard, CodeRegistry, CODE_RESERVE_MS, CODE_SWEEP_EVERY_MS, randomCode } from './challenges.ts';
 
 const seq = (...vals: string[]) => {
   let i = 0;
@@ -94,6 +94,18 @@ describe('CodeRegistry', () => {
     expect(reg.knows(first.code)).toBe(false);
     // after the reservation ran out the owner's code is simply adopted again from the client's copy
     expect(reg.bind('s1', first.code, first.token).code).toBe(first.code);
+  });
+
+  it('bind and knows walk the codes at most once a minute, not on every call', () => {
+    const { reg, advance } = make(['AAAAAA', 'BBBBBB', 'CCCCCC']);
+    const first = reg.bind('s1');
+    reg.unbind('s1');
+    advance(CODE_RESERVE_MS - 1);
+    reg.bind('s2'); // sweeps: the reservation has 1 ms left
+    advance(1);
+    expect(reg.knows(first.code)).toBe(true); // expired, but the last sweep was 1 ms ago
+    advance(CODE_SWEEP_EVERY_MS);
+    expect(reg.knows(first.code)).toBe(false);
   });
 
   it('never frees a code that is bound', () => {

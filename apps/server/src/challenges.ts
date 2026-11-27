@@ -3,6 +3,8 @@ import { BATTLE_CHALLENGE_TTL_MS, BATTLE_CODE_ALPHABET, BATTLE_CODE_LENGTH, isVa
 
 /** An unbound code stays reserved for its owner this long after they disconnect. */
 export const CODE_RESERVE_MS = 24 * 60 * 60 * 1000;
+/** bind() and knows() free expired codes at most this often: a sweep walks every code, so doing it per call is O(n) each time. */
+export const CODE_SWEEP_EVERY_MS = 60_000;
 export const MAX_INCOMING = 3;
 const MAX_TOKEN_LENGTH = 64;
 export const RATE_LIMIT_COUNT = 6;
@@ -36,6 +38,7 @@ export class CodeRegistry {
   private readonly genCode: () => string;
   private readonly genToken: () => string;
   private readonly reserveMs: number;
+  private lastSweep = -Infinity;
 
   constructor(o: CodeRegistryOptions = {}) {
     this.now = o.now ?? Date.now;
@@ -55,7 +58,7 @@ export class CodeRegistry {
    * A session that is already bound keeps its code.
    */
   bind(sessionId: string, code?: string, token?: string): { code: string; token: string; displaced?: string } {
-    this.sweep();
+    this.sweepNowAndThen();
     const own = this.codeOfSession.get(sessionId);
     if (own) {
       const e = this.entries.get(own)!;
@@ -100,7 +103,7 @@ export class CodeRegistry {
 
   /** True while the code exists (bound or still reserved). */
   knows(code: string): boolean {
-    this.sweep();
+    this.sweepNowAndThen();
     return this.entries.has(code);
   }
 
@@ -112,9 +115,14 @@ export class CodeRegistry {
     return this.codeOfSession.get(sessionId) ?? null;
   }
 
+  private sweepNowAndThen(): void {
+    if (this.now() - this.lastSweep >= CODE_SWEEP_EVERY_MS) this.sweep();
+  }
+
   /** Free unbound codes whose reservation ran out. */
   sweep(): void {
     const now = this.now();
+    this.lastSweep = now;
     for (const [code, e] of this.entries) {
       if (e.sessionId === null && now - e.lastSeen >= this.reserveMs) this.entries.delete(code);
     }

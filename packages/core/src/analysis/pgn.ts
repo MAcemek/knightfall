@@ -56,12 +56,32 @@ export function parseClock(text: string): number | null {
   return Number.isFinite(ms) ? Math.round(ms) : null;
 }
 
-/** Every [%clk ...] in order of appearance. */
+/** Every [%clk ...] of the main line, in order of appearance. Clocks inside ( ... ) variations are ignored. */
 export function extractClocks(pgn: string): number[] {
   const out: number[] = [];
-  for (const m of pgn.matchAll(/\[%clk\s+([0-9:.]+)\s*\]/g)) {
-    const ms = parseClock(m[1]);
-    if (ms !== null) out.push(ms);
+  let depth = 0;
+  let i = 0;
+  while (i < pgn.length) {
+    const c = pgn[i];
+    if (c === '{') {
+      const end = pgn.indexOf('}', i + 1);
+      const stop = end < 0 ? pgn.length : end;
+      if (depth === 0) {
+        for (const m of pgn.slice(i + 1, stop).matchAll(/\[%clk\s+([0-9:.]+)\s*\]/g)) {
+          const ms = parseClock(m[1]);
+          if (ms !== null) out.push(ms);
+        }
+      }
+      i = stop + 1;
+    } else if (c === ';' || (c === '[' && (i === 0 || pgn[i - 1] === '\n'))) {
+      // A rest-of-line comment, or a tag line: neither can hold a variation or a clock of the game.
+      const end = pgn.indexOf('\n', i);
+      i = end < 0 ? pgn.length : end + 1;
+    } else {
+      if (c === '(') depth++;
+      else if (c === ')' && depth > 0) depth--;
+      i++;
+    }
   }
   return out;
 }

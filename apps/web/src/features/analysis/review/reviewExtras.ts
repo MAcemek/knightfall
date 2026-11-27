@@ -3,17 +3,19 @@ import { playUci } from './reviewLogic.ts';
 
 /** More pure helpers of the review page (no React, no IndexedDB). */
 
-/** "+0.4", "-1.2", "M3", "-M3". */
-export function formatScore(score: EvalScore | undefined): string {
+/** "+0.4", "-1.2", "M3", "-M3"; "#" for a checkmated position (pass the eval's `terminal`). */
+export function formatScore(score: EvalScore | undefined, terminal?: PositionEval['terminal']): string {
   if (!score) return '–';
+  if (terminal === 'checkmate') return '#';
   if ('mate' in score) return score.mate > 0 ? `M${score.mate}` : `-M${Math.abs(score.mate)}`;
   const v = score.cp / 100;
   return `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
 }
 
 /** Label inside the eval bar: magnitude only ("0.4", "M3"), the bar itself shows who is ahead. */
-export function barLabel(score: EvalScore | undefined): string {
+export function barLabel(score: EvalScore | undefined, terminal?: PositionEval['terminal']): string {
   if (!score) return '';
+  if (terminal === 'checkmate') return '#';
   if ('mate' in score) return `M${Math.abs(score.mate)}`;
   return (Math.abs(score.cp) / 100).toFixed(1);
 }

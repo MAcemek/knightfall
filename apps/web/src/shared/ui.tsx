@@ -131,7 +131,7 @@ export function Modal({ open, onClose, children, className = '', size = 'md', la
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`w-full ${MODAL_SIZES[size]} max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] animate-pop overflow-y-auto overscroll-contain rounded-2xl border border-ink-700 bg-ink-850 p-4 shadow-2xl sm:p-6 ${className}`}
+        className={`w-full ${MODAL_SIZES[size]} max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] animate-dialog-in overflow-y-auto overscroll-contain rounded-2xl border border-ink-700 bg-ink-850 p-4 shadow-2xl sm:p-6 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

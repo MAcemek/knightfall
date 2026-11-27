@@ -55,9 +55,9 @@ export function ReviewModal({ attempts, index, onIndex, onClose }: {
   const finished = runner.status === 'solved' || runner.status === 'solution';
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/80 p-3 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-ink-950/80 p-3 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
       <div
-        className="max-h-[100dvh] w-full max-w-[min(560px,calc(100dvh-12rem))] animate-pop overflow-y-auto rounded-2xl border border-ink-700 bg-ink-850 p-3 shadow-2xl sm:p-4"
+        className="max-h-[100dvh] w-full max-w-[min(560px,calc(100dvh-12rem))] animate-dialog-in overflow-y-auto rounded-2xl border border-ink-700 bg-ink-850 p-3 shadow-2xl sm:p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center gap-2">

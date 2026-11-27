@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { animate } from 'motion';
+import { motionOff } from '../settings.ts';
 
 /** A number that counts smoothly to its new value (score/rating tickers). */
 export function TickerNumber({ value, duration = 0.6, className, format = (n: number) => String(Math.round(n)) }: {
@@ -14,6 +15,11 @@ export function TickerNumber({ value, duration = 0.6, className, format = (n: nu
     const from = prev.current;
     prev.current = value;
     if (from === value) return;
+    // JS animation is not covered by the CSS motion kill-switch: jump straight to the value when motion is off.
+    if (motionOff()) {
+      setShown(value);
+      return;
+    }
     const controls = animate(from, value, { duration, ease: [0.2, 0.8, 0.2, 1], onUpdate: (v) => setShown(v) });
     return () => controls.stop();
   }, [value, duration]);

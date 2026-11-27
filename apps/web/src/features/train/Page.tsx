@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
 import { GamesPage } from './GamesPage.tsx';
 import { GamesTrainer } from './GamesTrainer.tsx';
@@ -7,6 +7,8 @@ import { ThemeTrainer } from './ThemeTrainer.tsx';
 import { TrainHub } from './TrainHub.tsx';
 import { WeakTrainer } from './WeakTrainer.tsx';
 
+// No Suspense of their own: they suspend to the app-wide boundary, which keeps the Train hub on screen while
+// the code loads and then plays the page entrance on the trainer itself.
 const OpeningsPage = lazy(() => import('../openings/Page.tsx'));
 const EndgamesPage = lazy(() => import('../endgames/Page.tsx'));
 const WoodpeckerPage = lazy(() => import('../woodpecker/Page.tsx'));
@@ -36,11 +38,11 @@ export default function TrainPage() {
       <Route path="review" element={<ReviewTrainer />} />
       <Route path="games" element={<GamesPage />} />
       <Route path="games/play" element={<GamesTrainerRoute />} />
-      <Route path="woodpecker/*" element={<Suspense fallback={null}><WoodpeckerPage /></Suspense>} />
-      <Route path="blunder-check/*" element={<Suspense fallback={null}><BlunderCheckPage /></Suspense>} />
-      <Route path="openings/*" element={<Suspense fallback={null}><OpeningsPage /></Suspense>} />
-      <Route path="endgames/*" element={<Suspense fallback={null}><EndgamesPage /></Suspense>} />
-      <Route path="vision/*" element={<Suspense fallback={null}><VisionPage /></Suspense>} />
+      <Route path="woodpecker/*" element={<WoodpeckerPage />} />
+      <Route path="blunder-check/*" element={<BlunderCheckPage />} />
+      <Route path="openings/*" element={<OpeningsPage />} />
+      <Route path="endgames/*" element={<EndgamesPage />} />
+      <Route path="vision/*" element={<VisionPage />} />
       <Route path="*" element={<Navigate to="/train" replace />} />
     </Routes>
   );

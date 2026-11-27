@@ -102,7 +102,8 @@ export function PuzzlePrompt({ runner, className = '', idleText = 'Loading…' }
   return (
     <div className={`flex items-center gap-2.5 text-lg font-bold ${tone} ${className}`}>
       <span className={`inline-block h-4 w-4 rounded-sm ${swatch}`} />
-      <span>{text}</span>
+      {/* Keyed on the text: each new verdict ("Best move!", "Not quite") settles in instead of swapping in place. */}
+      <span key={text} className="inline-block animate-feedback-in">{text}</span>
     </div>
   );
 }
@@ -111,9 +112,14 @@ export function ProgressDots({ runner }: { runner: PuzzleRunner }): ReactNode {
   const { done, total } = runner.progress;
   return (
     <div className="flex gap-1.5">
-      {Array.from({ length: total }, (_, i) => (
-        <span key={i} className={`h-2 w-6 rounded-full transition-colors ${i < done ? 'bg-good-500' : 'bg-ink-700'}`} />
-      ))}
+      {/* A dot remounts when it fills (key includes the state), so only the dot that just turned green animates. */}
+      {Array.from({ length: total }, (_, i) =>
+        i < done ? (
+          <span key={`${i}-done`} className="h-2 w-6 origin-left animate-dot-fill rounded-full bg-good-500" />
+        ) : (
+          <span key={`${i}-todo`} className="h-2 w-6 rounded-full bg-ink-700" />
+        ),
+      )}
     </div>
   );
 }

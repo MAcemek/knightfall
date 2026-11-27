@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { FxLayer } from './shared/fx/index.ts';
 import { Icons } from './shared/ui.tsx';
@@ -10,6 +10,7 @@ import { UpdateWatcher } from './shared/pwa/UpdateWatcher.tsx';
 import { ToastHost } from './shared/toast.tsx';
 import { ChallengeInbox } from './shared/battle/ChallengeInbox.tsx';
 import { startBattleNetwork } from './shared/battle/store.ts';
+import { navIndex, viewKey } from './shared/routeView.ts';
 
 /**
  * Each mode lives in src/features/<mode>/ and default-exports its page from Page.tsx.
@@ -50,6 +51,19 @@ const MORE = [
   { to: '/settings', label: 'Settings', icon: Icons.sliders },
 ];
 
+/**
+ * Shown only while a page's code is still downloading on first load. It waits a moment so a fast load shows no
+ * flash of "Loading…"; in-app navigation keeps the old page on screen until the new one is ready instead.
+ */
+function PageLoading() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShown(true), 250);
+    return () => clearTimeout(t);
+  }, []);
+  return shown ? <div className="animate-fade-in p-10 text-center text-ink-400">Loading…</div> : null;
+}
+
 const sideLink = ({ isActive }: { isActive: boolean }) =>
   `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 font-semibold transition-colors ${isActive ? 'bg-ink-800 text-ember-400' : 'text-ink-300 hover:bg-ink-850 hover:text-ink-100'}`;
 
@@ -58,10 +72,11 @@ export function App() {
   const profile = useProfile();
   const reviews = useReviewSummary();
   const due = reviews?.due ?? 0;
-  // Page transition is keyed on the first path segment only, so /rush → /rush/play/3min (and the other
-  // in-feature navigations) never remounts a page.
+  // The page entrance replays when the view changes (/train → /train/woodpecker) but not when only a parameter
+  // does (another Daily date), so a board in use never fades out. See routeView.ts.
   const { pathname } = useLocation();
-  const section = pathname.split('/')[1] ?? '';
+  const view = viewKey(pathname);
+  const activeTab = navIndex(pathname, NAV);
   const toggleSound = () => setSetting('sound', !settings.sound);
 
   // A new page starts at the top. Without this, opening a game from a scrolled lobby (Rush, a review,
@@ -147,9 +162,12 @@ export function App() {
       </header>
 
       <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 lg:px-8 lg:pb-8 lg:pt-8">
-        <div key={section} className="animate-page-in">
+        {/* Suspense sits outside the keyed wrapper on purpose: an already-shown boundary lets navigation keep the
+            old page up while the next page's code loads, and the entrance then plays on the real page, not on a
+            loading placeholder. */}
+        <Suspense fallback={<PageLoading />}>
+        <div key={view} className="animate-page-in">
           <ErrorBoundary key={pathname}>
-          <Suspense fallback={<div className="p-10 text-center text-ink-400">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/puzzles/*" element={<Puzzles />} />
@@ -166,13 +184,25 @@ export function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<div className="p-10 text-center text-ink-400">Page not found.</div>} />
             </Routes>
-          </Suspense>
           </ErrorBoundary>
         </div>
+        </Suspense>
       </main>
 
       {/* Bottom nav (mobile) */}
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden">
+        {/* Active-tab marker: one column wide, slid to the active tab; hidden on pages the bar has no tab for. */}
+        <span
+          aria-hidden
+          className={`kf-nav-marker pointer-events-none absolute -top-px flex justify-center ${activeTab < 0 ? 'opacity-0' : ''}`}
+          style={{
+            left: 'env(safe-area-inset-left)',
+            width: 'calc((100% - env(safe-area-inset-left) - env(safe-area-inset-right)) / 8)',
+            transform: `translateX(${Math.max(0, activeTab) * 100}%)`,
+          }}
+        >
+          <span className="h-0.5 w-8 rounded-full bg-ember-400 shadow-[0_0_8px_rgb(255_154_31/0.6)]" />
+        </span>
         {NAV.map((n) => (
           <NavLink
             key={n.to}

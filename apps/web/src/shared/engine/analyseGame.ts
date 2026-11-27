@@ -1,7 +1,6 @@
 import { Chess } from 'chess.js';
 import { terminalEval, type PositionEval } from '@knightfall/core';
 import type { CloudEvalClient } from './cloudEval.ts';
-import { harmfulBoundaries, harmfulBoundaryMoves, MAX_EXTRA_POSITIONS, MAX_EXTRA_ROUNDS, positionsToRefine, refinedPositions } from './keyMoments.ts';
 import { AbortError, type EvalJob } from './pool.ts';
 
 /**
@@ -93,96 +92,4 @@ export async function analysePositions(opts: AnalysePositionsOptions): Promise<P
   }
   if (signal?.aborted) throw new AbortError();
   return out as PositionEval[];
-}
-
-export interface RefineOptions {
-  fens: readonly string[];
-  /** First-pass evaluations, one per FEN. */
-  evals: readonly PositionEval[];
-  /** Positions to look at again (see criticalPlies). */
-  plies: readonly number[];
-  /** Depth of the second pass. Positions already at least this deep are left alone. */
-  depth: number;
-  multiPv?: number;
-  evaluate: (job: EvalJob) => Promise<PositionEval>;
-  signal?: AbortSignal;
-  /** Called once per re-searched position with the evaluation that is kept. `done` counts finished positions. */
-  onEval?: (index: number, evaluation: PositionEval, done: number, total: number) => void;
-}
-
-/**
- * Second pass of a review: search the chosen positions again, deeper, and keep a new evaluation only when it
- * is deeper than the one already there. Uses the same pool (so never more engines than the pool allows),
- * every search from a clean hash. Returns a copy of `evals`. Rejects with AbortError when aborted.
- */
-export async function refineKeyMoments(opts: RefineOptions): Promise<PositionEval[]> {
-  const { fens, evals, depth, evaluate, signal, onEval } = opts;
-  const multiPv = opts.multiPv ?? 2;
-  const out = evals.slice();
-  const targets = positionsToRefine(evals, opts.plies, depth);
-  if (signal?.aborted) throw new AbortError();
-  if (!targets.length) return out;
-
-  // One controller for the whole pass: the first failure stops the searches that are still queued or running.
-  const inner = new AbortController();
-  const forward = () => inner.abort();
-  signal?.addEventListener('abort', forward, { once: true });
-  let done = 0;
-  try {
-    await Promise.all(
-      targets.map((i, rank) => {
-        const p = evaluate({ fen: fens[i], depth, multiPv, priority: targets.length - rank, signal: inner.signal, fresh: true }).then((e) => {
-          if (e.depth > out[i].depth) out[i] = e;
-          done++;
-          onEval?.(i, out[i], done, targets.length);
-        });
-        p.catch(() => inner.abort());
-        return p;
-      }),
-    );
-  } finally {
-    signal?.removeEventListener('abort', forward);
-  }
-  if (signal?.aborted) throw new AbortError();
-  return out;
-}
-
-export interface ConsistentRefineOptions extends RefineOptions {
-  /** Most extra positions the consistency rounds may add. Default MAX_EXTRA_POSITIONS (see extraPositionCap). */
-  maxExtra?: number;
-}
-
-/**
- * refineKeyMoments, then make sure no move is judged from a deep evaluation on one side and a shallow one on
- * the other. A move compares the position before it with the one after it; when only one of them was
- * searched deeper, the depth difference alone can turn a fine move into a "miss". Up to MAX_EXTRA_ROUNDS
- * times, the shallow side of every such move that got worse (see harmfulBoundaries) is searched deeper too
- * (at most `maxExtra` positions in all; the progress total grows with them). A move still inconsistent after
- * that gets the first-pass evaluation back on its deep side, so it is judged at one depth. That is the only
- * case where a position's evaluation gets shallower; the revert repeats until no such move is left.
- */
-export async function refineConsistently(opts: ConsistentRefineOptions): Promise<PositionEval[]> {
-  const { fens, evals: first, depth, signal, onEval } = opts;
-  const maxExtra = opts.maxExtra ?? MAX_EXTRA_POSITIONS;
-  let total = positionsToRefine(first, opts.plies, depth).length;
-  let out = await refineKeyMoments(opts);
-  let extra = 0;
-  for (let round = 0; round < MAX_EXTRA_ROUNDS; round++) {
-    const next = harmfulBoundaries(fens, first, out, refinedPositions(first, out))
-      .filter((i) => positionsToRefine(out, [i], depth).length > 0)
-      .slice(0, maxExtra - extra);
-    if (!next.length) break;
-    const base = total;
-    total += next.length;
-    extra += next.length;
-    out = await refineKeyMoments({ ...opts, evals: out, plies: next, onEval: onEval && ((i, e, done) => onEval(i, e, base + done, total)) });
-  }
-  if (signal?.aborted) throw new AbortError();
-  out = out.slice();
-  for (;;) {
-    const bad = harmfulBoundaryMoves(fens, first, out, refinedPositions(first, out));
-    if (!bad.length) break;
-    for (const b of bad) out[b.refined] = first[b.refined];
-  }
-  return out;
 }

@@ -43,18 +43,18 @@ export const ReviewHeader = memo(function ReviewHeader({ game, report }: { game:
   );
 });
 
-export function ProgressBar({ done, total, engineLabel, depth, phase = 'positions', onCancel }: { done: number; total: number; engineLabel: string; depth: number; phase?: 'positions' | 'key-moments'; onCancel: () => void }) {
+export function ProgressBar({ done, total, engineLabel, depth, onCancel }: { done: number; total: number; engineLabel: string; depth: number; onCancel: () => void }) {
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
   return (
     <div className="mx-auto mb-4 w-full max-w-6xl rounded-xl border border-ink-700/60 bg-ink-850 px-4 py-3">
       <div className="flex items-center justify-between gap-3 text-sm">
         <span className="min-w-0 truncate text-ink-200">
-          {phase === 'key-moments' ? 'Checking key moments' : `Analysing with ${engineLabel} · depth ${depth}`}
+          Analysing with {engineLabel} · depth {depth}
           <span className="ml-2 font-mono text-xs text-ink-400">{done}/{total}</span>
         </span>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-label={phase === 'key-moments' ? 'Checking key moments' : 'Analysing the game'} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800" role="progressbar" aria-label="Analysing the game" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         <div className="h-full rounded-full bg-ember-500 transition-[width] duration-200" style={{ width: `${pct}%` }} />
       </div>
     </div>

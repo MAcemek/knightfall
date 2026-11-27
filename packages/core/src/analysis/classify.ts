@@ -12,34 +12,22 @@ import {
 import type { EngineLine, EvalScore, MoveClass, PositionEval, Side } from './types.ts';
 
 /**
- * Move classification by expected-points loss. The great / brilliant / book rules follow WintrChess's documented
- * behaviour (reimplemented, no code copied); the label bands follow chess.com's Game Review.
- * Knightfall's names: great = "critical"/only move, good = "okay", book = "theory".
+ * Move classification by expected-points loss, matching WintrChess's rules (reimplemented from its documented
+ * behaviour, no code copied). Knightfall's names: great = "critical"/only move, good = "okay", book = "theory".
  * On top of those rules Knightfall adds "miss" (a chance the opponent gave you and you let go), which never
  * changes accuracy.
  */
 
-/**
- * Label bands: exclusive upper bounds of the expected-points loss (EP_GRADIENT). These are chess.com's published
- * bands (excellent 0.02, good 0.05, inaccuracy 0.10, mistake 0.20), with best under 0.01 because KnightFall's
- * engine is weaker and a move it scores a hair below its first choice is usually just as good.
- * From an equal position that is about 11 / 23 / 57 / 116 / 242 centipawns.
- */
+/** Expected-points loss bands (exclusive upper bounds). */
 export const LOSS_BEST = 0.01;
-export const LOSS_EXCELLENT = 0.02;
-export const LOSS_GOOD = 0.05;
-export const LOSS_INACCURACY = 0.1;
-export const LOSS_MISTAKE = 0.2;
+export const LOSS_EXCELLENT = 0.045;
+export const LOSS_GOOD = 0.08;
+export const LOSS_INACCURACY = 0.12;
+export const LOSS_MISTAKE = 0.22;
 /** "great": the second-best move would have lost at least this much. */
 export const GREAT_SECOND_LOSS = 0.1;
 /** Positions this good (cp, mover's view) need no hard-to-find move. */
 export const STILL_WINNING_CP = 700;
-/**
- * "brilliant": a sacrifice that is not the engine's first choice may still be brilliant when it gives away less
- * than this (expected points). chess.com: "Brilliant Moves are always the best or nearly best move in the
- * position". Without it, a deeper search that prefers another move by a few centipawns takes the brilliant away.
- */
-export const BRILLIANT_MAX_LOSS = 0.02;
 /** "miss": the mover must still be at least this well off afterwards (expected points). */
 export const MISS_MIN_EP = 0.45;
 
@@ -65,9 +53,6 @@ export interface ClassifyContext {
   previous?: MoveClass;
 }
 
-/** The side being mated: a move that brings the mate at most this many moves closer is still 'best' (chess.com labels almost every move of a lost mating net as best). */
-export const MATED_BEST_MATE_LOSS = 3;
-
 const isMate = (s: EvalScore): s is { mate: number } => 'mate' in s;
 
 /** The class from the loss alone (also handles positions with forced mates). */
@@ -77,7 +62,7 @@ export function pointLossClass(before: EvalScore, after: EvalScore, mover: Side)
   if (isMate(before) && isMate(after)) {
     if (prev > 0 && cur < 0) return cur < -3 ? 'mistake' : 'blunder';
     const mateLoss = (after.mate - before.mate) * (mover === 'w' ? 1 : -1);
-    if (mateLoss < 0 || (cur < 0 && mateLoss < MATED_BEST_MATE_LOSS)) return 'best';
+    if (mateLoss < 0 || (mateLoss === 0 && cur < 0)) return 'best';
     if (mateLoss < 2) return 'excellent';
     if (mateLoss < 7) return 'good';
     return 'inaccuracy';
@@ -163,22 +148,16 @@ function isBrilliant(ctx: ClassifyContext, p: { before: Chess; after: Chess; mov
   return unsafe.length > 0;
 }
 
-/** An "excellent" move that loses under BRILLIANT_MAX_LOSS, outside forced-mate scores. */
-function isNearlyBest(ctx: ClassifyContext, cls: MoveClass): boolean {
-  if (cls !== 'excellent' || isMate(ctx.before.score) || isMate(ctx.after.score)) return false;
-  return expectedPointsLoss(ctx.before.score, ctx.after.score, ctx.mover) < BRILLIANT_MAX_LOSS;
-}
-
 /**
  * Classify one move. In order:
  *  1. forced     the only legal move
  *  2. book       the position after the move is a known opening position
  *  3. best       it gives checkmate
- *  4. best       the engine's first choice, otherwise chess.com's bands
- *                (< 0.01 best, < 0.02 excellent, < 0.05 good, < 0.10 inaccuracy, < 0.20 mistake, else blunder;
+ *  4. best       the engine's first choice, otherwise the expected-points-loss bands
+ *                (< 0.01 best, < 0.045 excellent, < 0.08 good, < 0.12 inaccuracy, < 0.22 mistake, else blunder;
  *                mate scores use mate-distance rules)
  *  5. great      the first choice and the only one that holds (second-best loses >= 0.10)
- *  6. brilliant  a sound sacrifice that is "best" or nearly best (loses < 0.02 expected points, no mate scores)
+ *  6. brilliant  at least "best" and a sound sacrifice
  *  7. miss       Knightfall: the opponent just made a mistake/blunder and this move is an inaccuracy or worse
  *                while the mover is still doing fine
  */
@@ -193,7 +172,7 @@ export function classifyMove(ctx: ClassifyContext): MoveClass {
   const topPlayed = !!top && top.pv[0] === ctx.uci;
   let cls: MoveClass = topPlayed ? 'best' : pointLossClass(ctx.before.score, ctx.after.score, ctx.mover);
   if (topPlayed && isGreat(ctx, p)) cls = 'great';
-  if ((CLASS_RANK[cls] >= CLASS_RANK.best || isNearlyBest(ctx, cls)) && isBrilliant(ctx, p)) cls = 'brilliant';
+  if (CLASS_RANK[cls] >= CLASS_RANK.best && isBrilliant(ctx, p)) cls = 'brilliant';
 
   if (
     (ctx.previous === 'mistake' || ctx.previous === 'blunder') &&

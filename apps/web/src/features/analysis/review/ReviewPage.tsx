@@ -857,7 +857,7 @@ function ReviewBody({ s, gameKey }: { s: ReturnType<typeof useAnalysisSession>; 
   return (
     <div className="w-full">
       <ReviewHeader game={g} report={report} />
-      {status === 'analysing' && <ProgressBar done={s.done} total={s.total} engineLabel={ENGINES[engine].label} depth={s.depth} phase={s.phase} onCancel={s.cancel} />}
+      {status === 'analysing' && <ProgressBar done={s.done} total={s.total} engineLabel={ENGINES[engine].label} depth={s.depth} onCancel={s.cancel} />}
       {status === 'error' && (
         <div className="mx-auto mb-4 flex w-full max-w-6xl items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-4 py-3 text-sm" role="alert">
           <span className="text-bad-400">{s.error}</span>

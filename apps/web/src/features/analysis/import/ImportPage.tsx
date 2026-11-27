@@ -418,7 +418,7 @@ export function ImportPage() {
                   role="radio"
                   aria-checked={engine === id}
                   disabled={disabled}
-                  title={disabled ? 'Needs npm run engine:deep' : `${ENGINES[id].label}, depth ${ENGINES[id].depth}, key moments ${ENGINES[id].keyDepth}`}
+                  title={disabled ? 'Needs npm run engine:deep' : `${ENGINES[id].label}, depth ${ENGINES[id].depth}`}
                   onClick={() => chooseEngine(id)}
                   className={`rounded-lg px-3.5 py-1.5 text-sm font-bold transition-colors max-lg:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ember-400 disabled:cursor-not-allowed disabled:opacity-40 ${engine === id ? 'bg-ink-700 text-ember-400 shadow' : 'text-ink-400 hover:text-ink-100'}`}
                 >

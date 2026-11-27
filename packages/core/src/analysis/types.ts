@@ -77,7 +77,7 @@ export interface SideNumbers {
 }
 
 /** Version of the classification rules. A stored report with another version is rebuilt from its evals. */
-export const REPORT_VERSION = 4;
+export const REPORT_VERSION = 5;
 
 export interface GameReport {
   version: typeof REPORT_VERSION;

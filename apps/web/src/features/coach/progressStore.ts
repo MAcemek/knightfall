@@ -1,3 +1,4 @@
+import { REPORT_VERSION } from '@knightfall/core';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type CoachSpeed, type StoredGame, type WoodSet } from '../../shared/db.ts';
 import { getAnalysisPrefs } from '../../shared/analysis/index.ts';
@@ -44,7 +45,8 @@ async function blunderRows(games: readonly { game: StoredGame; side: 'w' | 'b' }
     const batch = games.slice(i, i + BATCH);
     const analyses = await db.analyses.bulkGet(batch.map((b) => b.game.key));
     batch.forEach((b, j) => {
-      const counts = analyses[j]?.report?.counts;
+      const report = analyses[j]?.report;
+      const counts = report?.version === REPORT_VERSION ? report.counts : undefined;
       const mine = counts ? (b.side === 'w' ? counts.white : counts.black) : undefined;
       const blunders = mine?.blunder;
       if (typeof blunders === 'number' && Number.isFinite(blunders) && out.length < BLUNDER_GAMES) out.push({ playedAt: b.game.playedAt, blunders });

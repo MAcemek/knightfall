@@ -1,7 +1,8 @@
 import { Chess } from 'chess.js';
 import type { Puzzle } from '../types.ts';
 import { uciToMove, validateLine } from '../validate.ts';
-import { classifyMove, GREAT_SECOND_LOSS, LOSS_EXCELLENT } from './classify.ts';
+import { classifyMove, GREAT_SECOND_LOSS } from './classify.ts';
+import { RETRY_MAX_LOSS } from './coach.ts';
 import { moveInsight } from './insight.ts';
 import { epMoveAccuracy, expectedPointsLoss } from './expectedPoints.ts';
 import { pieceMaterial } from './pieceSafety.ts';
@@ -94,16 +95,34 @@ export interface ReportInput {
   ratings?: { white?: number | null; black?: number | null };
 }
 
+/**
+ * A known opening move stays book while it loses under this much (expected points, EP_GRADIENT). chess.com keeps
+ * popular gambits as book (the King's Gambit and the Englund Gambit lose 0.05-0.08 and are still book), so only a
+ * known move that loses at least 0.10 ends the book.
+ */
+export const BOOK_MAX_LOSS = 0.1;
+
 /** Build the full report. Throws if the array lengths do not line up. */
 export function buildReport(input: ReportInput): GameReport {
   const { startFen, sans, ucis, fens, evals, openings, ratings } = input;
   const n = sans.length;
   if (ucis.length !== n || fens.length !== n + 1 || evals.length !== n + 1) throw new Error('buildReport: array lengths do not match');
 
-  // Book: the position after the move (piece placement) is a known opening position, at any ply.
+  // Book (as chess.com marks it): the position after the move (piece placement, so transpositions count) is a
+  // known opening position, the move loses under BOOK_MAX_LOSS, and every move before it was book. A named line
+  // that loses more than that ends the book, and so does the first move
+  // out of it: what follows is judged by the engine even if it returns to a known position.
   // The opening name is the last hit of the unbroken run from the start.
   const byPlacement = openings ? openingByPlacement(openings) : null;
-  const isBook = fens.slice(1).map((f) => !!byPlacement?.has(placementOf(f)));
+  const isBook: boolean[] = [];
+  let inBook = !!byPlacement;
+  for (let i = 0; i < n; i++) {
+    inBook =
+      inBook &&
+      byPlacement!.has(placementOf(fens[i + 1])) &&
+      expectedPointsLoss(evals[i].score, evals[i + 1].score, sideToMove(fens[i])) < BOOK_MAX_LOSS;
+    isBook.push(inBook);
+  }
   let bookPlies = 0;
   let opening: GameReport['opening'] = null;
   if (byPlacement) {
@@ -252,10 +271,10 @@ export function mistakePuzzles(report: GameReport, opts: PracticeOptions): Puzzl
     const fen = setup ? setup.fenBefore : m.fenBefore;
     const moves = setup ? [setup.uci, ...line] : line;
     if (validateLine(fen, moves) !== null) continue;
-    // Engine line 2 is an equally good first move when it loses under LOSS_EXCELLENT (same rule as judgeRetry in coach.ts).
+    // Engine line 2 is an equally good first move when it loses under RETRY_MAX_LOSS (same rule as judgeRetry in coach.ts).
     const ev = report.evals[m.ply];
     const second = ev?.lines[1];
-    const alt = ev && second && second.pv[0] && second.pv[0] !== pv[0] && expectedPointsLoss(ev.lines[0].score, second.score, m.color) < LOSS_EXCELLENT ? second.pv[0] : null;
+    const alt = ev && second && second.pv[0] && second.pv[0] !== pv[0] && expectedPointsLoss(ev.lines[0].score, second.score, m.color) < RETRY_MAX_LOSS ? second.pv[0] : null;
     const firstIdx = setup ? 1 : 0;
     const alts = alt && validateLine(fen, [...(setup ? [setup.uci] : []), alt]) === null ? { [firstIdx]: [alt] } : null;
     out.push({

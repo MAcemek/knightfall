@@ -1,4 +1,4 @@
-import { expectedPointsLoss, LOSS_EXCELLENT, LOSS_INACCURACY, winPercent, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
+import { expectedPointsLoss, winPercent, type MoveClass, type PositionEval, type Side } from '@knightfall/core';
 
 /**
  * Which positions of a reviewed game get a second, deeper look. Pure: it only reads the first-pass
@@ -16,13 +16,17 @@ export function keyPositionCap(mobile: boolean): number {
   return mobile ? MOBILE_MAX_KEY_POSITIONS : MAX_KEY_POSITIONS;
 }
 export const KEY_SWINGS = 3;
+/** First-pass loss (EP_GRADIENT scale) from which a move earns a deeper look. Independent of the label bands. */
+export const KEY_MIN_LOSS = 0.045;
+/** Merged loss (EP_GRADIENT scale) from which a boundary move counts as harmful. Independent of the label bands. */
+export const HARMFUL_MIN_LOSS = 0.12;
 
 export interface CriticalOptions {
   /** First-pass class of every move (index = ply). Without it, great and brilliant moves are not picked. */
   classes?: readonly (MoveClass | undefined)[];
   /** Most positions to return. Default MAX_KEY_POSITIONS. */
   maxPositions?: number;
-  /** Expected-points loss from which a move counts. Default LOSS_EXCELLENT. */
+  /** Expected-points loss from which a move counts. Default KEY_MIN_LOSS. */
   minLoss?: number;
   /** How many of the largest win-chance swings are added. Default KEY_SWINGS. */
   swings?: number;
@@ -42,7 +46,7 @@ export function criticalPlies(
   opts: CriticalOptions = {},
 ): number[] {
   const cap = opts.maxPositions ?? MAX_KEY_POSITIONS;
-  const minLoss = opts.minLoss ?? LOSS_EXCELLENT;
+  const minLoss = opts.minLoss ?? KEY_MIN_LOSS;
   const moves = Math.min(fens.length, evals.length) - 1;
   const rows: { ply: number; priority: number; loss: number; swing: number; picked: boolean }[] = [];
   for (let ply = 0; ply < moves; ply++) {
@@ -116,7 +120,7 @@ export interface HarmfulBoundary {
 /**
  * Moves judged across two depths that look worse than they did in the first pass. A "boundary" move is one
  * where exactly one of the positions before and after it was searched deeper (`refined`). It is harmful when
- * its loss with the merged evaluations is at least LOSS_INACCURACY and more than 0.02 above its loss with the
+ * its loss with the merged evaluations is at least HARMFUL_MIN_LOSS and more than 0.02 above its loss with the
  * first-pass evaluations of both positions. Worst first. Finished positions are never listed as unrefined
  * (their score is exact, so there is nothing to search).
  */
@@ -140,7 +144,7 @@ export function harmfulBoundaryMoves(
     const mover = moverOf(fens[i]);
     const mergedLoss = expectedPointsLoss(mBefore.score, mAfter.score, mover);
     const firstLoss = expectedPointsLoss(fBefore.score, fAfter.score, mover);
-    if (mergedLoss >= LOSS_INACCURACY && mergedLoss > firstLoss + BOUNDARY_MARGIN) out.push({ refined: r, unrefined: u, loss: mergedLoss });
+    if (mergedLoss >= HARMFUL_MIN_LOSS && mergedLoss > firstLoss + BOUNDARY_MARGIN) out.push({ refined: r, unrefined: u, loss: mergedLoss });
   }
   return out.sort((a, b) => b.loss - a.loss || a.unrefined - b.unrefined);
 }

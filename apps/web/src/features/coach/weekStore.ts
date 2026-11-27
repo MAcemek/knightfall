@@ -1,4 +1,4 @@
-import { addDays } from '@knightfall/core';
+import { addDays, REPORT_VERSION } from '@knightfall/core';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type WoodSet } from '../../shared/db.ts';
 import { getAnalysisPrefs } from '../../shared/analysis/index.ts';
@@ -43,7 +43,8 @@ export async function readWeek(monday: string, today: string = localDateKey(new 
   const analyses = await db.analyses.bulkGet(siteRapid.map((x) => x.game.key));
   const blunders = new Map<string, number>();
   siteRapid.forEach((x, i) => {
-    const counts = analyses[i]?.report?.counts;
+    const report = analyses[i]?.report;
+    const counts = report?.version === REPORT_VERSION ? report.counts : undefined;
     const mine = counts ? (x.side === 'w' ? counts.white : counts.black) : undefined;
     if (typeof mine?.blunder === 'number' && Number.isFinite(mine.blunder)) blunders.set(x.game.key, mine.blunder);
   });

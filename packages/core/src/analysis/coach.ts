@@ -1,5 +1,4 @@
 import type { PieceSymbol } from 'chess.js';
-import { LOSS_EXCELLENT } from './classify.ts';
 import { expectedPoints, expectedPointsLoss } from './expectedPoints.ts';
 import type { BestReason, MoveInsight } from './insight.ts';
 import { PIECE_VALUE } from './pieceSafety.ts';
@@ -384,12 +383,18 @@ export function coachBestText(move: TipMove, insight: MoveInsight | undefined, p
 }
 
 
-/** Retry: 'best' = the engine's first move, 'good' = another line within LOSS_EXCELLENT of it, else 'wrong'. */
+/**
+ * A retry or a puzzle's other first move counts as good when it loses under this much against the engine's first
+ * move (EP_GRADIENT scale). Kept apart from the label bands so that retries stay as forgiving as before.
+ */
+export const RETRY_MAX_LOSS = 0.045;
+
+/** Retry: 'best' = the engine's first move, 'good' = another line within RETRY_MAX_LOSS of it, else 'wrong'. */
 export function judgeRetry(evalBefore: PositionEval, uci: string, mover: Side): 'best' | 'good' | 'wrong' {
   const top = evalBefore.lines[0];
   if (!top) return 'wrong';
   if (top.pv[0] === uci) return 'best';
   const match = evalBefore.lines.find((l) => l.pv[0] === uci);
-  if (match && expectedPointsLoss(top.score, match.score, mover) < LOSS_EXCELLENT) return 'good';
+  if (match && expectedPointsLoss(top.score, match.score, mover) < RETRY_MAX_LOSS) return 'good';
   return 'wrong';
 }

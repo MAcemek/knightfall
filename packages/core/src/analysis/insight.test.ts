@@ -265,7 +265,7 @@ describe('through buildReport', () => {
     // After allowing mate, the best move's point is stopping it, not a side effect of it.
     expect(report.moves[5].insight?.best?.reason).toBe('stops-mate');
     expect(report.moves[6].insight?.motif).toBe('checkmate');
-    expect(report.version).toBe(3);
+    expect(report.version).toBe(4);
     expect(report.advanced.endgame).toEqual({ white: null, black: null });
     expect(JSON.parse(JSON.stringify(report))).toEqual(report);
   });

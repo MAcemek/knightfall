@@ -51,11 +51,11 @@ describe('expected points', () => {
 });
 
 describe('pointLossClass: centipawn to centipawn bands (from cp 0, White)', () => {
-  // Losing x cp from an equal position loses 0.01 / 0.045 / 0.08 / 0.12 / 0.22 expected points at about
-  // x = 12 / 52 / 93 / 140 / 270.
+  // chess.com's bands: losing x cp from an equal position loses 0.01 / 0.02 / 0.05 / 0.10 / 0.20 expected points
+  // (EP_GRADIENT) at about x = 11 / 23 / 57 / 116 / 242.
   const cases: [number, MoveClass][] = [
-    [0, 'best'], [11, 'best'], [12, 'excellent'], [51, 'excellent'], [52, 'good'], [92, 'good'],
-    [93, 'inaccuracy'], [139, 'inaccuracy'], [140, 'mistake'], [269, 'mistake'], [270, 'blunder'], [900, 'blunder'],
+    [0, 'best'], [11, 'best'], [12, 'excellent'], [22, 'excellent'], [23, 'good'], [57, 'good'],
+    [58, 'inaccuracy'], [115, 'inaccuracy'], [116, 'mistake'], [242, 'mistake'], [243, 'blunder'], [900, 'blunder'],
   ];
   it.each(cases)('losing %i cp is %s', (x, cls) => {
     expect(pointLossClass({ cp: 0 }, { cp: -x }, 'w')).toBe(cls);
@@ -68,14 +68,22 @@ describe('pointLossClass: centipawn to centipawn bands (from cp 0, White)', () =
     const loss = (x: number) => expectedPointsLoss({ cp: 0 }, { cp: -x }, 'w');
     expect(loss(11)).toBeLessThan(0.01);
     expect(loss(12)).toBeGreaterThanOrEqual(0.01);
-    expect(loss(51)).toBeLessThan(0.045);
-    expect(loss(52)).toBeGreaterThanOrEqual(0.045);
-    expect(loss(92)).toBeLessThan(0.08);
-    expect(loss(93)).toBeGreaterThanOrEqual(0.08);
-    expect(loss(139)).toBeLessThan(0.12);
-    expect(loss(140)).toBeGreaterThanOrEqual(0.12);
-    expect(loss(269)).toBeLessThan(0.22);
-    expect(loss(270)).toBeGreaterThanOrEqual(0.22);
+    expect(loss(22)).toBeLessThan(0.02);
+    expect(loss(23)).toBeGreaterThanOrEqual(0.02);
+    expect(loss(57)).toBeLessThan(0.05);
+    expect(loss(58)).toBeGreaterThanOrEqual(0.05);
+    expect(loss(115)).toBeLessThan(0.1);
+    expect(loss(116)).toBeGreaterThanOrEqual(0.1);
+    expect(loss(242)).toBeLessThan(0.2);
+    expect(loss(243)).toBeGreaterThanOrEqual(0.2);
+  });
+  it('a loss of 0.015 expected points is excellent and 0.03 is good', () => {
+    // From an equal position: x cp loses 0.5 - 1 / (1 + e^(0.0035 x)).
+    const cpFor = (loss: number) => Math.round(Math.log((0.5 + loss) / (0.5 - loss)) / 0.0035);
+    expect(expectedPointsLoss({ cp: 0 }, { cp: -cpFor(0.015) }, 'w')).toBeCloseTo(0.015, 3);
+    expect(pointLossClass({ cp: 0 }, { cp: -cpFor(0.015) }, 'w')).toBe('excellent');
+    expect(expectedPointsLoss({ cp: 0 }, { cp: -cpFor(0.03) }, 'w')).toBeCloseTo(0.03, 3);
+    expect(pointLossClass({ cp: 0 }, { cp: -cpFor(0.03) }, 'w')).toBe('good');
   });
 });
 
@@ -92,6 +100,18 @@ describe('pointLossClass: mate to mate', () => {
     expect(pointLossClass({ mate: -5 }, { mate: -3 }, 'b')).toBe('best');
     // Being mated either way in the same number of moves: nothing was lost.
     expect(pointLossClass({ mate: -3 }, { mate: -3 }, 'w')).toBe('best');
+  });
+  it('being mated: bringing the mate at most 2 moves closer is still best, 3 closer is not', () => {
+    // mateLoss = (after.mate - before.mate) for White, sign flipped for Black.
+    expect(pointLossClass({ mate: -4 }, { mate: -2 }, 'w')).toBe('best'); // 2 moves closer
+    expect(pointLossClass({ mate: -4 }, { mate: -3 }, 'w')).toBe('best'); // 1 move closer
+    expect(pointLossClass({ mate: -5 }, { mate: -2 }, 'w')).not.toBe('best'); // 3 moves closer
+    expect(pointLossClass({ mate: 4 }, { mate: 2 }, 'b')).toBe('best');
+    expect(pointLossClass({ mate: 5 }, { mate: 2 }, 'b')).not.toBe('best');
+  });
+  it('the winning side keeping the same mate distance is still excellent', () => {
+    expect(pointLossClass({ mate: 3 }, { mate: 3 }, 'w')).toBe('excellent');
+    expect(pointLossClass({ mate: -3 }, { mate: -3 }, 'b')).toBe('excellent');
   });
   it('slower mates: 0-1 moves excellent, 2-6 good, 7+ inaccuracy', () => {
     expect(pointLossClass({ mate: 3 }, { mate: 3 }, 'w')).toBe('excellent');
@@ -188,7 +208,7 @@ describe('classifyMove: forced, book, checkmate, best', () => {
 });
 
 describe('classifyMove: each loss band when the top move was not played', () => {
-  const cases: [number, MoveClass][] = [[5, 'best'], [30, 'excellent'], [70, 'good'], [110, 'inaccuracy'], [200, 'mistake'], [400, 'blunder']];
+  const cases: [number, MoveClass][] = [[5, 'best'], [15, 'excellent'], [30, 'good'], [70, 'inaccuracy'], [150, 'mistake'], [300, 'blunder']];
   it.each(cases)('losing %i cp is %s', (x, cls) => {
     expect(classifyMove(ctx(START, E4, { before: { cp: 0 }, lines: [D4], after: { cp: -x } }))).toBe(cls);
   });
@@ -260,9 +280,20 @@ describe('classifyMove: brilliant', () => {
     const c = ctx(legal, nxe5, { before: { cp: 40 }, lines: [[{ cp: 40 }, 'd2d4']], after: { cp: 30 } });
     expect(classifyMove(c)).toBe('brilliant');
   });
-  it('not when the move is merely excellent', () => {
-    const c = ctx(legal, nxe5, { before: { cp: 60 }, lines: [[{ cp: 60 }, 'd2d4']], after: { cp: 30 } });
-    expect(classifyMove(c)).toBe('excellent');
+  it('also when it is not the engine\'s first choice but nearly best (loses under 0.02)', () => {
+    // 30 -> 10 loses 0.0175 (excellent, nearly best); 30 -> 0 loses 0.026 (good, too much).
+    const c = ctx(legal, nxe5, { before: { cp: 30 }, lines: [[{ cp: 30 }, 'd2d4']], after: { cp: 10 } });
+    expect(classifyMove(c)).toBe('brilliant');
+  });
+  it('a queen sacrifice that a deeper search ranks second stays brilliant', () => {
+    // Qxd1+ with Qxb2 ranked first by 45 cp; chess.com's Game Review calls the sacrifice brilliant.
+    const fen = '5rk1/ppp2p1p/2n2p2/8/8/3Q2P1/1PPK1P1P/q2R4 b - - 0 22';
+    const c = ctx(fen, 'a1d1', { before: { cp: -571 }, lines: [[{ cp: -571 }, 'a1b2'], [{ cp: -566 }, 'a1a5']], after: { cp: -526 } });
+    expect(classifyMove(c)).toBe('brilliant');
+  });
+  it('not when the move is only good', () => {
+    const c = ctx(legal, nxe5, { before: { cp: 30 }, lines: [[{ cp: 30 }, 'd2d4']], after: { cp: 0 } });
+    expect(classifyMove(c)).toBe('good');
   });
   it('not when the position was already won, or the sacrifice leaves the mover worse', () => {
     const won = ctx(legal, nxe5, { before: { cp: 900 }, lines: [[{ cp: 900 }, nxe5], [{ cp: 800 }, 'd2d4']], after: { cp: 900 } });

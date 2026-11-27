@@ -124,7 +124,8 @@ describe('buildReport', () => {
   const report = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings });
 
   it('classifies every move', () => {
-    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'excellent', 'best', 'best', 'blunder', 'best']);
+    // 2.Qh5 (30 -> -20 cp) loses 0.0437 expected points: a good move (0.02 to 0.05).
+    expect(report.moves.map((m) => m.class)).toEqual(['book', 'book', 'good', 'best', 'best', 'blunder', 'best']);
   });
   it('fills move metadata', () => {
     const nf6 = report.moves[5];
@@ -135,7 +136,7 @@ describe('buildReport', () => {
     expect(nf6.epLoss).toBeCloseTo(0.5262, 4);
     expect(nf6.accuracy).toBeCloseTo(9.4, 1);
     expect(nf6.cpLoss).toBe(1030);
-    // Qh5 (30 → -20 cp) loses 0.0437 expected points: just inside "excellent".
+    // Qh5 (30 → -20 cp) loses 0.0437 expected points on the accuracy scale, which accuracy is built on, and the label bands use the same scale.
     expect(report.moves[2].epLoss).toBeCloseTo(0.0437, 4);
     expect(report.moves[2].accuracy).toBeCloseTo(83.44, 2);
     // Delivering mate loses nothing; accuracy of a flawless move is 103.16 − 3.17.
@@ -152,12 +153,12 @@ describe('buildReport', () => {
     expect(report.accuracy.black!).toBeCloseTo((99.99 + 99.99 + 9.4008) / 3, 2);
     expect(report.acpl.white).toBeCloseTo(60 / 4, 6);
     expect(report.acpl.black).toBeCloseTo(1030 / 3, 6);
-    expect(report.counts.white).toMatchObject({ book: 1, excellent: 1, best: 2, great: 0, blunder: 0 });
+    expect(report.counts.white).toMatchObject({ book: 1, good: 1, excellent: 0, best: 2, great: 0, blunder: 0 });
     expect(report.counts.black).toMatchObject({ book: 1, best: 1, blunder: 1 });
     expect(Object.values(report.counts.white).reduce((a, b) => a + b, 0)).toBe(4);
   });
-  it('is version 3 and carries the Lichess-formula accuracy and the game-rating estimate', () => {
-    expect(report.version).toBe(3);
+  it('is version 4 and carries the Lichess-formula accuracy and the game-rating estimate', () => {
+    expect(report.version).toBe(4);
     expect(report.ratingAccuracy.white!).toBeGreaterThan(85);
     expect(report.ratingAccuracy.black!).toBeLessThan(25);
     // No known ratings: anchored on 1600, moved by the (clamped) accuracy gap.
@@ -187,6 +188,26 @@ describe('buildReport', () => {
     const placementOnly = { [`${g.fens[1].split(' ')[0]} w KQkq -`]: ['B00', "King's Pawn"] as [string, string] };
     const two = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: placementOnly });
     expect(two.moves[0].class).toBe('book');
+  });
+  it('ends the book at the first move out of it, or at a known move that gives ground', () => {
+    const all: OpeningTable = Object.fromEntries(g.fens.slice(1, 5).map((f, i) => [epdOf(f), ['C20', `Line ${i}`] as [string, string]]));
+    // Every position up to 3.Bc4 is known, and no move loses anything: four book moves.
+    const known = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: all });
+    expect(known.moves.map((m) => m.class === 'book')).toEqual([true, true, true, true, false, false, false]);
+    // Drop the position after 2.Qh5 from the table: 2...Nc6 and 3.Bc4 are no longer book although they are known.
+    const gap = { ...all };
+    delete gap[epdOf(g.fens[3])];
+    const broken = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: gap });
+    expect(broken.moves.map((m) => m.class === 'book')).toEqual([true, true, false, false, false, false, false]);
+    // 2.Qh5 gives away 0.0437 expected points in the fixture. A gambit-sized loss of about 0.08 (30 -> -62 cp) stays book.
+    const withScore = (cp: number) => evals.map((e, i) => (i === 3 ? { ...e, score: { cp }, lines: [{ score: { cp }, pv: ['b8c6'] }] } : e));
+    const gambit = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: withScore(-62), openings: all });
+    expect(gambit.moves[2].epLoss).toBeCloseTo(0.08, 2);
+    expect(gambit.moves.map((m) => m.class === 'book')).toEqual([true, true, true, true, false, false, false]);
+    // A loss of about 0.12 (30 -> -109 cp) ends the book, and the known positions after it are not book either.
+    const unsound = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals: withScore(-109), openings: all });
+    expect(unsound.moves[2].epLoss).toBeCloseTo(0.12, 2);
+    expect(unsound.moves.map((m) => m.class === 'book')).toEqual([true, true, false, false, false, false, false]);
   });
   it('works without an opening table and rejects mismatched input', () => {
     const noBook = buildReport({ startFen: g.startFen, sans: g.sans, ucis: g.ucis, fens: g.fens, evals, openings: null });
@@ -223,7 +244,7 @@ describe('mistakePuzzles', () => {
   });
   it('lists engine line 2 as an alternative first move when it is about as good', () => {
     const [p] = mistakePuzzles(report, { gameKey: 'li-abcdefgh', side: 'b', rating: 1480, label: 'vs Alice' });
-    // d8e7 (-10 cp) loses under LOSS_EXCELLENT against g7g6 (-30 cp); index 1 = Black's first move after the setup move.
+    // d8e7 (-10 cp) loses under RETRY_MAX_LOSS against g7g6 (-30 cp); index 1 = Black's first move after the setup move.
     expect(p.alts).toEqual({ 1: ['d8e7'] });
     expect(validateLine(p.fen, [p.moves[0], 'd8e7'])).toBeNull();
   });

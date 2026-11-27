@@ -137,7 +137,7 @@ export function StatusLine({ error, okText }: { error: string | null; okText: st
   return (
     <div
       key={error ?? 'ok'}
-      className={`flex animate-pop items-start gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+      className={`flex animate-feedback-in items-start gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${
         error ? 'bg-bad-500/10 text-bad-400 ring-1 ring-bad-500/30' : 'bg-good-500/10 text-good-400 ring-1 ring-good-500/30'
       }`}
       role={error ? 'alert' : 'status'}

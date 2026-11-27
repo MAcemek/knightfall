@@ -134,7 +134,8 @@
   0% { opacity: 0; transform: translateY(6px) scale(0.96); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-/* Puzzle prompt ("Best move!", "Not quite"): the new line settles in. Needs inline-block. */
+/* Text that changes or appears (puzzle verdicts, notes, alert lines): it settles in without the badge "pop".
+   Inline elements need inline-block. */
 @keyframes kf-feedback-in {
   0% { opacity: 0; transform: translateY(4px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -259,7 +260,7 @@ body {
   animation: kf-shine calc(1.1s * var(--kf-speed)) ease-out 0.25s both;
 }
 
-/* Phone bottom bar: the active-tab marker slides between the 8 columns. */
+/* Active-tab markers: phone bottom bar (between the 8 columns) and desktop sidebar (between links). */
 .kf-nav-marker {
   transition:
     transform calc(240ms * var(--kf-speed)) cubic-bezier(0.2, 0.8, 0.2, 1),

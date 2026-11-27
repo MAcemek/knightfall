@@ -57,7 +57,7 @@ export function ClubCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (pat
         </form>
       </div>
       {club.error && (
-        <div className="mt-3 flex animate-pop items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
+        <div className="mt-3 flex animate-feedback-in items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
           <span>{club.error}</span>
           <button className="flex h-8 w-8 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissClubError} aria-label="Dismiss">
             {Icons.x('h-4 w-4')}

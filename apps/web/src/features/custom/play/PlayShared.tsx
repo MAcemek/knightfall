@@ -112,7 +112,7 @@ export function PlayShared() {
           <div ref={saveBtn} className="w-full">
             {saved ? (
               <div className="flex w-full flex-wrap items-center gap-2">
-                <span className="flex animate-pop items-center gap-1.5 text-sm font-semibold text-good-400">
+                <span className="flex animate-feedback-in items-center gap-1.5 text-sm font-semibold text-good-400">
                   {Icons.check('h-4 w-4')} In your puzzles
                 </span>
                 <Button size="sm" className="ml-auto" onClick={() => navigate(`/custom/edit/${saved.id}`)}>

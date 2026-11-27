@@ -99,7 +99,7 @@ function OutcomeLine({ runner, mode, result }: { runner: PuzzleRunner; mode: Ses
   }
   if (!text) return null;
   return (
-    <span key={String(text)} className={`inline-block animate-pop text-right text-sm font-bold ${tone}`}>
+    <span key={String(text)} className={`inline-block animate-feedback-in text-right text-sm font-bold ${tone}`}>
       {text}
     </span>
   );

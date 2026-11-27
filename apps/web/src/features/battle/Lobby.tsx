@@ -68,7 +68,7 @@ export function Lobby({ api }: { api: BattleApi }) {
     <div className="mx-auto grid w-full max-w-5xl gap-4 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-4">
         {state.error && (
-          <div className="flex animate-pop items-center justify-between gap-3 rounded-2xl border border-bad-500/40 bg-bad-500/10 px-4 py-3 text-sm font-semibold text-bad-400" role="alert">
+          <div className="flex animate-feedback-in items-center justify-between gap-3 rounded-2xl border border-bad-500/40 bg-bad-500/10 px-4 py-3 text-sm font-semibold text-bad-400" role="alert">
             <span className="flex items-center gap-2">
               {Icons.x('h-4 w-4 shrink-0')}
               {state.error}
@@ -264,7 +264,7 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
       </div>
       <RecentOpponents prefs={prefs} busy={outgoing.kind === 'waiting' || outgoing.kind === 'sending' || connection.moved} />
       {outgoing.kind === 'result' && message && (
-        <div className="mt-3 flex animate-pop items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
+        <div className="mt-3 flex animate-feedback-in items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
           <span>{message.text}</span>
           <button className="-my-1 flex h-10 w-10 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissChallengeResult} aria-label="Dismiss">
             {Icons.x('h-4 w-4')}

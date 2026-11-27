@@ -11,6 +11,7 @@ import { ToastHost } from './shared/toast.tsx';
 import { ChallengeInbox } from './shared/battle/ChallengeInbox.tsx';
 import { startBattleNetwork } from './shared/battle/store.ts';
 import { navIndex, viewKey } from './shared/routeView.ts';
+import { SideNavMarker } from './shared/SideNavMarker.tsx';
 
 /**
  * Each mode lives in src/features/<mode>/ and default-exports its page from Page.tsx.
@@ -101,7 +102,8 @@ export function App() {
             Knight<span className="text-ember-400">fall</span>
           </span>
         </NavLink>
-        <nav className="flex flex-col gap-1">
+        <nav className="relative flex flex-col gap-1">
+          <SideNavMarker pathname={pathname} />
           {[NAV[0], COACH, ...NAV.slice(1)].map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={sideLink}>
               <span className="transition-transform duration-150 group-hover:scale-110">{n.icon('h-5 w-5')}</span>

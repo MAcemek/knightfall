@@ -73,7 +73,7 @@ export function DailyCard({ runner, date, today, record, practice, finished, chi
         )}
       </div>
       {note && (
-        <p key={String(note)} className={`mt-3 animate-pop text-sm font-semibold ${tone}`}>
+        <p key={String(note)} className={`mt-3 animate-feedback-in text-sm font-semibold ${tone}`}>
           {note}
         </p>
       )}

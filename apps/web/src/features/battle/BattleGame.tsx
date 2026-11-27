@@ -64,8 +64,15 @@ export function BattleGame({ state, match, serverNow, onResult, onResign, onClai
               myScoreRef={myScoreRef}
             />
             {clinched && <ClinchBanner opponent={match.opponent.name} lead={state.me.solved - state.opp.solved} onClaim={onClaim} />}
+            {(state.reconnectingSince > 0 || state.oppAway) && (
+              <div data-testid="connection-banner" role="status" className="mb-3 rounded-xl border border-ember-400/30 bg-ember-400/10 px-4 py-2.5 text-sm font-semibold text-ember-300 max-lg:mb-2 max-lg:line-clamp-2 max-lg:px-3 max-lg:py-1.5 max-lg:text-xs max-lg:leading-4">
+                {state.reconnectingSince > 0
+                  ? 'Connection lost. Reconnecting… your clock keeps running and your puzzles still count.'
+                  : `${match.opponent.name} lost their connection. Their seat is held for a few seconds…`}
+              </div>
+            )}
             {chasing && (
-              <div data-testid="chasing-banner" className="mb-3 animate-pop rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-semibold text-sky-400 max-lg:mb-2 max-lg:line-clamp-2 max-lg:px-3 max-lg:py-1.5 max-lg:text-xs max-lg:leading-4">
+              <div data-testid="chasing-banner" className="mb-3 animate-feedback-in rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-semibold text-sky-400 max-lg:mb-2 max-lg:line-clamp-2 max-lg:px-3 max-lg:py-1.5 max-lg:text-xs max-lg:leading-4">
                 {match.opponent.name} is out of lives — solve {state.opp.solved - state.me.solved + 1} more to clinch the win!
               </div>
             )}

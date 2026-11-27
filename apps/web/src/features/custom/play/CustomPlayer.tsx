@@ -145,7 +145,7 @@ export function CustomPlayer({ puzzle, onResult, actions, stats, kicker, onNext 
             {result && (
               <div
                 key={celebrate + (result.solved ? 's' : 'f')}
-                className={`animate-pop rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                className={`animate-feedback-in rounded-xl px-3 py-2.5 text-sm font-semibold ${
                   result.solved ? 'bg-good-500/10 text-good-400 ring-1 ring-good-500/30' : 'bg-bad-500/10 text-bad-400 ring-1 ring-bad-500/30'
                 }`}
               >

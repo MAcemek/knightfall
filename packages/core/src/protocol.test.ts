@@ -9,6 +9,10 @@ import {
   CLUB_IDLE_MS,
   CLUB_MAX_PLAYERS,
   DEFAULT_BATTLE_SETTINGS,
+  REACTIONS,
+  REACTION_EMOJI,
+  REACTION_LABEL,
+  isReaction,
   decode,
   encode,
   rampFor,
@@ -36,8 +40,8 @@ describe('defaults and constants', () => {
   it('default settings are the classic 3 minute normal battle', () => {
     expect(DEFAULT_BATTLE_SETTINGS).toEqual({ durationMs: BATTLE_DURATION_MS, level: 'normal' });
   });
-  it('announces the settings, club and reconnect capabilities', () => {
-    expect([...CLIENT_CAPS]).toEqual(['settings', 'club', 'reconnect']);
+  it('announces the settings, club, reconnect and react capabilities', () => {
+    expect([...CLIENT_CAPS]).toEqual(['settings', 'club', 'reconnect', 'react']);
   });
   it('club limits', () => {
     expect(CLUB_MAX_PLAYERS).toBe(30);
@@ -72,5 +76,22 @@ describe('reconnect', () => {
     };
     expect(decode<ServerMessage>(encode(matched))).toEqual(matched);
     expect(decode<ServerMessage>(encode({ type: 'opponent-away', graceMs: BATTLE_RECONNECT_MS }))).toEqual({ type: 'opponent-away', graceMs: 15_000 });
+  });
+});
+
+describe('reactions', () => {
+  it('isReaction accepts the five ids and rejects anything else', () => {
+    for (const r of ['gg', 'clap', 'fire', 'wow', 'oops']) expect(isReaction(r)).toBe(true);
+    for (const r of ['', 'GG', 'toString', 'lol', 1, null, undefined, {}]) expect(isReaction(r)).toBe(false);
+  });
+  it('has an emoji and a label for every reaction', () => {
+    for (const r of REACTIONS) {
+      expect(REACTION_EMOJI[r]).toBeTruthy();
+      expect(REACTION_LABEL[r]).toBeTruthy();
+    }
+  });
+  it("both cap lists include 'react'", () => {
+    expect(CLIENT_CAPS).toContain('react');
+    expect(SERVER_CAPS).toContain('react');
   });
 });

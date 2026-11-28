@@ -21,6 +21,7 @@ const TYPES: Record<ClientMessage['type'], true> = {
   'club-leave': true,
   'club-start': true,
   'club-new-race': true,
+  react: true,
 };
 
 export const CLIENT_TYPES: ReadonlySet<string> = new Set(Object.keys(TYPES));

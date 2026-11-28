@@ -2,8 +2,10 @@ import {
   BATTLE_RECONNECT_MS,
   DEFAULT_BATTLE_SETTINGS,
   FRIEND_MOVED_MESSAGE,
+  isReaction,
   isValidCode,
   normalizeCode,
+  REACTION_COOLDOWN_MS,
   SERVER_CAPS,
   type BattleSettings,
   type ChallengeStatus,
@@ -71,6 +73,8 @@ export class BattleHub {
   private readonly clubs = new ClubRegistry();
   /** Sessions of club members, by id (a session replaced by another tab is not in `sessions`). */
   private readonly clubSessions = new Map<string, Session>();
+  /** Time of each session's last accepted reaction. */
+  private readonly lastReaction = new Map<string, number>();
   /** Seats held for players whose socket dropped mid-battle, by the id of the session that dropped. */
   private readonly holds = new Map<string, { code: string; timer: ReturnType<typeof setTimeout> }>();
 
@@ -195,6 +199,9 @@ export class BattleHub {
         this.afterClub(r.club, true);
         break;
       }
+      case 'react':
+        this.react(s, msg.reaction);
+        break;
       default:
         break;
     }
@@ -271,6 +278,7 @@ export class BattleHub {
   private dropSession(id: string) {
     const old = this.sessions.get(id);
     if (!old) return;
+    this.lastReaction.delete(id);
     const out = this.board.outgoing(id);
     if (out) {
       this.board.remove(out.id);
@@ -569,6 +577,32 @@ export class BattleHub {
     this.clearChallengesFor(s);
     this.detach(s.id);
     return true;
+  }
+
+  /** Relay a quick reaction to the 1v1 opponent (also on the end screen) or the other club members. Never echoed. */
+  private react(s: Session, reaction: unknown) {
+    if (!isReaction(reaction)) return;
+    const now = Date.now();
+    const lastAt = this.lastReaction.get(s.id);
+    if (lastAt !== undefined && now - lastAt < REACTION_COOLDOWN_MS) return;
+    const msg: ServerMessage = { type: 'reaction', reaction, from: s.info.name };
+    const room = this.roomOf.get(s.id);
+    const opp = room?.opponentOf(s.id);
+    if (room && opp) {
+      // Only a human who is still in this room (has not left or moved on) and understands reactions.
+      if (!(opp instanceof Session) || this.roomOf.get(opp.id) !== room || !opp.caps.has('react')) return;
+      this.lastReaction.set(s.id, now);
+      opp.send(msg);
+      return;
+    }
+    const club = this.clubs.clubOf(s.id);
+    if (!club) return;
+    this.lastReaction.set(s.id, now);
+    for (const m of club.members.values()) {
+      if (m.id === s.id || !m.connected) continue;
+      const t = this.clubSessions.get(m.id);
+      if (t?.caps.has('react')) t.send(msg);
+    }
   }
 
   private clubCreate(s: Session, rawSettings: unknown) {

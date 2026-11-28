@@ -34,13 +34,23 @@ export interface SeriesInfo {
   opp: number;
 }
 /** Capabilities a client announces in `hello`. */
-export const CLIENT_CAPS = ['settings', 'club', 'reconnect'] as const;
+export const CLIENT_CAPS = ['settings', 'club', 'reconnect', 'react'] as const;
 /**
  * Features this server supports, announced in `welcome` (an older server sends none).
  * 'reconnect': a 1v1 seat is held for BATTLE_RECONNECT_MS after a socket drop, a `hello` with `resume` takes it
  * back, and a club member who joins again with the same friend code gets their place back.
  */
-export const SERVER_CAPS = ['settings', 'club', 'reconnect'] as const;
+export const SERVER_CAPS = ['settings', 'club', 'reconnect', 'react'] as const;
+/** Quick reactions (both sides need the 'react' cap). */
+export const REACTIONS = ['gg', 'clap', 'fire', 'wow', 'oops'] as const;
+export type ReactionId = (typeof REACTIONS)[number];
+export const REACTION_EMOJI: Record<ReactionId, string> = { gg: '🤝', clap: '👏', fire: '🔥', wow: '😮', oops: '😅' };
+export const REACTION_LABEL: Record<ReactionId, string> = { gg: 'GG', clap: 'Well played', fire: 'On fire', wow: 'Wow', oops: 'Oops' };
+export function isReaction(x: unknown): x is ReactionId {
+  return typeof x === 'string' && (REACTIONS as readonly string[]).includes(x);
+}
+/** Minimum time between two reactions from one player; the server drops faster ones. */
+export const REACTION_COOLDOWN_MS = 1500;
 /** How long a dropped player's seat in a 1v1 battle is held before the opponent wins. */
 export const BATTLE_RECONNECT_MS = 15_000;
 export const CLUB_MAX_PLAYERS = 30;
@@ -101,7 +111,9 @@ export type ClientMessage =
   /** Host only. */
   | { type: 'club-start' }
   /** Host only: back to the lobby with scores reset. */
-  | { type: 'club-new-race' };
+  | { type: 'club-new-race' }
+  /** A quick reaction to the opponent or the club room. Only relayed to clients with the 'react' cap. */
+  | { type: 'react'; reaction: ReactionId };
 
 export type ChallengeStatus =
   | 'sent'
@@ -169,7 +181,9 @@ export type ServerMessage =
       endsAt?: number;
       serverNow: number;
     }
-  | { type: 'club-error'; reason: string };
+  | { type: 'club-error'; reason: string }
+  /** Only sent to clients that announced 'react'. `from` is the sender's display name. */
+  | { type: 'reaction'; reaction: ReactionId; from: string };
 
 export function encode(msg: ClientMessage | ServerMessage): string {
   return JSON.stringify(msg);

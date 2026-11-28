@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BATTLE_CHALLENGE_TTL_MS, CLUB_IDLE_MS, CLUB_MAX_PLAYERS, FRIEND_MOVED_MESSAGE, SERVER_CAPS, type BattleSettings, type ServerMessage } from '@knightfall/core';
+import { BATTLE_CHALLENGE_TTL_MS, REACTION_COOLDOWN_MS, CLUB_IDLE_MS, CLUB_MAX_PLAYERS, FRIEND_MOVED_MESSAGE, SERVER_CAPS, type BattleSettings, type ServerMessage } from '@knightfall/core';
 import { BattleHub, SERIES_GAP_MS, Session } from './hub.ts';
 import { isClientMessage } from './clientTypes.ts';
 
@@ -882,5 +882,95 @@ describe('old clients (no caps) keep working', () => {
     expect(last(a, 'end')).toMatchObject({ reason: 'time' });
     vi.advanceTimersByTime(SERIES_GAP_MS * 2);
     expect(ofType(a, 'matched')).toHaveLength(1);
+  });
+});
+
+describe('reactions', () => {
+  const R = ['react'];
+  const pair = (hub: BattleHub, aCaps: string[] | undefined, bCaps: string[] | undefined) => {
+    const a = connect(hub, 'Ann', 1200, { caps: aCaps });
+    const b = connect(hub, 'Bob', 1200, { caps: bCaps });
+    const id = invite(hub, a, b);
+    hub.handle(b.s, { type: 'challenge-respond', id, accept: true });
+    return { a, b };
+  };
+
+  it('relays to the 1v1 opponent with the cap, never echoes, and works after the game ended', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, R, R);
+    hub.handle(a.s, { type: 'react', reaction: 'clap' });
+    expect(ofType(b, 'reaction')).toEqual([{ type: 'reaction', reaction: 'clap', from: 'Ann' }]);
+    expect(ofType(a, 'reaction')).toHaveLength(0);
+    vi.advanceTimersByTime(3 * 60 * 1000 + 5000);
+    hub.tick();
+    expect(last(a, 'end')).toBeDefined();
+    hub.handle(b.s, { type: 'react', reaction: 'gg' });
+    expect(last(a, 'reaction')).toEqual({ type: 'reaction', reaction: 'gg', from: 'Bob' });
+  });
+
+  it('does not send to an opponent without the cap', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, R, undefined);
+    hub.handle(a.s, { type: 'react', reaction: 'gg' });
+    expect(ofType(b, 'reaction')).toHaveLength(0);
+  });
+
+  it('does not send once the opponent left the room', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, R, R);
+    hub.handle(b.s, { type: 'leave' });
+    hub.handle(a.s, { type: 'react', reaction: 'gg' });
+    expect(ofType(b, 'reaction')).toHaveLength(0);
+  });
+
+  it('drops a second reaction inside the cooldown and accepts one after it', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, R, R);
+    hub.handle(a.s, { type: 'react', reaction: 'gg' });
+    vi.advanceTimersByTime(REACTION_COOLDOWN_MS - 100);
+    hub.handle(a.s, { type: 'react', reaction: 'fire' });
+    expect(ofType(b, 'reaction')).toHaveLength(1);
+    vi.advanceTimersByTime(100);
+    hub.handle(a.s, { type: 'react', reaction: 'fire' });
+    expect(ofType(b, 'reaction').map((m) => m.reaction)).toEqual(['gg', 'fire']);
+  });
+
+  it('ignores invalid reactions without using the cooldown', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, R, R);
+    hub.handle(a.s, { type: 'react', reaction: 'lol' as never });
+    hub.handle(a.s, { type: 'react' } as never);
+    hub.handle(a.s, { type: 'react', reaction: 'wow' });
+    expect(ofType(b, 'reaction').map((m) => m.reaction)).toEqual(['wow']);
+  });
+
+  it('ignores a reaction from a session with no opponent and no club', () => {
+    const hub = newHub();
+    const a = connect(hub, 'Ann', 1200, { caps: R });
+    hub.handle(a.s, { type: 'react', reaction: 'gg' });
+    expect(ofType(a, 'reaction')).toHaveLength(0);
+  });
+
+  it('broadcasts in a club to the other members with the cap, not to the sender', () => {
+    const hub = newHub();
+    const host = connect(hub, 'Host', 1200, { caps: ['club', 'react'] });
+    const m1 = connect(hub, 'Mia', 1200, { caps: ['club', 'react'] });
+    const m2 = connect(hub, 'Old', 1200, { caps: ['club'] });
+    hub.handle(host.s, { type: 'club-create' });
+    const roomCode = last(host, 'club-state')!.code;
+    hub.handle(m1.s, { type: 'club-join', code: roomCode });
+    hub.handle(m2.s, { type: 'club-join', code: roomCode });
+    hub.handle(host.s, { type: 'react', reaction: 'fire' });
+    expect(ofType(m1, 'reaction')).toEqual([{ type: 'reaction', reaction: 'fire', from: 'Host' }]);
+    expect(ofType(m2, 'reaction')).toHaveLength(0);
+    expect(ofType(host, 'reaction')).toHaveLength(0);
+  });
+
+  it('a client that never says react is unaffected', () => {
+    const hub = newHub();
+    const { a, b } = pair(hub, undefined, undefined);
+    hub.handle(a.s, { type: 'react', reaction: 'gg' });
+    expect(ofType(b, 'reaction')).toHaveLength(0);
+    expect(last(a, 'matched')).toBeDefined();
   });
 });

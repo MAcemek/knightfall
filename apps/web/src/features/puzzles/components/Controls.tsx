@@ -133,8 +133,8 @@ export function ControlDock(p: ControlDockProps) {
         </Button>
       </div>
       {p.action}
-      {p.onNext && (
-        <Button size="lg" variant={p.nextReady ? 'primary' : 'secondary'} className="h-12 w-full" onClick={p.onNext} disabled={!p.canNext || p.loading}>
+      {p.onNext && (p.canNext || p.loading) && (
+        <Button size="lg" variant={p.nextReady ? 'primary' : 'secondary'} className="h-12 w-full animate-rise" onClick={p.onNext} disabled={!p.canNext || p.loading}>
           {p.loading ? 'Loading…' : p.nextLabel ?? 'Next puzzle'} {!p.loading && Icons.next('h-5 w-5')}
         </Button>
       )}

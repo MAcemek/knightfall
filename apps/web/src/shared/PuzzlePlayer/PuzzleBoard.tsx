@@ -12,16 +12,18 @@ export function PuzzleBoard({ runner, orientation, className, children }: {
   className?: string;
   children?: ReactNode;
 }) {
+  const peek = runner.peek;
+  const arrows = peek ? (peek.arrow ? [peek.arrow] : undefined) : runner.hintArrow ? [runner.hintArrow] : undefined;
   return (
     <Board
-      fen={runner.fen}
+      fen={peek ? peek.fen : runner.fen}
       orientation={orientation ?? runner.orientation}
       interactive={runner.interactive}
       movableColor={runner.solverColor}
-      lastMove={runner.lastMove}
-      mark={runner.mark}
-      pulse={runner.pulse}
-      arrows={runner.hintArrow ? [runner.hintArrow] : undefined}
+      lastMove={peek ? peek.lastMove : runner.lastMove}
+      mark={peek ? null : runner.mark}
+      pulse={peek ? [] : runner.pulse}
+      arrows={arrows}
       shakeKey={runner.shakeKey}
       onMove={runner.playMove}
       onPremove={runner.status === 'opponent' || runner.status === 'intro' ? runner.setPremove : undefined}

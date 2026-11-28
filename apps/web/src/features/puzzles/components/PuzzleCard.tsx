@@ -52,11 +52,7 @@ export function PuzzleCard({ runner, mode, result, children, dock = false }: { r
               <span className="text-sm text-ink-500">—</span>
             )
           ) : (
-            <>
-              <span className="h-6 w-14 rounded-full bg-ink-700/70" />
-              <span className="h-6 w-20 rounded-full bg-ink-700/70" />
-              <span className="h-6 w-10 rounded-full bg-ink-700/70" />
-            </>
+            <span className="self-center text-sm text-ink-400">Shown when you finish</span>
           )}
         </div>
       </div>

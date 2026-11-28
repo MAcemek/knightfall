@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Puzzle } from '@knightfall/core';
 import type { RushRun } from '../../shared/db.ts';
-import { applyResult, clockElapsed, clockRemaining, formatClock, initialCore, pauseClock, resumeClock, startClock, MAX_STRIKES, modeHistory, summarize, toRushRun, type RushAttempt } from './rushLogic.ts';
+import { applyResult, crossedBest, clockElapsed, clockRemaining, formatClock, initialCore, pauseClock, resumeClock, startClock, MAX_STRIKES, modeHistory, summarize, toRushRun, type RushAttempt } from './rushLogic.ts';
 
 const pz = (id: string, rating: number): Puzzle => ({ id, fen: '8/8/8/8/8/8/8/8 w - - 0 1', moves: [], opponentFirst: true, rating, themes: [], source: 'lichess' });
 const att = (index: number, rating: number, solved: boolean, timeMs = 1000): RushAttempt => ({ index, puzzle: pz(`p${index}`, rating), solved, timeMs });
@@ -29,6 +29,17 @@ describe('applyResult', () => {
     expect(r.core.strikes).toBe(MAX_STRIKES);
     expect(r.struckOut).toBe(true);
     expect(r.core.attempts).toHaveLength(4);
+  });
+});
+
+describe('crossedBest', () => {
+  it('fires only once the score is above a previous best', () => {
+    expect(crossedBest(10, 10, false)).toBe(false);
+    expect(crossedBest(10, 11, false)).toBe(true);
+  });
+  it('never fires without a previous best or after it already fired', () => {
+    expect(crossedBest(0, 5, false)).toBe(false);
+    expect(crossedBest(10, 20, true)).toBe(false);
   });
 });
 

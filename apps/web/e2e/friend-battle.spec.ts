@@ -68,6 +68,10 @@ test('friend battle: challenge, settings, same puzzles, a real win, a casual res
     await expect(p.page.getByText('Friend battle. Your battle rating is unchanged.')).toBeVisible();
   }
 
+  // A quick reaction: Ana sends GG, Ben sees it float up.
+  await ana.page.getByRole('button', { name: 'Send GG' }).click();
+  await expect(ben.page.getByTestId('reaction-bubble').filter({ hasText: '🤝' })).toBeVisible({ timeout: 5000 });
+
   // Back in the lobby: rating untouched, and each is in the other's Recent opponents with the right record.
   await backToLobby(ana.page);
   await backToLobby(ben.page);

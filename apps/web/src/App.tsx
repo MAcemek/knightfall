@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { FxLayer } from './shared/fx/index.ts';
 import { Icons } from './shared/ui.tsx';
@@ -10,8 +10,9 @@ import { UpdateWatcher } from './shared/pwa/UpdateWatcher.tsx';
 import { ToastHost } from './shared/toast.tsx';
 import { ChallengeInbox } from './shared/battle/ChallengeInbox.tsx';
 import { startBattleNetwork } from './shared/battle/store.ts';
-import { navIndex, viewKey } from './shared/routeView.ts';
+import { phoneTabIndex, viewKey } from './shared/routeView.ts';
 import { SideNavMarker } from './shared/SideNavMarker.tsx';
+import { MoreSheet } from './features/home/MoreSheet.tsx';
 
 /**
  * Each mode lives in src/features/<mode>/ and default-exports its page from Page.tsx.
@@ -31,7 +32,7 @@ const Coach = lazy(() => import('./features/coach/Page.tsx'));
 const Stats = lazy(() => import('./features/stats/Page.tsx'));
 const Settings = lazy(() => import('./features/settings/Page.tsx'));
 
-/** Main modes: desktop sidebar + mobile bottom bar (8 columns). */
+/** Main modes for the desktop sidebar. The phone bottom bar uses PHONE_TABS instead. */
 const NAV = [
   { to: '/', label: 'Home', icon: Icons.home, end: true },
   { to: '/puzzles', label: 'Puzzles', icon: Icons.puzzle },
@@ -43,7 +44,15 @@ const NAV = [
   { to: '/analysis', label: 'Review', icon: Icons.search },
 ];
 
-/** Coach: second in the desktop sidebar, an icon in the phone top bar (the bottom bar stays at 8 columns). */
+/** Phone bottom bar: five columns. "More" is a button that opens a sheet with the other modes and pages. */
+const PHONE_TABS = [
+  { to: '/', label: 'Home', icon: Icons.home, end: true },
+  { to: '/puzzles', label: 'Puzzles', icon: Icons.puzzle },
+  { to: '/train', label: 'Train', icon: Icons.target },
+  { to: '/battle', label: 'Battle', icon: Icons.swords },
+];
+
+/** Coach: second in the desktop sidebar, an icon in the phone top bar. */
 const COACH: { to: string; label: string; icon: typeof Icons.bulb; end?: boolean } = { to: '/coach', label: 'Coach', icon: Icons.bulb };
 
 /** Secondary pages: below the modes in the sidebar, icons in the mobile top bar. */
@@ -77,8 +86,15 @@ export function App() {
   // does (another Daily date), so a board in use never fades out. See routeView.ts.
   const { pathname } = useLocation();
   const view = viewKey(pathname);
-  const activeTab = navIndex(pathname, NAV);
+  const activeTab = phoneTabIndex(pathname);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const toggleSound = () => setSetting('sound', !settings.sound);
+
+  // The More sheet closes whenever the page changes (a row link, back, or a link from elsewhere).
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   // A new page starts at the top. Without this, opening a game from a scrolled lobby (Rush, a review,
   // a drill) on a phone keeps the old scroll offset and hides the clock or the top of the board.
@@ -192,32 +208,44 @@ export function App() {
       </main>
 
       {/* Bottom nav (mobile) */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-8 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-ink-800 bg-ink-900/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden">
         {/* Active-tab marker: one column wide, slid to the active tab; hidden on pages the bar has no tab for. */}
         <span
           aria-hidden
           className={`kf-nav-marker pointer-events-none absolute -top-px flex justify-center ${activeTab < 0 ? 'opacity-0' : ''}`}
           style={{
             left: 'env(safe-area-inset-left)',
-            width: 'calc((100% - env(safe-area-inset-left) - env(safe-area-inset-right)) / 8)',
+            width: 'calc((100% - env(safe-area-inset-left) - env(safe-area-inset-right)) / 5)',
             transform: `translateX(${Math.max(0, activeTab) * 100}%)`,
           }}
         >
           <span className="h-0.5 w-8 rounded-full bg-ember-400 shadow-[0_0_8px_rgb(255_154_31/0.6)]" />
         </span>
-        {NAV.map((n) => (
+        {PHONE_TABS.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
             end={n.end}
-            className={({ isActive }) => `relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-semibold leading-tight transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
+            className={({ isActive }) => `relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-semibold leading-tight transition-colors ${isActive ? 'text-ember-400' : 'text-ink-400'}`}
           >
             {n.icon('h-5 w-5')}
             {n.label}
-            {n.to === '/train' && due > 0 && <span className="absolute right-[22%] top-1.5 h-2 w-2 rounded-full bg-ember-500" />}
+            {n.to === '/train' && due > 0 && <span className="absolute right-[26%] top-1.5 h-2 w-2 rounded-full bg-ember-500" />}
           </NavLink>
         ))}
+        <button
+          ref={moreRef}
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen(true)}
+          className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-semibold leading-tight transition-colors ${activeTab === 4 ? 'text-ember-400' : 'text-ink-400'}`}
+        >
+          {Icons.layers('h-5 w-5')}
+          More
+        </button>
       </nav>
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} returnFocus={moreRef} />
       <ProgressWatcher />
       <ToastHost />
       <UpdateWatcher />

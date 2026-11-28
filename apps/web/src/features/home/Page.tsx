@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { dailyStreak, utcDateKey } from '@knightfall/core';
 import { useBackupReminder } from '../../shared/backup/useBackupReminder.ts';
 import { db } from '../../shared/db.ts';
+import { useSettings } from '../../shared/settings.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { useReviewSummary } from '../../shared/progress/index.ts';
 import { prefetchAround } from '../../shared/puzzleSource.ts';
@@ -11,6 +12,9 @@ import { Icons, Panel } from '../../shared/ui.tsx';
 import type { StripView } from '../coach/todayText.ts';
 import { homeStrip } from '../coach/todayText.ts';
 import { useToday } from '../coach/todayStore.ts';
+import { CodeCard } from '../battle/CodeCard.tsx';
+import { isReturning, solvedToday, startOfLocalDay } from './homeLogic.ts';
+import { TodayCard } from './TodayCard.tsx';
 
 const MODES = [
   { to: '/puzzles', title: 'Puzzles', blurb: 'Rated tactics matched to your level. Build a streak.', icon: Icons.puzzle, tint: 'from-ember-500/25' },
@@ -26,20 +30,34 @@ const COACH_MODE = { to: '/coach', title: 'Coach', blurb: 'A 12-week plan with a
 
 export default function HomePage() {
   const profile = useProfile();
+  const settings = useSettings();
+  const navigate = useNavigate();
   const stats = useLiveQuery(async () => {
-    const [bestRush, daily, solved, attempts] = await Promise.all([
+    const now = Date.now();
+    const start = startOfLocalDay(now);
+    const todayKey = utcDateKey(new Date(now));
+    const [bestRush, daily, solved, attempts, battles, todayAttempts, todayBattles] = await Promise.all([
       db.rushRuns.orderBy('score').last(),
       db.daily.toArray(),
       db.attempts.filter((a) => a.solved).count(),
       db.attempts.count(),
+      db.battles.count(),
+      db.attempts.where('at').aboveOrEqual(start).toArray(),
+      db.battles.where('at').aboveOrEqual(start).toArray(),
     ]);
+    const todayDaily = daily.find((d) => d.date === todayKey);
     return {
       attempts,
+      battles,
+      dailies: daily.length,
       bestRush: bestRush?.score ?? 0,
-      dailyStreak: dailyStreak(daily.filter((d) => d.solved).map((d) => d.date), utcDateKey(new Date())),
+      dailyStreak: dailyStreak(daily.filter((d) => d.solved).map((d) => d.date), todayKey),
+      dailySolved: !!todayDaily?.solved,
       solved,
+      solvedToday: solvedToday({ attempts: todayAttempts, battles: todayBattles, daily: todayDaily, now }),
     };
   }, []);
+  const returning = !!stats && isReturning(stats);
   const backupReminder = useBackupReminder();
   const reviews = useReviewSummary();
   const coach = useToday();
@@ -51,6 +69,26 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      {returning && stats ? (
+        <>
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 sm:gap-4">
+            <TodayCard solved={stats.solvedToday} goal={settings.dailyGoal} dailySolved={stats.dailySolved} dailyStreak={stats.dailyStreak} />
+            <Panel className="animate-rise">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.15em] text-ember-400">Battle</h2>
+              <CodeCard bare onDone={() => navigate('/battle')} />
+              <Link to="/battle" className="mt-3 flex min-h-12 items-center justify-center rounded-xl bg-ink-700 px-4 py-3 font-bold shadow-[0_4px_0_0_var(--color-ink-800)] transition hover:bg-ink-600">
+                Find an opponent
+              </Link>
+            </Panel>
+          </div>
+          <div className="mb-6 grid grid-cols-4 gap-2 sm:gap-3">
+            <MiniStat label="Rating" value={profile ? Math.round(profile.puzzleRating.rating) : '—'} />
+            <MiniStat label="Streak" value={profile ? profile.puzzleStreak.current : '—'} />
+            <MiniStat label="Daily" value={stats.dailyStreak} />
+            <MiniStat label="Rush" value={stats.bestRush} />
+          </div>
+        </>
+      ) : (
       <section className="relative mb-5 overflow-hidden rounded-3xl border border-ink-800 bg-gradient-to-br from-ink-850 via-ink-900 to-ink-950 p-5 sm:mb-8 sm:p-10">
         <img src="/pieces/bN.svg" alt="" className="pointer-events-none absolute -right-8 -top-6 h-64 w-64 rotate-12 opacity-[0.07]" />
         <p className="text-sm font-bold uppercase tracking-[0.2em] text-ember-400">Train your tactics</p>
@@ -74,8 +112,9 @@ export default function HomePage() {
           <HeroStat label="Best rush" value={stats?.bestRush ?? '—'} />
         </div>
       </section>
+      )}
 
-      {stats && stats.attempts === 0 && (
+      {stats && !returning && (
         <Panel className="mb-6 animate-rise">
           <h2 className="mb-3 text-lg font-extrabold">New here? Three quick steps</h2>
           <ol className="space-y-2">
@@ -180,6 +219,15 @@ function HeroStat({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="rounded-xl bg-ink-950/50 px-3 py-2.5 sm:px-4 sm:py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">{label}</div>
       <div className="mt-0.5 font-mono text-xl font-bold">{value}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-ink-800 bg-ink-900 px-2 py-2 text-center">
+      <div className="truncate text-[11px] font-semibold uppercase tracking-wider text-ink-400">{label}</div>
+      <div className="font-mono text-lg font-bold">{value}</div>
     </div>
   );
 }

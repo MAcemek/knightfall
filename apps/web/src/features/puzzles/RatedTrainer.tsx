@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { PuzzlePrompt, usePuzzleRunner, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { PuzzlePrompt, usePuzzleRunner, WhyWrong, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
 import { db } from '../../shared/db.ts';
 import { burstAt, confetti, PALETTES, sfx } from '../../shared/fx/index.ts';
 import { useProfile } from '../../shared/profile.ts';
@@ -41,7 +41,7 @@ function visible(selector: string): Element | null {
 
 export function RatedTrainer() {
   const session = useRatedSession();
-  const runner = usePuzzleRunner(session.puzzle, { onComplete: session.onComplete });
+  const runner = usePuzzleRunner(session.puzzle, { onComplete: session.onComplete, explainMistakes: true });
   const profile = useProfile();
   const autoNext = useSettings().autoAdvance;
   const ratedCount = useLiveQuery(() => db.attempts.where('mode').equals('rated').count(), []);
@@ -149,6 +149,7 @@ export function RatedTrainer() {
           </div>
         }
         dock={
+          <>
           <ControlDock
             runner={runner}
             prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
@@ -164,6 +165,8 @@ export function RatedTrainer() {
             onNext={goNext}
             nextLabel={session.mode === 'replay' ? 'Back to rated' : 'Next puzzle'}
           />
+          <div className="lg:hidden"><WhyWrong runner={runner} /></div>
+          </>
         }
         side={
           <div className="flex flex-col gap-3">
@@ -172,7 +175,7 @@ export function RatedTrainer() {
             </div>
             {ratedCount === 0 && (
               <TipCard id="rated-intro" title="How rated puzzles work">
-                Find the best move for the side shown above the board. A clean solve raises your rating, a miss lowers it, and a hint means no gain. Press <b>?</b> for shortcuts.
+                Find the best move for the side shown above the board. A clean solve raises your rating, a miss lowers it, and a hint means no gain. <span className="hidden fine:inline">Press <b>?</b> for shortcuts.</span>
               </TipCard>
             )}
             {session.abandonedDelta !== null && (
@@ -209,6 +212,7 @@ export function RatedTrainer() {
                   nextLabel={session.mode === 'replay' ? 'Back to rated' : 'Next puzzle'}
                   extra={<Toggle checked={autoNext} onChange={(v) => setSetting('autoAdvance', v)} label="Auto-next" />}
                 />
+                <div className="max-lg:hidden"><WhyWrong runner={runner} /></div>
                 <p className="mt-3 min-h-4 text-center text-xs text-ink-400">
                   {(status === 'failed' || (retrying && status !== 'solved')) && session.mode === 'rated' ? "Retries are for practice and don't change your rating." : ''}
                 </p>

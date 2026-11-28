@@ -12,6 +12,10 @@ export const SELF_REVIEW_MODES: readonly { id: SelfReviewMode; label: string }[]
   { id: 'all', label: 'All games' },
 ];
 
+export const DAILY_GOALS = [0, 5, 10, 20] as const;
+/** Puzzles to solve per day; 0 = off. */
+export type DailyGoal = (typeof DAILY_GOALS)[number];
+
 export interface Settings {
   /** Sound effects on/off. */
   sound: boolean;
@@ -30,6 +34,10 @@ export interface Settings {
   autoGamePuzzles: boolean;
   /** Review a game yourself before the engine does. */
   selfReview: SelfReviewMode;
+  /** Short buzz on right and wrong moves (Android only). */
+  vibration: boolean;
+  /** Daily puzzle goal shown on Home; 0 = off. */
+  dailyGoal: DailyGoal;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -42,6 +50,8 @@ export const DEFAULT_SETTINGS: Settings = {
   premoves: true,
   autoGamePuzzles: true,
   selfReview: 'off',
+  vibration: true,
+  dailyGoal: 10,
 };
 
 export interface BoardTheme {
@@ -88,6 +98,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     premoves: typeof r.premoves === 'boolean' ? r.premoves : d.premoves,
     autoGamePuzzles: typeof r.autoGamePuzzles === 'boolean' ? r.autoGamePuzzles : d.autoGamePuzzles,
     selfReview: SELF_REVIEW_MODES.some((m) => m.id === r.selfReview) ? (r.selfReview as SelfReviewMode) : d.selfReview,
+    vibration: typeof r.vibration === 'boolean' ? r.vibration : d.vibration,
+    dailyGoal: DAILY_GOALS.some((g) => g === r.dailyGoal) ? (r.dailyGoal as DailyGoal) : d.dailyGoal,
   };
 }
 

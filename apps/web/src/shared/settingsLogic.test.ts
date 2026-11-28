@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD_THEMES, boardTheme, DEFAULT_SETTINGS, migrateLegacy, sanitizeSettings } from './settingsLogic.ts';
+import { BOARD_THEMES, DAILY_GOALS, boardTheme, DEFAULT_SETTINGS, migrateLegacy, sanitizeSettings } from './settingsLogic.ts';
 
 describe('sanitizeSettings', () => {
   it('returns defaults for junk', () => {
@@ -8,8 +8,8 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings([1, 2])).toEqual(DEFAULT_SETTINGS);
   });
   it('keeps valid fields and drops invalid ones', () => {
-    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all', extra: 1 });
-    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all' });
+    const s = sanitizeSettings({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all', vibration: false, dailyGoal: 20, extra: 1 });
+    expect(s).toEqual({ sound: false, volume: 0.4, boardTheme: 'dusk', animSpeed: 'off', showCoords: false, autoAdvance: true, premoves: false, autoGamePuzzles: false, selfReview: 'all', vibration: false, dailyGoal: 20 });
     expect(sanitizeSettings({ boardTheme: 'green', animSpeed: 'slow', sound: 'yes' })).toEqual(DEFAULT_SETTINGS);
   });
   it('clamps volume to 0..1', () => {
@@ -53,6 +53,24 @@ describe('autoGamePuzzles setting', () => {
   it('keeps a boolean and rejects junk', () => {
     expect(sanitizeSettings({ autoGamePuzzles: false }).autoGamePuzzles).toBe(false);
     expect(sanitizeSettings({ autoGamePuzzles: 'no' }).autoGamePuzzles).toBe(true);
+  });
+});
+
+describe('vibration and dailyGoal settings', () => {
+  it('default to on and 10 for old objects without them', () => {
+    const s = sanitizeSettings({ sound: false, volume: 0.5 });
+    expect(s.vibration).toBe(true);
+    expect(s.dailyGoal).toBe(10);
+  });
+  it('accept valid values', () => {
+    expect(sanitizeSettings({ vibration: false }).vibration).toBe(false);
+    for (const g of DAILY_GOALS) expect(sanitizeSettings({ dailyGoal: g }).dailyGoal).toBe(g);
+  });
+  it('fall back to defaults on bad values', () => {
+    expect(sanitizeSettings({ vibration: 'no' }).vibration).toBe(true);
+    expect(sanitizeSettings({ dailyGoal: 7 }).dailyGoal).toBe(10);
+    expect(sanitizeSettings({ dailyGoal: '5' }).dailyGoal).toBe(10);
+    expect(sanitizeSettings({ dailyGoal: null }).dailyGoal).toBe(10);
   });
 });
 

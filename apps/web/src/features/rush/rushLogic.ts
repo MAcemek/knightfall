@@ -84,6 +84,14 @@ export interface ApplyOutcome {
   struckOut: boolean;
 }
 
+/**
+ * Whether the live score has just gone past the best score of earlier runs. Needs a previous best above 0
+ * (the first ever run has nothing to beat) and fires once per run (`already` = it fired before).
+ */
+export function crossedBest(prevBest: number, score: number, already: boolean): boolean {
+  return !already && prevBest > 0 && score > prevBest;
+}
+
 /** Fold one puzzle outcome into the run. Pure. */
 export function applyResult(core: RunCore, attempt: RushAttempt): ApplyOutcome {
   const attempts = [...core.attempts, attempt];

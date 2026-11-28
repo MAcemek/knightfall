@@ -59,6 +59,7 @@ export function RushGame({ mode, onPlayAgain, onChangeMode }: { mode: RushMode; 
         solveKey={g.solveKey}
         milestoneKey={g.milestoneKey}
         strikeKey={g.strikeKey}
+        beatBest={g.beatBest}
       />
       <PuzzleBoard runner={runner}>
         {danger && <div className="pointer-events-none absolute inset-0 z-30 animate-danger shadow-[inset_0_0_80px_rgb(240_72_72/0.6)]" />}

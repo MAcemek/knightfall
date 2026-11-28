@@ -120,6 +120,7 @@ export function RushHud({
   solveKey,
   milestoneKey,
   strikeKey,
+  beatBest = false,
 }: {
   cfg: RushModeConfig;
   core: RunCore;
@@ -129,6 +130,7 @@ export function RushHud({
   solveKey: number;
   milestoneKey: number;
   strikeKey: number;
+  beatBest?: boolean;
 }) {
   const scoreRef = useRef<HTMLDivElement>(null);
 
@@ -157,7 +159,12 @@ export function RushHud({
             />
             <FloatingDelta delta={solveKey ? 1 : null} trigger={solveKey || null} />
           </div>
-          <div className="mt-0.5 flex h-5 items-center sm:mt-1 sm:h-6">
+          <div className="mt-0.5 flex h-5 items-center gap-1.5 sm:mt-1 sm:h-6">
+            {beatBest && (
+              <span className="inline-flex animate-pop items-center gap-1 rounded-full bg-good-500 px-2 py-0.5 text-[11px] font-black leading-4 text-ink-950 shadow-[0_0_14px_rgb(47_207_111/0.5)]">
+                {Icons.trophy('h-3 w-3')}New best!
+              </span>
+            )}
             <ComboBadge combo={core.combo} />
           </div>
           <div className="mt-1">

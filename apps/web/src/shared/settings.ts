@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { getKV, KEYS, setKV } from './db.ts';
+import { setHapticsEnabled } from './fx/haptics.ts';
 import { setMuted, setVolume } from './fx/sound.ts';
 import { boardTheme, DEFAULT_SETTINGS, migrateLegacy, sanitizeSettings, type Settings } from './settingsLogic.ts';
 
@@ -42,6 +43,7 @@ function apply(s: Settings) {
   }
   setVolume(s.volume);
   setMuted(!s.sound);
+  setHapticsEnabled(s.vibration);
 }
 
 function commit(next: Settings, persist: boolean) {

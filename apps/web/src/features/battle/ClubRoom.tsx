@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { BATTLE_MAX_STRIKES, formatCode, rampFor, type ClubPlayer } from '@knightfall/core';
-import { sfx, TickerNumber } from '../../shared/fx/index.ts';
+import { confetti, haptic, sfx, TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Modal, Panel, Pill } from '../../shared/ui.tsx';
 import { leaveClub, newClubRace, reportClubProgress, startClubRace } from '../../shared/battle/clubStore.ts';
 import { serverNow } from '../../shared/battle/connection.ts';
@@ -8,6 +8,7 @@ import { clubLink, isHost, ordinal, rankPlayers, raceKey, type ClubRoom as Room 
 import { describeSettings } from './friendSettings.ts';
 import type { PlayedPuzzle } from './battleState.ts';
 import { RaceBoard, useTimeUp } from './RaceBoard.tsx';
+import { Reactions } from './Reactions.tsx';
 import { formatClock, useNow } from './util.ts';
 
 /** The club room: lobby, race (the shared RaceBoard plus a live ranking) and results. */
@@ -294,8 +295,11 @@ function EndView({ room }: { room: Room }) {
 
   useEffect(() => {
     if (!room.participating) return;
-    if (won) sfx.win();
-    else sfx.sparkle();
+    if (won) {
+      sfx.win();
+      haptic('win');
+      confetti({ count: 70 });
+    } else sfx.sparkle();
   }, [room.participating, won]);
 
   return (
@@ -318,7 +322,42 @@ function EndView({ room }: { room: Room }) {
           </Button>
         </div>
       </Panel>
+      {ranked.length > 0 && <Podium room={room} ranked={ranked} />}
+      <Panel>
+        <Reactions />
+      </Panel>
       <Ranking room={room} players={room.players} />
     </div>
+  );
+}
+
+const PODIUM = [
+  { index: 1, height: 'h-16', tone: 'bg-ink-300/20 text-ink-300 ring-ink-300/40', delay: '120ms' },
+  { index: 0, height: 'h-24', tone: 'bg-ember-400/20 text-ember-400 ring-ember-400/50', delay: '0ms' },
+  { index: 2, height: 'h-12', tone: 'bg-amber-600/20 text-amber-600 ring-amber-600/40', delay: '240ms' },
+] as const;
+
+/** The top three as a podium: 2nd left, 1st in the middle and tallest, 3rd right (ties share the number). */
+function Podium({ room, ranked }: { room: Room; ranked: ReturnType<typeof rankPlayers> }) {
+  return (
+    <Panel>
+      <div className="grid grid-cols-3 items-end gap-2" data-testid="club-podium">
+        {PODIUM.map((slot) => {
+          const entry = ranked[slot.index];
+          if (!entry) return <div key={slot.index} />;
+          const p = entry.player;
+          return (
+            <div key={slot.index} className="animate-rise flex min-w-0 flex-col items-center text-center" style={{ animationDelay: slot.delay }}>
+              <div className="w-full truncate text-sm font-semibold">
+                {p.name}
+                {p.id === room.you && <span className="text-ember-400"> (you)</span>}
+              </div>
+              <div className="mb-1 font-mono text-xs text-ink-400">{p.solved} solved</div>
+              <div className={`flex w-full items-center justify-center rounded-t-xl text-2xl font-black ring-1 ${slot.height} ${slot.tone}`}>{entry.rank}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }

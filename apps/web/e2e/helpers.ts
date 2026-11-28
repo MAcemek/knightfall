@@ -311,6 +311,8 @@ export interface FriendChoice {
 
 /** Pick options in the "Play a friend" card (the first set of pickers on the page). */
 export async function chooseFriendSettings(page: Page, choice: FriendChoice): Promise<void> {
+  const toggle = page.getByRole('button', { name: 'Battle settings' }).first();
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
   const pick = async (group: string, option: string) => {
     const radio = page.getByRole('radiogroup', { name: group }).first().getByRole('radio', { name: option });
     await radio.click();
@@ -321,9 +323,9 @@ export async function chooseFriendSettings(page: Page, choice: FriendChoice): Pr
   if (choice.series) await pick('Series', choice.series);
 }
 
-/** Type a friend's code into the "Play a friend" box and press Challenge. */
+/** Type a friend's code into the "Have a code?" box and press Challenge. */
 export async function sendChallenge(page: Page, code: string): Promise<void> {
-  await page.getByLabel("Enter a friend's code").fill(code);
+  await page.getByLabel('Enter a code').fill(code);
   await page.getByRole('button', { name: 'Challenge', exact: true }).first().click();
 }
 
@@ -359,6 +361,6 @@ export function lobbyRating(page: Page): Locator {
 /** Open the share link `/battle?club=CODE` and press Join. */
 export async function joinClubByLink(p: Player, code: string): Promise<void> {
   await p.page.goto(`/battle?club=${code.replace('-', '')}`);
-  await expect(p.page.getByLabel('Join with a code')).toHaveValue(code);
-  await p.page.getByRole('button', { name: 'Join', exact: true }).click();
+  await expect(p.page.getByLabel('Enter a code')).toHaveValue(code);
+  await p.page.getByRole('button', { name: 'Join room', exact: true }).click();
 }

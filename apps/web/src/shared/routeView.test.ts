@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navIndex, viewKey } from './routeView.ts';
+import { navIndex, phoneTabIndex, viewKey } from './routeView.ts';
 
 describe('viewKey', () => {
   it('gives each section its own view', () => {
@@ -45,5 +45,27 @@ describe('navIndex', () => {
     expect(navIndex('/trainer', items)).toBe(-1);
     expect(navIndex('/coach', items)).toBe(-1);
     expect(navIndex('/settings', items)).toBe(-1);
+  });
+});
+
+describe('phoneTabIndex', () => {
+  it('maps the four direct tabs and their sub-pages', () => {
+    expect(phoneTabIndex('/')).toBe(0);
+    expect(phoneTabIndex('/puzzles')).toBe(1);
+    expect(phoneTabIndex('/train/woodpecker/abc')).toBe(2);
+    expect(phoneTabIndex('/battle')).toBe(3);
+  });
+
+  it('puts Daily, Rush, Custom and Review under More', () => {
+    for (const p of ['/daily', '/daily/2026-11-20', '/rush', '/rush/play/3min', '/custom', '/analysis', '/analysis/insights', '/analysis/abc']) {
+      expect(phoneTabIndex(p)).toBe(4);
+    }
+  });
+
+  it('has no tab for top-bar pages or shared prefixes', () => {
+    expect(phoneTabIndex('/coach')).toBe(-1);
+    expect(phoneTabIndex('/stats')).toBe(-1);
+    expect(phoneTabIndex('/settings')).toBe(-1);
+    expect(phoneTabIndex('/dailyx')).toBe(-1);
   });
 });

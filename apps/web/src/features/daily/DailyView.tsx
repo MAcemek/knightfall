@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { addDays, playerMoveCount, utcDateKey, type Puzzle } from '@knightfall/core';
 import { db } from '../../shared/db.ts';
 import { burstAt, confetti, PALETTES, sfx } from '../../shared/fx/index.ts';
-import { PuzzlePrompt, usePuzzleRunner, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { PuzzlePrompt, usePuzzleRunner, WhyWrong, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
 import { dailyPuzzle } from '../../shared/puzzleSource.ts';
 import { Button, GameLayout, Icons, Panel } from '../../shared/ui.tsx';
 import { ControlDock, Controls } from '../puzzles/components/Controls.tsx';
@@ -103,6 +103,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
 
   const runner = usePuzzleRunner(puzzle, {
     solvedSound: false,
+    explainMistakes: true,
     onComplete: (r) => {
       firstResult.current = r;
       void recordOutcome(r.puzzle, r.solved, r.solved && r.hintsUsed === 0 && r.mistakes === 0);
@@ -209,6 +210,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
           </div>
         }
         dock={
+          <>
           <ControlDock
             runner={runner}
             prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
@@ -220,6 +222,8 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
             onSolution={runner.showSolution}
             action={dayAction}
           />
+          <div className="lg:hidden"><WhyWrong runner={runner} /></div>
+          </>
         }
         side={
           <div className="flex flex-col gap-3">
@@ -258,6 +262,7 @@ export function DailyView({ date, today, records, streak, best, calendar }: Dail
                     </div>
                   }
                 />
+                <div className="max-lg:hidden"><WhyWrong runner={runner} /></div>
               </div>
             </DailyCard>
             {calendar}

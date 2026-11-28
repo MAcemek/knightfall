@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { burstAt, confetti, FloatingDelta, PALETTES, sfx, TickerNumber } from '../../shared/fx/index.ts';
+import { burstAt, confetti, FloatingDelta, haptic, PALETTES, sfx, TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
 import { SERIES_NEXT_GAME_MS, seriesAfter, seriesText, type BattleState, type EndInfo, type MatchInfo } from './battleState.ts';
 import { Kbd } from './Lobby.tsx';
 import { PuzzleChips } from './PuzzleChips.tsx';
+import { Reactions } from './Reactions.tsx';
 import { isTypingTarget, useNow } from './util.ts';
 
 const TITLES: Record<EndInfo['result'], { title: string; cls: string; glow: string }> = {
@@ -54,6 +55,7 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
   useEffect(() => {
     if (end.result === 'win') {
       sfx.win();
+      haptic('win');
       confetti();
       setTimeout(() => burstAt(titleRef.current, { colors: PALETTES.good, count: 50, power: 10, shape: 'star' }), 120);
     } else if (end.result === 'loss') {
@@ -133,6 +135,8 @@ export function EndScreen({ state, match, onRematch, onNewOpponent, onLobby }: {
               </div>
             </div>
           )}
+
+          <Reactions />
 
           {/* Actions */}
           {running ? (

@@ -5,10 +5,16 @@ import { sfx } from '../../shared/fx/index.ts';
 import { useInstall } from '../../shared/pwa/install.ts';
 import { setPlayerName, useProfile } from '../../shared/profile.ts';
 import { resetSettings, setSetting, useSettings } from '../../shared/settings.ts';
-import { ANIM_SPEEDS, BOARD_THEMES, SELF_REVIEW_MODES } from '../../shared/settingsLogic.ts';
+import { ANIM_SPEEDS, BOARD_THEMES, DAILY_GOALS, SELF_REVIEW_MODES, type DailyGoal } from '../../shared/settingsLogic.ts';
 import { toast } from '../../shared/toast.tsx';
 import { Button, Icons, PageHeader, Panel, Segmented, Switch } from '../../shared/ui.tsx';
 import { BackupPanel } from './BackupPanel.tsx';
+
+type DailyGoalId = `${(typeof DAILY_GOALS)[number]}`;
+const DAILY_GOAL_OPTIONS: readonly { id: DailyGoalId; label: string }[] = DAILY_GOALS.map((g) => ({
+  id: String(g) as DailyGoalId,
+  label: g === 0 ? 'Off' : String(g),
+}));
 
 export default function SettingsPage() {
   const s = useSettings();
@@ -91,6 +97,20 @@ export default function SettingsPage() {
             />
             <span className="w-12 text-right font-mono text-sm">{Math.round(s.volume * 100)}%</span>
           </div>
+          <Switch
+            checked={s.vibration}
+            onChange={(v) => setSetting('vibration', v)}
+            label="Vibration"
+            hint="Short buzz on right and wrong moves. Android phones only, iPhones do not support it."
+          />
+          <div className="font-semibold">Daily goal</div>
+          <Segmented
+            label="Daily goal"
+            options={DAILY_GOAL_OPTIONS}
+            value={String(s.dailyGoal) as DailyGoalId}
+            onChange={(v) => setSetting('dailyGoal', Number(v) as DailyGoal)}
+          />
+          <p className="text-sm text-ink-400">Puzzles to solve each day, shown as a ring on Home.</p>
         </Panel>
       </div>
 

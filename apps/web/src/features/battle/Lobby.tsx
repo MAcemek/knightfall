@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BATTLE_DURATION_MS, BATTLE_MAX_STRIKES, formatCode, normalizeCode } from '@knightfall/core';
+import { BATTLE_DURATION_MS, BATTLE_MAX_STRIKES, formatCode } from '@knightfall/core';
 import { db, getKV, KEYS, type BattleRecord } from '../../shared/db.ts';
 import { useProfile } from '../../shared/profile.ts';
 import { TickerNumber } from '../../shared/fx/index.ts';
 import { Button, Icons, Panel, Pill } from '../../shared/ui.tsx';
-import { serverNow, useConnection } from '../../shared/battle/connection.ts';
+import { useConnection } from '../../shared/battle/connection.ts';
 import { serverSupports } from '../../shared/battle/connectionLogic.ts';
-import { codeProblem, formatCodeInput, MOVED_TEXT, outgoingMessage } from '../../shared/battle/challengeLogic.ts';
-import { cancelChallenge, dismissChallengeResult, forgetOpponent, sendChallenge, useChallenges } from '../../shared/battle/store.ts';
+import { MOVED_TEXT } from '../../shared/battle/challengeLogic.ts';
+import { forgetOpponent, sendChallenge, useChallenges } from '../../shared/battle/store.ts';
 import { ClubCard } from './ClubCard.tsx';
+import { CodeCard } from './CodeCard.tsx';
 import { clubLabel } from './clubLogic.ts';
 import { sanitizeRecent } from './recentOpponents.ts';
-import { SettingsControls } from './SettingsControls.tsx';
+import { SettingsDisclosure } from './SettingsControls.tsx';
 import { useFriendPrefs, type PrefsPatch } from './useFriendPrefs.ts';
 import type { FriendPrefs } from './friendSettings.ts';
 import type { BattleApi } from './useBattle.ts';
@@ -79,6 +79,8 @@ export function Lobby({ api }: { api: BattleApi }) {
           </div>
         )}
 
+        {!searching && <CodeCard prefs={prefs} />}
+
         <Panel className="relative overflow-hidden p-0">
           <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ember-500/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-sky-400/10 blur-3xl" />
@@ -135,22 +137,15 @@ export function Lobby({ api }: { api: BattleApi }) {
   );
 }
 
-/** "Play a friend": my code (copy / share), a box for a friend's code, and the state of a challenge in flight. */
+/** "Play a friend": my code (copy / share), the battle settings and recent opponents. Friend codes are typed into the CodeCard. */
 function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: PrefsPatch) => void }) {
   const connection = useConnection();
   const { outgoing } = useChallenges();
-  const [params] = useSearchParams();
-  // `/battle?challenge=CODE` prefills the box; the player still presses Challenge.
-  const [input, setInput] = useState(() => formatCodeInput(params.get('challenge') ?? ''));
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
-  useNow(250, outgoing.kind === 'waiting');
 
   const code = connection.code;
   // Only once the server has answered `hello`: before that its capabilities are not known yet.
   const settingsUnavailable = (connection.status === 'online' || connection.status === 'outdated') && !serverSupports(connection.serverCaps, 'settings');
-  const problem = codeProblem(input);
-  const typed = normalizeCode(input).length;
-  const message = outgoingMessage(outgoing, serverNow());
   const link = code ? `${location.origin}/battle?challenge=${code}` : '';
 
   const flash = (kind: 'code' | 'link') => {
@@ -186,9 +181,8 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
   return (
     <Panel>
       <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-ink-400">Play a friend</h2>
-      {/* Phones show one column in the order you use it: your code, settings, the friend's code + Challenge. */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="max-sm:order-1">
+      <div>
+        <div>
           <div className="text-xs font-semibold text-ink-400">Your code</div>
           <div className={`mt-1 font-mono font-black ${code ? 'text-3xl tracking-widest text-ink-100' : 'text-lg text-ink-400'}`} aria-live="polite" data-testid="my-code">
             {codeText}
@@ -208,69 +202,13 @@ function FriendCard({ prefs, onPrefs }: { prefs: FriendPrefs; onPrefs: (patch: P
             </p>
           )}
         </div>
-
-        <div className="max-sm:order-3">
-          <label htmlFor="friend-code" className="text-xs font-semibold text-ink-400">
-            Enter a friend's code
-          </label>
-          {outgoing.kind === 'waiting' || outgoing.kind === 'sending' ? (
-            <div className="mt-1 flex flex-col gap-2" aria-live="polite">
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ember-400 border-t-transparent" aria-hidden />
-                <span className="min-w-0 break-words">{message?.text}</span>
-              </div>
-              <Button size="sm" variant="secondary" className="self-start" onClick={cancelChallenge}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <form
-              className="mt-1 flex flex-col gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!problem && !connection.moved) sendChallenge(input, prefs.settings, prefs.series);
-              }}
-            >
-              <div className="flex gap-2">
-                <input
-                  id="friend-code"
-                  value={input}
-                  onChange={(e) => {
-                    setInput(formatCodeInput(e.target.value));
-                    dismissChallengeResult();
-                  }}
-                  placeholder="ABC-123"
-                  maxLength={7}
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  aria-invalid={typed === 6 && !!problem}
-                  className="h-11 w-0 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-800 px-3 font-mono text-lg font-bold uppercase tracking-widest text-ink-100 placeholder:text-ink-500 focus-visible:outline-2 focus-visible:outline-ember-400"
-                />
-                <Button type="submit" variant="primary" disabled={!!problem || connection.moved}>
-                  Challenge
-                </Button>
-              </div>
-              {typed === 6 && problem && <p className="text-xs text-bad-400">{problem}</p>}
-            </form>
-          )}
-        </div>
-        <div className="sm:col-span-2 max-sm:order-2">
-          <div className="mb-1.5 text-xs font-semibold text-ink-400">Battle settings</div>
-          <SettingsControls prefs={prefs} onChange={onPrefs} withSeries disabled={settingsUnavailable} />
-          {settingsUnavailable && <p className="mt-1.5 text-xs text-ink-400">Custom settings need the updated battle server</p>}
-        </div>
+      </div>
+      <p className="mt-2 text-xs text-ink-400">Friends type your code in their Have a code? box.</p>
+      <div className="mt-3">
+        <SettingsDisclosure prefs={prefs} onChange={onPrefs} withSeries disabled={settingsUnavailable} label="Battle settings" />
+        {settingsUnavailable && <p className="mt-1.5 text-xs text-ink-400">Custom settings need the updated battle server</p>}
       </div>
       <RecentOpponents prefs={prefs} busy={outgoing.kind === 'waiting' || outgoing.kind === 'sending' || connection.moved} />
-      {outgoing.kind === 'result' && message && (
-        <div className="mt-3 flex animate-feedback-in items-center justify-between gap-3 rounded-xl border border-bad-500/40 bg-bad-500/10 px-3 py-2 text-sm font-semibold text-bad-400" role="alert">
-          <span>{message.text}</span>
-          <button className="-my-1 flex h-10 w-10 shrink-0 items-center justify-center text-ink-300 hover:text-ink-100" onClick={dismissChallengeResult} aria-label="Dismiss">
-            {Icons.x('h-4 w-4')}
-          </button>
-        </div>
-      )}
     </Panel>
   );
 }

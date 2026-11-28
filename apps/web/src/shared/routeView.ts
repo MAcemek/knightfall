@@ -33,3 +33,20 @@ export function viewKey(pathname: string): string {
 export function navIndex(pathname: string, items: readonly { to: string; end?: boolean }[]): number {
   return items.findIndex(({ to, end }) => pathname === to || (!end && pathname.startsWith(to.endsWith('/') ? to : `${to}/`)));
 }
+
+/** Pages the phone bar's "More" tab stands for. */
+const MORE_SECTIONS = ['/daily', '/rush', '/custom', '/analysis'] as const;
+
+/** Phone bar tabs in order; "More" has no route of its own. */
+export const PHONE_TAB_PATHS = ['/', '/puzzles', '/train', '/battle'] as const;
+export const PHONE_MORE_INDEX = 4;
+
+/**
+ * Index of the phone bottom-bar tab that owns `pathname` (0 Home, 1 Puzzles, 2 Train, 3 Battle, 4 More),
+ * or -1 for pages with no tab (Coach, Stats, Settings, Play: they live in the top bar).
+ */
+export function phoneTabIndex(pathname: string): number {
+  const own = navIndex(pathname, PHONE_TAB_PATHS.map((to) => ({ to, end: to === '/' })));
+  if (own >= 0) return own;
+  return MORE_SECTIONS.some((to) => pathname === to || pathname.startsWith(`${to}/`)) ? PHONE_MORE_INDEX : -1;
+}

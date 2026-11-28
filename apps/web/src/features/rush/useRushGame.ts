@@ -3,9 +3,9 @@ import type { Puzzle } from '@knightfall/core';
 import { usePuzzleRunner, type PuzzleRunner, type RunnerResult } from '../../shared/PuzzlePlayer/index.ts';
 import { prefetchSequence, sequencePuzzle } from '../../shared/puzzleSource.ts';
 import { db, type RushMode } from '../../shared/db.ts';
-import { sfx } from '../../shared/fx/index.ts';
+import { confetti, haptic, sfx } from '../../shared/fx/index.ts';
 import { beginTimedPlay } from '../../shared/timedPlay.ts';
-import { applyResult, clockElapsed, clockRemaining, initialCore, pauseClock, resumeClock, RUSH_MODES, startClock, toRushRun, type RunClock, type RushModeConfig, type RunCore } from './rushLogic.ts';
+import { applyResult, clockElapsed, crossedBest, clockRemaining, initialCore, pauseClock, resumeClock, RUSH_MODES, startClock, toRushRun, type RunClock, type RushModeConfig, type RunCore } from './rushLogic.ts';
 
 export type RushPhase = 'countdown' | 'playing' | 'ending' | 'over';
 export type EndReason = 'time' | 'strikes' | 'quit';
@@ -37,6 +37,8 @@ export interface RushGame {
   solveKey: number;
   milestoneKey: number;
   strikeKey: number;
+  /** The live score went past the best of earlier runs in this mode (stays true for the rest of the run). */
+  beatBest: boolean;
   save: SaveInfo | null;
   error: string | null;
   retryLoad: () => void;
@@ -87,10 +89,12 @@ export function useRushGame(mode: RushMode): RushGame {
   const [solveKey, setSolveKey] = useState(0);
   const [milestoneKey, setMilestoneKey] = useState(0);
   const [strikeKey, setStrikeKey] = useState(0);
+  const [beatBest, setBeatBest] = useState(false);
   const [save, setSave] = useState<SaveInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const alive = useRef(true);
+  const prevBestRef = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const seen = useRef(new Set<string>());
   const indexRef = useRef(0);
@@ -191,7 +195,32 @@ export function useRushGame(mode: RushMode): RushGame {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadIndex, end]);
 
-  const runner = usePuzzleRunner(puzzle, { onComplete, solvedSound: false, replyDelay: 220, introDelay: 320, autoRetry: false });
+  const runner = usePuzzleRunner(puzzle, { onComplete, solvedSound: false, replyDelay: 220, introDelay: 320, autoRetry: false, wrongHaptic: 'strike' });
+
+  // The best score of earlier runs in this mode, loaded when the run starts (same rule as the end-of-run check).
+  useEffect(() => {
+    let ok = true;
+    db.rushRuns
+      .where('mode')
+      .equals(mode)
+      .toArray()
+      .then((runs) => {
+        if (ok) prevBestRef.current = runs.reduce((m, r) => Math.max(m, r.score), 0);
+      })
+      .catch(() => {});
+    return () => {
+      ok = false;
+    };
+  }, [mode]);
+
+  // First time the live score passes that best: a small celebration, once.
+  useEffect(() => {
+    if (phase !== 'playing' || !crossedBest(prevBestRef.current, core.score, beatBest)) return;
+    setBeatBest(true);
+    sfx.sparkle();
+    confetti({ count: 40 });
+    haptic('win');
+  }, [core.score, phase, beatBest]);
 
   // Countdown (StrictMode-safe: cleanup cancels everything and the second mount restarts it).
   useEffect(() => {
@@ -283,6 +312,7 @@ export function useRushGame(mode: RushMode): RushGame {
     solveKey,
     milestoneKey,
     strikeKey,
+    beatBest,
     save,
     error,
     retryLoad,

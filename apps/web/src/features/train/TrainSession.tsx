@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Puzzle } from '@knightfall/core';
-import { ProgressDots, PuzzlePrompt, usePuzzleRunner, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
+import { ProgressDots, PuzzlePrompt, usePuzzleRunner, WhyWrong, type RunnerResult, type RunnerStatus } from '../../shared/PuzzlePlayer/index.ts';
 import { BOARD_SHORTCUTS, ShortcutHelp, type ShortcutGroup } from '../../shared/ShortcutHelp.tsx';
 import { sortThemes, themeLabel } from '../../shared/themes.ts';
 import { Button, GameLayout, Icons, PageHeader, Panel, Pill, Stat } from '../../shared/ui.tsx';
@@ -99,7 +99,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished, 
     [source],
   );
 
-  const runner = usePuzzleRunner(puzzle, { onComplete });
+  const runner = usePuzzleRunner(puzzle, { onComplete, explainMistakes: true });
   const { status, retrying } = runner;
   const over = status === 'solved' || status === 'failed' || status === 'solution';
   const canHint = status === 'player';
@@ -187,6 +187,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished, 
           </div>
         }
         dock={
+          <>
           <ControlDock
             runner={runner}
             prompt={<PuzzlePrompt runner={runner} className="text-base!" />}
@@ -201,6 +202,8 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished, 
             onSolution={runner.showSolution}
             onNext={goNext}
           />
+          <div className="lg:hidden"><WhyWrong runner={runner} /></div>
+          </>
         }
         side={
           <div className="flex flex-col gap-3">
@@ -246,6 +249,7 @@ export function TrainSession({ title, subtitle, icon, badges, source, finished, 
                   stepper={<SolutionStepper runner={runner} />}
                   onHelp={help.openHelp}
                 />
+                <div className="max-lg:hidden"><WhyWrong runner={runner} /></div>
               </div>
             </Panel>
             {tallyPanel}

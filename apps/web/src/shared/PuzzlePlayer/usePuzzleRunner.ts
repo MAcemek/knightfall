@@ -2,6 +2,7 @@ import { Chess, type Move } from 'chess.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isPlayerPly, playerMoveCount, uciToMove, type Puzzle } from '@knightfall/core';
 import type { BoardArrow, BoardMark } from '../Board/index.ts';
+import { haptic } from '../fx/haptics.ts';
 import { sfx } from '../fx/sound.ts';
 import { getSettings } from '../settings.ts';
 import { altNotice, judgePuzzleMove } from './altLogic.ts';
@@ -35,6 +36,17 @@ export interface RunnerOptions {
    * is a strike and they move on to the next puzzle.
    */
   autoRetry?: boolean;
+  /** Keep the last wrong move in `runner.wrongMove` so the page can offer "Why was that wrong?" (default false). */
+  explainMistakes?: boolean;
+  /** Vibration on a wrong move: 'wrong' (default), 'strike' (Rush, where a miss costs a strike) or false for none. */
+  wrongHaptic?: 'wrong' | 'strike' | false;
+}
+
+/** The board position the "Why was that wrong?" peek shows. */
+export interface RunnerPeek {
+  fen: string;
+  lastMove: [string, string];
+  arrow: BoardArrow | null;
 }
 
 export interface PuzzleRunner {
@@ -78,6 +90,12 @@ export interface PuzzleRunner {
   steppable: boolean;
   canStepBack: boolean;
   canStepForward: boolean;
+  /** The last wrong move (position before it and the move), only with `explainMistakes`; cleared on a new puzzle. */
+  wrongMove: { fenBefore: string; uci: string } | null;
+  /** A position shown instead of the live one (not interactive) while the solver reads an explanation. */
+  peek: RunnerPeek | null;
+  showPeek: (p: RunnerPeek) => void;
+  closePeek: () => void;
   playMove: (uci: string) => void;
   setPremove: (uci: string | null) => void;
   hint: () => void;
@@ -113,11 +131,11 @@ export function playMoveSound(m: Move) {
  * feedback state for <PuzzleBoard/>.
  */
 export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {}): PuzzleRunner {
-  const { replyDelay = 280, introDelay = 420, solvedSound = true, autoRetry = true } = opts;
+  const { replyDelay = 280, introDelay = 420, solvedSound = true, autoRetry = true, explainMistakes = false, wrongHaptic = 'wrong' } = opts;
   const optsRef = useRef(opts);
   optsRef.current = opts;
-  const cfg = useRef({ replyDelay, solvedSound, autoRetry });
-  cfg.current = { replyDelay, solvedSound, autoRetry };
+  const cfg = useRef({ replyDelay, solvedSound, autoRetry, explainMistakes, wrongHaptic });
+  cfg.current = { replyDelay, solvedSound, autoRetry, explainMistakes, wrongHaptic };
 
   const puzzleRef = useRef<Puzzle | null>(puzzle);
   const chessRef = useRef<Chess | null>(null);
@@ -151,6 +169,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   const [positionKey, setPositionKey] = useState(0);
   const [solvedKey, setSolvedKey] = useState(0);
   const [review, setReview] = useState<{ index: number; total: number } | null>(null);
+  const [wrongMove, setWrongMove] = useState<{ fenBefore: string; uci: string } | null>(null);
+  const [peek, setPeek] = useState<RunnerPeek | null>(null);
 
   const setStatus = (s: RunnerStatus) => {
     statusRef.current = s;
@@ -219,6 +239,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     const fenBefore = c.fen();
     const judged = judgePuzzleMove(p, ply, fenBefore, uci);
     clearHints();
+    setPeek(null);
     // An equally good alternative counts as correct: say so, then carry on with the engine's move.
     const verdict = judged === 'alt' ? 'correct' : judged;
     if (judged === 'alt') {
@@ -238,6 +259,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
       setMark({ square: uci.slice(2, 4), kind: 'wrong', key: ++markKey.current });
       setShakeKey((k) => k + 1);
       sfx.wrong();
+      if (cfg.current.wrongHaptic) haptic(cfg.current.wrongHaptic);
+      if (cfg.current.explainMistakes) setWrongMove({ fenBefore, uci });
       setStatus('failed');
       report(false);
       // Show the mistake briefly, take it back, then (by default) let them try again.
@@ -265,6 +288,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     optsRef.current.onCorrectMove?.({ ply, square: m.to });
 
     if (finished) {
+      haptic('solved');
       setStatus('solved');
       setSolvedKey((k) => k + 1);
       if (cfg.current.solvedSound) later(() => sfx.solved(), 90);
@@ -272,6 +296,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
       return;
     }
     sfx.correct();
+    haptic('correct');
     setStatus('opponent');
     later(playOpponent, cfg.current.replyDelay);
   };
@@ -314,6 +339,8 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     setRetrying(false);
     setLastWrong(false);
     setNotice(null);
+    setWrongMove(null);
+    setPeek(null);
     setMark(null);
     clearHints();
     clearPremove();
@@ -358,6 +385,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     const p = puzzleRef.current;
     if (!p || statusRef.current !== 'player') return;
     exitView(); // a hint refers to the live position
+    setPeek(null);
     const expected = p.moves[plyRef.current];
     const from = expected.slice(0, 2);
     const to = expected.slice(2, 4);
@@ -377,6 +405,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     const c = chessRef.current;
     if (statusRef.current !== 'failed' || !p || !c) return;
     clearTimers();
+    setPeek(null);
     // Rebuild the position at the current ply (the wrong move may not have been taken back yet).
     const replay = new Chess(p.fen);
     for (let i = 0; i < plyRef.current; i++) replay.move(uciToMove(p.moves[i]));
@@ -395,6 +424,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     if (!p || s === 'solution' || s === 'solved') return;
     clearTimers();
     clearPremove();
+    setPeek(null);
     viewRef.current = null;
     setReview(null);
     report(false);
@@ -449,6 +479,7 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
       return false;
     }
     clearTimers(); // stop a running solution playback
+    setPeek(null);
     setMark(null);
     // v = 0 with a setup move: show the position BEFORE it, highlighting the move the opponent played.
     const setup = v === 0 && p.opponentFirst ? p.moves[0] : null;
@@ -470,6 +501,9 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
   };
   const stepBack = useCallback(() => step(-1), []); // eslint-disable-line react-hooks/exhaustive-deps
   const stepForward = useCallback(() => step(1), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const showPeek = useCallback((p: RunnerPeek) => setPeek(p), []);
+  const closePeek = useCallback(() => setPeek(null), []);
 
   const ability = computeStepAbility(status, review ? review.index : null, plyRef.current, puzzle ? puzzle.moves.length : 0);
 
@@ -494,10 +528,14 @@ export function usePuzzleRunner(puzzle: Puzzle | null, opts: RunnerOptions = {})
     positionKey,
     solvedKey,
     review,
-    interactive: boardInteractive(status, review !== null),
+    interactive: boardInteractive(status, review !== null) && peek === null,
     steppable: ability.steppable,
     canStepBack: ability.canBack,
     canStepForward: ability.canForward,
+    wrongMove,
+    peek,
+    showPeek,
+    closePeek,
     playMove,
     setPremove,
     hint,
